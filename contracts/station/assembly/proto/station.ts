@@ -124,6 +124,11 @@ export namespace station {
         writer.uint32(200);
         writer.uint64(message.alert_mana);
       }
+
+      if (message.ticket_fee_bp != 0) {
+        writer.uint32(208);
+        writer.uint32(message.ticket_fee_bp);
+      }
     }
 
     static decode(reader: Reader, length: i32): config_object {
@@ -229,6 +234,10 @@ export namespace station {
             message.alert_mana = reader.uint64();
             break;
 
+          case 26:
+            message.ticket_fee_bp = reader.uint32();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -262,6 +271,7 @@ export namespace station {
     treasury: Uint8Array | null;
     buffer_bp: u32;
     alert_mana: u64;
+    ticket_fee_bp: u32;
 
     constructor(
       owner: Uint8Array | null = null,
@@ -287,7 +297,8 @@ export namespace station {
       max_days: u64 = 0,
       treasury: Uint8Array | null = null,
       buffer_bp: u32 = 0,
-      alert_mana: u64 = 0
+      alert_mana: u64 = 0,
+      ticket_fee_bp: u32 = 0
     ) {
       this.owner = owner;
       this.paused = paused;
@@ -313,6 +324,7 @@ export namespace station {
       this.treasury = treasury;
       this.buffer_bp = buffer_bp;
       this.alert_mana = alert_mana;
+      this.ticket_fee_bp = ticket_fee_bp;
     }
   }
 

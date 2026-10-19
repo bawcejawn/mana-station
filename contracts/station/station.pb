@@ -1,6 +1,6 @@
 
-•L
-assembly/proto/station.protostationkoinos/options.proto" 
+¹L
+assembly/proto/station.protostationkoinos/options.proto"Ä
 config_object
 owner (B€µRowner
 paused (Rpaused#
@@ -33,7 +33,8 @@ bigMaxDebt&
 treasury (B€µRtreasury
 	buffer_bp (RbufferBp!
 
-alert_mana (B0R	alertManaJ"•
+alert_mana (B0R	alertMana"
+ticket_fee_bp (RticketFeeBpJ"•
 
 app_object'
 reserved_mana (B0RreservedMana

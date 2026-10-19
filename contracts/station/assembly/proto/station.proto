@@ -38,6 +38,9 @@ message config_object {
   // straight from the reserve (Carl, 5:22 PM): no debt, no repayment, never below the hard floor (admin_min + budget).
   uint32 buffer_bp = 24;
   uint64 alert_mana = 25 [jstype = JS_STRING];      // emit station.reserve_low below this Mana (0 = default 15,000)
+  // Big-upload ticket fee (Carl, 8:10 PM): on buyer cancel or expiry the station keeps max(this share of the price,
+  // the pro-rata used share). 0 = default 500 (5%); max 2000 (20%). Refunds are only ever in the stablecoin paid.
+  uint32 ticket_fee_bp = 26;
 }
 
 // Carl's reserved app: a fixed RESERVATION of Mana per rolling 24 h (absolute, so adding KOIN never changes it;

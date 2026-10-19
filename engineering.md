@@ -418,10 +418,17 @@ Carl's reasoning: "someone needs the mana for 4 days but bought for 7 … keep t
   - Service continues to the end of the paid day.
   - Renewed terms that haven't started are refunded in full.
   - The term is shortened to what was used, so a second cancel or owner refund computes 0. This was found by the tests: an earlier draft could refund twice.
-- **Big-upload tickets: decided by Carl (Oct 19, 7:59 PM), no minimum charge.**
+- **Big-upload ticket fee: decided by Carl (Oct 19, 8:10 PM); supersedes "no minimum charge" (7:59 PM). Built.**
+  - On cancel or expiry the buyer is charged **max(5% of paid, pro-rata used share)**, so refund = paid − that. The 5% is retained, not refunded, and goes to Carl via the normal `release`.
+  - Config `ticket_fee_bp`: 0 = default 500 (5%), owner-adjustable, max 2000 (20%); higher values are refused. Formula: keep = paid − floor(paid × (10,000 − bp) / 10,000), i.e. the fee rounds up and the refund rounds down, < 1 base unit in Carl's favour. Escrow invariants unchanged: refund + release = paid.
+  - `owner_refund` (buyer not at fault) charges **no fee**: only the used share is kept, and no buyer cooldown is set.
+  - Examples (500,000 for 100 Mana): 0 used → 475,000 (95%) refunded, 25,000 released; 10.5 used → 447,500 (89.5%); 3% used → 95% refunded, not 97% (5% retained).
+  - **Stablecoin only, never Mana or KOIN (verified in code):** `set_price` now accepts only vUSDT or vUSDC. The only token transfers in the contract are `collect` (buyer → station, priced token) and `send` (from `doRefund` → buyer, and `doRelease` → treasury), both with the escrow's own `e.token`, i.e. the stablecoin paid. The only other token use is a read-only KOIN `balanceOf`. There is no Mana-transfer or KOIN-transfer path. Unused Mana is never "refunded"; it is released back into the pool counters (outstanding debt and the weekly bucket, see (a) below).
+  - Allowances unchanged: no fee, the current day counts as used (1-day minimum). Equivalent: 100% of a 1-day term, ≈14.3% of a 7-day term, ≈3.3% of a 30-day term.
+- **Big-upload tickets (Oct 19, 7:59 PM, history): no minimum charge; superseded at 8:10 PM by the 5% fee above.**
   - On buyer cancel (`cancel_big_upload`) or after expiry (`close_ticket`, anyone), the unused Mana is refunded in full, exactly pro rata: floor(paid × unused Mana / ticket Mana), computed in base units with a 128-bit `mulDiv` (no overflow). It rounds down by less than 1 token base unit, in Carl's favour.
   - The earned part (Mana actually used) is released to Carl at settlement. Only the used Mana stays as reserve debt.
-  - Example: 500,000 for 100 Mana, 10.5 used → 447,500 refunded and 52,500 released. With 0 used: 500,000 refunded, 0 released.
+  - Example (7:59 PM rule): 500,000 for 100 Mana, 10.5 used → 447,500 refunded and 52,500 released. With 0 used: 500,000 refunded (now 475,000 with the fee).
   - **Spam check (opening and cancelling tickets to lock reserve capacity):** with no minimum, holding a ticket is free, because the buyer gets everything back. Existing limits bound the damage:
     - one ticket purchase per 24 h station-wide;
     - at most 6,000 outstanding and 12,000 per 7 days;
@@ -448,14 +455,14 @@ Carl's reasoning: "someone needs the mana for 4 days but bought for 7 … keep t
   - `set_config` can no longer toggle `paused`; only `set_paused` can, so the clock can't be bypassed.
 - **Suspension:**
   - A suspended buyer can't self-cancel; the owner decides.
-  - `owner_refund(allowance_id | ticket_payee)` refunds unused whole days, or unused Mana with no minimum charge, to the buyer only, never to the owner. It's for buyers not at fault (reason 4, or a false sanctions match after reclassifying it to 4), or by owner choice for abuse or AUP.
+  - `owner_refund(allowance_id | ticket_payee)` refunds unused whole days, or the unused ticket share with no fee, in the stablecoin paid, to the buyer only, never to the owner. It's for buyers not at fault (reason 4, or a false sanctions match after reclassifying it to 4), or by owner choice for abuse or AUP.
   - Abuse with no refund: allowance terms release at their normal end; a suspended buyer's expired ticket can be settled only by the owner, with 0 refund.
   - **Sanctions (reason 2): refund AND release are frozen in escrow** pending legal review. Paying a sanctioned party, or taking their funds as income, may both be prohibited; OFAC blocking/reporting rules ⚖.
   - Suspended time is not extended.
 - **Reentrancy / double spend:** state (refunded / released / closed / totals) is written before every token transfer. The only tokens are the owner-priced vUSDT/vUSDC. A double-spend sequence (cancel → owner refund → cancel → release → release) never pays more than the amount paid. MockVM can't simulate a re-entering token; that's a testnet/audit item.
 - **Terms text** (quotes and purchase events, `refundable = true`, `auto_renew = false`):
   - "Prepaid. Your payment is held in the station's escrow until the term ends, then released to the operator. Cancel any time: unused whole days are refunded (the current day counts as used, so 1 day is the minimum charge). If the operator pauses the station, paused time is credited … No auto-renew …"
-  - The ticket version adds "unused Mana is refunded pro rata, with a minimum charge of 20%".
+  - Ticket version (8:10 PM): "Prepaid one-time big upload, paid in vUSDT or vUSDC and held in the station's escrow. Cancel any time, or let it expire: you get back the unused share of what you paid, minus a 5% fee that is always kept (the station keeps the larger of 5% or the share you used). Refunds are only in the stablecoin you paid, never in Mana or KOIN; unused Mana returns to the station's pool. … Tickets last 24 hours. …"
 - **Found while testing: SDK buffer limit.** The koinos-sdk-as system-call buffer defaults to **1 KiB**. Reading a tx's operations in `authorize` would fail for any tx larger than that, including every big upload of a contract. `authorize` now sets 64 KiB, or 1 MiB for ticket holders. UNVERIFIED against the chain's real max tx size and the memory/Mana cost: testnet item.
 
 **Tests (after the hold fix): 42/42 pass.** New:
@@ -465,6 +472,8 @@ Carl's reasoning: "someone needs the mana for 4 days but bought for 7 … keep t
 - 24 h default ticket life, owner-adjustable.
 
 Mutation check, each change alone, every one caught: no wait restore → 2 fail; no weekly release → 2; no outstanding release → 4; wrong default life → 1; no buyer wait → 2; wait cleared instead of restored → 1. Release wasm 59,725 bytes.
+
+**Tests (after the 8:10 PM fee): 43/43 pass.** Updated: 0 used → 475,000 (95%); attacker loop now costs the attacker 5% per cycle (6 × 75,000 to Carl). New: 3% used still retains 5% (950,000 of 1,000,000); 10.5% → 89.5%; owner refund has no fee and no cooldown; `ticket_fee_bp` 2001 refused, 2000 accepted (20% kept), owner-only; 333 bp rounding (keep 8,492 of 255,000 = 8,491.5 → up); KOIN and non-stablecoin `set_price` refused; no KOIN moves. Mutation check, each alone, all caught: no fee cap → 4 fail; fee on owner refunds → 1; no 20% cap → 1; no stablecoin-only check → 1; fee rounded down → 1. Release wasm 60,502 bytes.
 
 **Tests (after the no-minimum decision): 39/39 pass.** New: 0 used → full refund, then the same buyer is on cooldown while another buyer can buy; expiry with no use → full refund; exact pro rata with 10.5 used (447,500 / 52,500); 128-bit `mulDiv` edge cases. Mutation check: whole-Mana rounding → 1 fail; no buyer cooldown → 1; a hidden 20% charge → 3. Release wasm 59,347 bytes.
 
@@ -523,7 +532,7 @@ Release wasm: 58,724 bytes; ABI 30 methods.
 2. v2 budget: 20% of `koin_amount` per rolling 24 h (6,000 at 30k), always refilled; 80% reserve; `admin_min` 100 is untouchable.
 3. Absolute reservations (Knode and Stories 3,000 each) for exempt Carl projects; only an owner boost exceeds them. The sellable slice = budget − reservations (0 at 30k). Per-user anti-spam is unchanged.
 4. The derived sellable slice backs prepaid vUSDT/vUSDC allowances (pull payment, auto expiry, renew), exempt overflow and big-upload debt repayment. It is 0 at 30k, so all three stay off until KOIN is added.
-5. 42/42 simulated-chain tests pass (escrow, exact ticket refunds, fee-free hold fix). Earlier: 39/39 (escrow; tickets refunded exactly pro rata, no minimum). Earlier: 37/37 (escrow, pro-rata refunds, release after the term, pause credit). Earlier: 30/30 (incl. per-buyer suspend switch). Earlier: 28/28 (no refunds, vUSDT + vUSDC, approved big-upload limits). Earlier: 25/25 (payments go directly to Carl; exempt apps get a 20% buffer from the reserve with alerts; paid allowances hard-capped). Earlier: 23/23, with the introductory prices applied (1/7/30-day tiers, price snapshot, no auto-renew) (owner-only fee-exempt allowlist with events; fee-free, not limit-free). Testnet is parked. Knode `set_sponsor_limit(0)` waits until the station is fully launched.
+5. 43/43 simulated-chain tests pass (escrow; 5% ticket fee retained, owner-adjustable to 20% max; refunds only in the stablecoin paid; hold fix). Earlier: 42/42 (escrow, exact ticket refunds, fee-free hold fix). Earlier: 39/39 (escrow; tickets refunded exactly pro rata, no minimum). Earlier: 37/37 (escrow, pro-rata refunds, release after the term, pause credit). Earlier: 30/30 (incl. per-buyer suspend switch). Earlier: 28/28 (no refunds, vUSDT + vUSDC, approved big-upload limits). Earlier: 25/25 (payments go directly to Carl; exempt apps get a 20% buffer from the reserve with alerts; paid allowances hard-capped). Earlier: 23/23, with the introductory prices applied (1/7/30-day tiers, price snapshot, no auto-renew) (owner-only fee-exempt allowlist with events; fee-free, not limit-free). Testnet is parked. Knode `set_sponsor_limit(0)` waits until the station is fully launched.
 
 **Decided (2026-10-19):** rolling windows; testnet OK (parked); Knode off only after launch; own Mana is the default payer; v2 budget model; vUSDT primary / vUSDC optional; Chainge USDT rejected.
 
@@ -535,7 +544,7 @@ Release wasm: 58,724 bytes; ABI 30 methods.
 
 **Decided (7:32–7:33 PM, Carl):** no refunds (`cancel_allowance` removed; kill switch stays); big-upload limits 6,000 / 12,000 per 7 days / 6,000 outstanding, owner-adjustable; vUSDT (max 500) and vUSDC (max 100, lower for liquidity) both accepted; unreserved fee-exempt projects refused while the sellable slice is 0. **Decided (7:37 PM, Carl):** per-buyer suspend switch (owner only, no extension).
 
-**Decided (Oct 19, 7:47 PM, Carl):** escrow with pro-rata refunds of unused whole days (current day = used), release after the term ends to the owner wallet, ticket refunds exactly pro rata with no minimum (Carl, 7:59 PM) plus a per-buyer no-fee cooldown after a refund, pause credit, owner refunds for buyers not at fault, sanctions freeze. Supersedes "no refunds".
+**Decided (Oct 19, 7:47 PM, Carl):** escrow with pro-rata refunds of unused whole days (current day = used), release after the term ends to the owner wallet, ticket refunds pro rata minus a retained 5% fee (Carl, 8:10 PM; superseded "no minimum", 7:59 PM) plus a per-buyer no-fee cooldown after a refund, pause credit, owner refunds for buyers not at fault, sanctions freeze. Supersedes "no refunds".
 
 **Still for Carl (flags, not open design decisions):**
 1. Sanctions freeze: lawyer on what to do with blocked escrow funds. (Ticket hold fix (a)+(b) decided and built 8:02 PM.) See §7e.

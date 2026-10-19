@@ -43,9 +43,10 @@ function entryKey(contract: Uint8Array, ep: u32): Uint8Array { const k = new Uin
 function pct(amount: u64, bp: u32): u64 { return amount / 10_000 * u64(bp); }
 function wholeManaUp(m: u64): u64 { return (m + MANA - 1) / MANA; }
 export const ALLOWANCE_TERMS = "Prepaid. Your payment is held in the station's escrow until the term ends, then released to the operator. Cancel any time: unused whole days are refunded (the current day counts as used, so 1 day is the minimum charge). If the operator pauses the station, paused time is credited: your term is extended by the pause. No auto-renew: service stops at expiry unless you renew, at the price current then. Daily, 7-day and 30-day offers: buy only what you need. Non-transferable; not redeemable for crypto or cash except these refunds. Introductory prices may increase for new purchases. A buyer may be suspended for abuse, sanctions or AUP reasons; suspended time is not extended, and the operator may refund unused days (never to a sanctioned party).";
-export const BIG_TERMS = "Prepaid one-time big upload, held in the station's escrow. Cancel any time, or let it expire: unused Mana is refunded in full, pro rata (no minimum charge; rounded down by less than one token base unit). After a refund, the same buyer waits one cooldown period before buying another ticket. Paused time extends the ticket. No auto-renew. Non-transferable; not redeemable for crypto or cash except these refunds. A buyer may be suspended for abuse, sanctions or AUP reasons; the operator may refund unused Mana (never to a sanctioned party).";
+export const BIG_TERMS = "Prepaid one-time big upload, paid in vUSDT or vUSDC and held in the station's escrow. Cancel any time, or let it expire: you get back the unused share of what you paid, minus a 5% fee that is always kept (the station keeps the larger of 5% or the share you used). Refunds are only in the stablecoin you paid, never in Mana or KOIN; unused Mana returns to the station's pool. After a refund, the same buyer waits one cooldown period before buying another ticket. Tickets last 24 hours. Paused time extends the ticket. No auto-renew. Non-transferable; not redeemable for crypto or cash except these refunds. A buyer may be suspended for abuse, sanctions or AUP reasons; the operator may refund unused value (never to a sanctioned party).";
 const MAX_OPEN_PURCHASES: i32 = 128;                 // bounded loops (pause credit)
 const MAX_TERMS: i32 = 8;
+const DEFAULT_TICKET_FEE_BP: u32 = 500;             // 5% (Carl, 8:10 PM)
 const DEFAULT_TICKET_MS: u64 = 86_400_000;          // ticket lifetime when big_ticket_ms = 0 (Carl, 8:02 PM: 24 h)
 const TX_BUFFER: u32 = 64 * 1024;                   // normal sponsored txs
 const BIG_TX_BUFFER: u32 = 1024 * 1024;             // big-upload ticket txs (contract bytecode)                            // open escrow terms per allowance
@@ -185,10 +186,16 @@ export class Station {
   }
   /** Ticket refund (Carl, 7:59 PM: no minimum charge) = floor(paid × unused Mana / ticket Mana), exact in base units:
    *  rounds down by < 1 token base unit, in Carl's favour. */
-  ticketRefund(e: station.escrow_object, t: station.ticket_object): u64 {
+  ticketRefund(e: station.escrow_object, t: station.ticket_object, feeBp: u32): u64 {
     if (t.mana == 0 || t.remaining == 0) return 0;
-    const r = mulDiv(e.amount, t.remaining, t.mana); const h = this.held(e); return r > h ? h : r;
+    let r = mulDiv(e.amount, t.remaining, t.mana);                      // pro-rata unused share, rounded down
+    if (feeBp > 0) {                                                     // keep at least the fee (rounded up)
+      const keep = e.amount - mulDiv(e.amount, u64(10_000 - feeBp), 10_000);
+      const cap = e.amount - keep; if (r > cap) r = cap;
+    }
+    const h = this.held(e); return r > h ? h : r;
   }
+  ticketFeeBp(c: station.config_object): u32 { return c.ticket_fee_bp > 0 ? c.ticket_fee_bp : DEFAULT_TICKET_FEE_BP; }
   doRefund(e: station.escrow_object, amount: u64, action: string): void {
     if (amount == 0) return;
     System.require(amount <= this.held(e), "refund above held");
@@ -614,6 +621,7 @@ export class Station {
     System.require(isAddress(c.owner), "owner required");
     System.require(c.refill_bp <= 2000, "daily budget above one day's refill (20%)");
     System.require(c.buffer_bp <= 5000, "buffer above 50%");
+    System.require(c.ticket_fee_bp <= 2000, "ticket fee above 20%");
     System.require(!isAddress(c.treasury) || !Arrays.equal(c.treasury!, this.contractId), "treasury must be an external wallet (escrow lives in the station)");
     System.require(c.koin_amount <= this.koinBalance(), "koin_amount above the station's KOIN balance");
     this.validateReservations(c, 0, null);
@@ -707,6 +715,9 @@ export class Station {
   set_price(args: station.set_price_arguments): station.set_price_result {
     this.requireOwner(); System.require(args.value != null && args.token != null, "token and price required");
     System.require(!Arrays.equal(args.token!, Base58.decode(LEGACY_CHAINGE_USDT)), "legacy Chainge USDT is not accepted");
+    // Only the two stablecoins can ever be priced, so escrow (payments, refunds, releases) is only ever vUSDT/vUSDC:
+    // never KOIN or any other token (Carl, 8:10 PM). Mana itself can't be transferred at all.
+    System.require(Arrays.equal(args.token!, Base58.decode(VUSDT)) || Arrays.equal(args.token!, Base58.decode(VUSDC)), "only vUSDT or vUSDC");
     const v = args.value!;
     System.require(v.price_1d <= MAX_UNIT_PRICE && v.price_7d <= MAX_UNIT_PRICE && v.price_30d <= MAX_UNIT_PRICE && v.big_per_1000 <= MAX_UNIT_PRICE, "price too large");
     // Affects new purchases and renewals only: existing allowances and tickets keep their stored snapshot and expiry.
@@ -771,7 +782,7 @@ export class Station {
     this.big.put(b);
     this.tickets.remove(payee);
     if (e != null && !e.closed) {
-      r = noRefund ? 0 : this.ticketRefund(e!, t);
+      r = noRefund ? 0 : this.ticketRefund(e!, t, buyerCooldown ? this.ticketFeeBp(c) : 0); // owner refund: no fee
       // Anti-spam without a fee (Carl, 7:59 PM): after a buyer gets unused Mana back (cancel or expiry), that buyer waits
       // big_cooldown_ms before buying another ticket. Owner refunds don't trigger it.
       if (buyerCooldown && r > 0) this.ticketCd.put(t.buyer!, new station.revenue_object(now + c.big_cooldown_ms));
@@ -840,7 +851,7 @@ export class Station {
     const c = this.config.get()!; const t = this.clock(c, this.now());
     r.purchase = e;
     if (e.kind == 1) { r.refundable_now = this.termRefund(e, t); r.releasable = !e.closed && t >= e.end; }
-    else { const tk = this.tickets.get(e.payee!); if (tk != null) r.refundable_now = this.ticketRefund(e, tk); }
+    else { const tk = this.tickets.get(e.payee!); if (tk != null) r.refundable_now = this.ticketRefund(e, tk, this.ticketFeeBp(c)); }
     return r;
   }
   get_escrow_totals(args: station.get_escrow_totals_arguments): station.get_escrow_totals_result {

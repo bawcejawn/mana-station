@@ -357,6 +357,10 @@
                 "options": {
                   "jstype": "JS_STRING"
                 }
+              },
+              "ticket_fee_bp": {
+                "type": "uint32",
+                "id": 26
               }
             },
             "reserved": [
