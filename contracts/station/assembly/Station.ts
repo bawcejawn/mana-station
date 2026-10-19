@@ -42,8 +42,8 @@ function u32Key(n: u32): Uint8Array { const k = new Uint8Array(4); k[0] = u8(n >
 function entryKey(contract: Uint8Array, ep: u32): Uint8Array { const k = new Uint8Array(contract.length + 4); k.set(contract, 0); k.set(u32Key(ep), contract.length); return k; }
 function pct(amount: u64, bp: u32): u64 { return amount / 10_000 * u64(bp); }
 function wholeManaUp(m: u64): u64 { return (m + MANA - 1) / MANA; }
-export const ALLOWANCE_TERMS = "Prepaid. Your payment is held in the station's escrow until the term ends, then released to the operator. Cancel any time: unused whole days are refunded (the current day counts as used, so 1 day is the minimum charge). If the operator pauses the station, paused time is credited: your term is extended by the pause. No auto-renew: service stops at expiry unless you renew, at the price current then. Daily, 7-day and 30-day offers: buy only what you need. Non-transferable; not redeemable for crypto or cash except these refunds. Introductory prices may increase for new purchases. A buyer may be suspended for abuse, sanctions or AUP reasons; suspended time is not extended, and the operator may refund unused days (never to a sanctioned party).";
-export const BIG_TERMS = "Prepaid one-time big upload, paid in vUSDT or vUSDC and held in the station's escrow. Cancel any time, or let it expire: you get back the unused share of what you paid, minus a 5% fee that is always kept (the station keeps the larger of 5% or the share you used). Refunds are only in the stablecoin you paid, never in Mana or KOIN; unused Mana returns to the station's pool. After a refund, the same buyer waits one cooldown period before buying another ticket. Tickets last 24 hours. Paused time extends the ticket. No auto-renew. Non-transferable; not redeemable for crypto or cash except these refunds. A buyer may be suspended for abuse, sanctions or AUP reasons; the operator may refund unused value (never to a sanctioned party).";
+export const ALLOWANCE_TERMS = "Prepaid Mana for one app contract: the station only sponsors transactions whose every operation calls that app (no other contracts, no token transfers). Your payment is held in the station's escrow until the term ends, then released to the operator. Cancel any time: unused whole days are refunded (the current day counts as used, so 1 day is the minimum charge). If the operator pauses the station, paused time is credited: your term is extended by the pause. No auto-renew: service stops at expiry unless you renew, at the price current then. Daily, 7-day and 30-day offers: buy only what you need. Non-transferable; not redeemable for crypto or cash except these refunds. Introductory prices may increase for new purchases. A buyer may be suspended for abuse, sanctions or AUP reasons; suspended time is not extended, and the operator may refund unused days (never to a sanctioned party).";
+export const BIG_TERMS = "Prepaid one-time big upload, paid in vUSDT or vUSDC and held in the station's escrow. Cancel any time, or let it expire: you get back the unused share of what you paid, minus a 5% fee that is always kept (the station keeps the larger of 5% or the share you used). Refunds are only in the stablecoin you paid, never in Mana or KOIN; unused Mana returns to the station's pool. After a refund, the same buyer waits one cooldown period before buying another ticket. Tickets last 24 hours and only sponsor uploading or calling the payee's own app contract. Paused time extends the ticket. No auto-renew. Non-transferable; not redeemable for crypto or cash except these refunds. A buyer may be suspended for abuse, sanctions or AUP reasons; the operator may refund unused value (never to a sanctioned party).";
 const MAX_OPEN_PURCHASES: i32 = 128;                 // bounded loops (pause credit)
 const MAX_TERMS: i32 = 8;
 const DEFAULT_TICKET_FEE_BP: u32 = 500;             // 5% (Carl, 8:10 PM)
@@ -194,6 +194,11 @@ export class Station {
       const cap = e.amount - keep; if (r > cap) r = cap;
     }
     const h = this.held(e); return r > h ? h : r;
+  }
+  /** KOIN or any priced / rejected stablecoin: never a sponsorable app (no sponsored token transfers). */
+  isMoneyContract(t: Uint8Array): bool {
+    if (this.prices.has(t) || Arrays.equal(t, Base58.decode(VUSDT)) || Arrays.equal(t, Base58.decode(VUSDC)) || Arrays.equal(t, Base58.decode(LEGACY_CHAINGE_USDT))) return true;
+    return !BUILD_FOR_TESTING && Arrays.equal(t, System.getContractAddress("koin"));
   }
   ticketFeeBp(c: station.config_object): u32 { return c.ticket_fee_bp > 0 ? c.ticket_fee_bp : DEFAULT_TICKET_FEE_BP; }
   doRefund(e: station.escrow_object, amount: u64, action: string): void {
@@ -404,12 +409,11 @@ export class Station {
       this.watchReserve(c, mana - rc);
       return true;
     }
-    // Routes B / C: sold allowances (account = payee, or app = the one contract every op calls).
-    let id = this.targets.get(payee); let kind: u32 = 2;
-    if (id == null) {
-      if (!oneTarget) return false;
-      id = this.targets.get(target0); kind = 1;
-    }
+    // Route B: sold APP allowances only (Carl, 9:09 PM: "only usable through the apps that are paying for the Mana
+    // usage"). Every op must call the one paying app contract; Mana is drawn from that app's allowance. No account
+    // allowances: a payee address never unlocks sponsorship of arbitrary contracts.
+    if (!oneTarget) return false;
+    const id = this.targets.get(target0); const kind: u32 = 1;
     if (id == null) return false;
     const s = this.allowances.get(u32Key(u32(id.total)));
     if (s == null || s.kind != kind || s.expiry <= now) return false;    // expired: cut off automatically
@@ -434,7 +438,7 @@ export class Station {
     if (mana - rc < this.bigFloor(c)) return false;                     // never below admin_min + one day's budget
     for (let i = 0; i < ops.length; i++) {
       const up = ops[i].upload_contract;
-      if (ops[i].call_contract != null) continue;
+      if (ops[i].call_contract != null) { if (!Arrays.equal(ops[i].call_contract!.contract_id, payee)) return false; continue; } // the payee's own app only (9:09 PM)
       if (up != null && t.allow_upload && Arrays.equal(up.contract_id, payee)) continue; // payee's own contract only
       return false;                                                     // set_system_* never
     }
@@ -533,8 +537,9 @@ export class Station {
     System.require(!c.paused, "paused");
     System.require(isAddress(args.buyer) && System.checkAuthority(authority.authorization_type.contract_call, args.buyer!), "buyer must sign");
     System.require(!this.suspended.has(args.buyer!), "buyer suspended");
-    System.require((args.kind == 1 || args.kind == 2) && isAddress(args.target), "kind 1 (app contract) or 2 (account) and a target");
+    System.require(args.kind == 1 && isAddress(args.target), "kind 1 (paying app contract) only; account allowances were removed (Carl, 9:09 PM)");
     System.require(!Arrays.equal(args.target!, this.contractId), "not the station");
+    System.require(!this.isMoneyContract(args.target!), "token contracts (KOIN, stablecoins) cannot be sponsored");
     this.committed(c, now, true);                                       // clean expired entries
     const existing = this.targets.get(args.target!);
     if (existing != null) { const e = this.allowances.get(u32Key(u32(existing.total))); System.require(e == null || e.expiry <= now, "target already has an allowance; renew it"); }

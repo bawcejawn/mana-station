@@ -180,6 +180,13 @@ for (const [name, fn] of nd) { const x = await fn(); check("designated", `refuse
 check("designated", "refusals cost the station 0 Mana (Mana did not drop)", (await rc(ST)) >= m0, `${m0} → ${await rc(ST)}`);
 
 const koinSt0 = await kbal(ST);
+// paying app for route B: the testapp bytecode uploaded to spam2's address by spam2 itself (funder pays). Not exempt.
+const PAYAPP = SP2;
+{ const c = new Contract({ id: SP2, abi: abiA, provider, signer: S("spam2"), bytecode: wasm("../contracts/testapp/build/release/contract.wasm") });
+  try { const { transaction } = await c.deploy({ payer: FUN, payee: SP2, rcLimit: String(15n * M), beforeSend: coSign("funder") }); await transaction.wait("byBlock", 120000); check("escrow", "deploy paying app (non-exempt testapp copy)", true); }
+  catch (e) { check("escrow", "deploy paying app (non-exempt testapp copy)", false, String(e.message).slice(0, 200)); } }
+const unpaid = await send(C(PAYAPP, abiA, "user1"), "play", { user: U1 }, sponsored(U1, L));
+check("designated", "app without a paid allowance refused", !unpaid.ok, unpaid.error || "");
 // ---------------------------------------------------------------- 7. escrow: allowance purchase / reservation refusal / suspend / cancel
 for (const to of [BUY, U1]) check("escrow", `mint 1,000 tUSDT to ${to.slice(0, 6)}…`, (await send(tok("token"), "mint", { to, value: String(1000n * M) }, { payer: FUN, payee: TOK, cosigner: "funder" })).ok);
 const stE = await read(sta(), "get_status"); note(`sold_capacity ${stE.sold_capacity} (expected 3L = ${3n * L})`);
@@ -188,18 +195,25 @@ check("escrow", "quote above the sellable slice: not available (reservations pro
 const q = await read(sta(), "quote_allowance", { token: TOK, mana_per_day: String(2n * L), days: "7" });
 check("escrow", "quote 2L/day × 7 d available, refundable, no auto-renew", q.available && q.refundable && !q.auto_renew, `price ${q.price}`);
 const price = BigInt(q.price || 0);
-const buyA = (mpd) => sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 2n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 2, target: U1, mana_per_day: String(mpd), days: "7", token: TOK, max_price: String(price * 2n) }]], { rcLimit: 3n * M });
-const bigBuy = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 4n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 2, target: U1, mana_per_day: String(4n * L), days: "7", token: TOK, max_price: String(price * 4n) }]], { rcLimit: 3n * M });
+const buyA = (mpd) => sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 2n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 1, target: PAYAPP, mana_per_day: String(mpd), days: "7", token: TOK, max_price: String(price * 2n) }]], { rcLimit: 3n * M });
+const bigBuy = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 4n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 1, target: PAYAPP, mana_per_day: String(4n * L), days: "7", token: TOK, max_price: String(price * 4n) }]], { rcLimit: 3n * M });
 check("escrow", "buy_allowance above the sellable slice refused", !bigBuy.ok, bigBuy.error || "");
 const ba = await buyA(2n * L);
 check("escrow", "buy_allowance 2L/day × 7 d (approve + pull in one tx), allowance_bought event", ba.ok && ba.events.includes("station.allowance_bought"), ba.error || `rc ${ba.rc} events ${ba.events}`); if (ba.ok) cost("buy_allowance tx (approve + buy)", ba.rc);
 const aid = 1;
-const xfer = () => send(tok("user1"), "transfer", { from: U1, to: U2, value: "1" }, sponsored(U1, L));
-const b1 = await xfer(); check("escrow", "allowance target user1: sponsored tx accepted (route B, sold account allowance)", b1.ok, b1.error || `rc ${b1.rc}`); if (b1.ok) cost("token transfer, sponsored by allowance", b1.rc);
-note("design point: a sold ACCOUNT allowance (kind 2) sponsors any contract for its target; only fee-exempt apps are restricted to allowlisted entry points");
+const xfer = () => send(C(PAYAPP, abiA, "user1"), "play", { user: U1 }, sponsored(U1, L));
+const b1 = await xfer(); check("escrow", "paying app (app allowance): its users' txs sponsored from its allowance", b1.ok, b1.error || `rc ${b1.rc}`); if (b1.ok) cost("play on paying app, sponsored by its allowance", b1.rc);
+const acc = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 2n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 2, target: U1, mana_per_day: String(2n * L), days: "7", token: TOK, max_price: String(price * 2n) }]], { rcLimit: 3n * M });
+check("designated", "account allowance (kind 2) refused (Carl, 9:09 PM)", !acc.ok, acc.error || "");
+const tokT = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 2n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 1, target: TOK, mana_per_day: String(L), days: "7", token: TOK, max_price: String(price * 2n) }]], { rcLimit: 3n * M });
+check("designated", "allowance targeting a token contract refused", !tokT.ok, tokT.error || "");
+const tr = await send(tok("user1"), "transfer", { from: U1, to: U2, value: "1" }, sponsored(U1, L));
+check("designated", "token transfer by a paying app's user still refused", !tr.ok, tr.error || "");
 const su = await admin("suspend_allowance", { buyer: BUY, reason: 1 });
 check("suspend", "owner suspends buyer (reason 1 abuse), buyer_suspended event", su.ok && su.events.includes("station.buyer_suspended"), su.error || su.events);
 const b2 = await xfer(); check("suspend", "suspended buyer's allowance no longer sponsors", !b2.ok, b2.error || "");
+const mix = await sendOps("user1", [[C(PAYAPP, abiA, "user1"), "play", { user: U1 }], [app("user1"), "play", { user: U1 }]], sponsored(U1, L));
+check("designated", "mixed targets (paying app + Carl's Stories) refused", !mix.ok, mix.error || "");
 const sc = await send(sta("buyer"), "cancel_allowance", { buyer: BUY, id: aid }, { rcLimit: 3n * M }); check("suspend", "suspended buyer cannot self-cancel", !sc.ok, sc.error || "");
 const us = await admin("unsuspend_allowance", { buyer: BUY, reason: 0 });
 check("suspend", "unsuspend, buyer_unsuspended event", us.ok && us.events.includes("station.buyer_unsuspended"), us.error || us.events);
