@@ -1,0 +1,45 @@
+{
+  "_note": "PROPOSED mainnet settings, v2 with Carl's 4:37 PM answers (option A). Not deployed. Units: KOIN/Mana in satoshis (1e8); stablecoins 8 decimals. OPEN = still Carl's decision.",
+  "config": {
+    "owner": "<Carl's offline owner wallet>",
+    "koin_amount": "3000000000000",
+    "refill_bp": 2000,
+    "admin_min": "10000000000",
+    "hard_max": "300000000",
+    "per_min": 5, "cooldown_ms": "600000",
+    "day_actions": 25, "day_mana": "6000000000",
+    "new_actions": 10, "new_mana": "2500000000", "new_pct": 25,
+    "max_ops": 2,
+    "big_max": "200000000000",
+    "big_cooldown_ms": "86400000",
+    "big_week_cap": "600000000000",
+    "big_max_debt": "600000000000",
+    "big_ticket_ms": "259200000",
+    "max_allowances": 50,
+    "max_days": "90",
+    "treasury": "OPEN: empty = the station (withdraw_revenue to Carl) | Carl's wallet address"
+  },
+  "_derived_at_30k": {
+    "daily_budget": "6,000 Mana (20% of koin_amount)",
+    "reservations": "Knode 3,000 + Stories 3,000 = 6,000",
+    "sellable_slice": "0 → no sales, no big uploads, no exempt overflow (automatic)",
+    "if_koin_amount_40k": "budget 8,000 − reservations 6,000 = 2,000 sellable, reservations unchanged",
+    "reserve": "80% of koin_amount; big floor = admin_min + daily budget"
+  },
+  "apps": {
+    "1_knode":   { "reserved_mana": "300000000000", "active": true },
+    "2_stories": { "reserved_mana": "300000000000", "active": true }
+  },
+  "exempt": {
+    "1Mpmf2ERhjYpX7CCiM11WERuM4j17uT1sr": { "_name": "Knode (Kpred)", "app": 1, "strict": true },
+    "<Stories contract id, not deployed yet>": { "_name": "SwarmTales Stories", "app": 2, "strict": true },
+    "_other_carl_projects": "app 0: fee-free but only from the unsold sellable slice (refused while it is 0)"
+  },
+  "entries": "per-action caps for the strict exempt contracts: set after the testnet measurement (3 Mana each until then)",
+  "prices": {
+    "vUSDT 12VoHz41a4HtfiyhTWbg9RXqGMRbYk6pXh": { "active": true, "per_mana_day": "", "per_big_mana": "", "min_days": "1", "max_per_purchase": "OPEN (proposed 50000000000 = 500 vUSDT)" },
+    "vUSDC 1N8iYrYEJdCVK1rhbqv3qZUzHcpoeKmFnj": { "active": "OPEN", "per_mana_day": "", "per_big_mana": "", "min_days": "1", "max_per_purchase": "OPEN (proposed 10000000000 = 100 vUSDC)" },
+    "_prices": "blank: Monetization will set them (lower than first proposed)",
+    "rejected": "Chainge USDT 19WrWze3XAoMa3Mwqys4rJMP6emZX2wfpH (set_price refuses it)"
+  }
+}

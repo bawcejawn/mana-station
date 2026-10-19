@@ -1,0 +1,385 @@
+syntax = "proto3";
+
+package station;
+
+import "koinos/options.proto";
+
+// ════════ Stored objects (v2 model, Carl 2026-10-19 4:13 PM) ════════
+// Units: Mana and KOIN in satoshis (1 Mana = 100000000). "bp" = basis points (10000 = 100%).
+
+message config_object {
+  bytes owner = 1 [(koinos.btype) = ADDRESS];
+  bool paused = 2;
+  uint64 koin_amount = 3 [jstype = JS_STRING];      // configured station capacity (KOIN). Owner-flexible; budgets derive from it
+  uint32 refill_bp = 4;                             // daily budget = koin_amount × refill_bp (2000 = 20% = one day's refill)
+  uint64 admin_min = 5 [jstype = JS_STRING];        // untouchable Mana for admin / kill switch
+  uint64 hard_max = 6 [jstype = JS_STRING];         // largest rc_limit for normal sponsored txs
+  uint32 per_min = 7;
+  uint64 cooldown_ms = 8 [jstype = JS_STRING];
+  uint32 day_actions = 9;                           // per user, rolling 24 h
+  uint64 day_mana = 10 [jstype = JS_STRING];
+  uint32 new_actions = 11;
+  uint64 new_mana = 12 [jstype = JS_STRING];
+  uint32 new_pct = 13;                              // new users together: % of an app's allowance
+  uint32 max_ops = 14;
+  reserved 15;                                      // was sold_bp: the sellable slice is now derived (budget − reservations)
+  uint64 big_max = 16 [jstype = JS_STRING];         // per big-upload request (Mana)
+  uint64 big_cooldown_ms = 17 [jstype = JS_STRING]; // between big-upload purchases (station-wide)
+  uint64 big_week_cap = 18 [jstype = JS_STRING];    // total big uploads per rolling 7 days (Mana)
+  uint64 big_max_debt = 19 [jstype = JS_STRING];    // reserve that big uploads may owe at once (Mana)
+  uint64 big_ticket_ms = 20 [jstype = JS_STRING];   // a big-upload ticket expires after this
+  uint32 max_allowances = 21;                       // sold allowances open at once (bounded loops)
+  uint64 max_days = 22 [jstype = JS_STRING];        // longest prepaid period per buy / renew
+  // Where stablecoin payments land: the station itself (then withdraw_revenue to Carl) or Carl's wallet directly.
+  bytes treasury = 23 [(koinos.btype) = ADDRESS];
+}
+
+// Carl's reserved app: a fixed RESERVATION of Mana per rolling 24 h (absolute, so adding KOIN never changes it;
+// the extra becomes sellable). Unused reservation is never sold. Only the owner can exceed it (expiring boost).
+message app_object {
+  uint64 reserved_mana = 1 [jstype = JS_STRING];   // e.g. 3,000 Mana/day for Knode
+  bool active = 2;
+  uint64 boost_mana = 3 [jstype = JS_STRING];       // owner-approved extra per 24 h
+  uint64 boost_until = 4 [jstype = JS_STRING];
+}
+
+// Fee-exempt contract (Carl's projects). app > 0 links it to a reservation; app 0 = other Carl project whose usage
+// can only come from the sellable slice. strict = only allowlisted entry points (with their caps).
+// Exempt means fee-free, not limit-free: per-user, per-tx, rate, 20% daily cap and admin floor all apply.
+message exempt_object {
+  uint32 app = 1;
+  bool strict = 2;
+}
+
+message exempt_event {
+  bytes contract_id = 1 [(koinos.btype) = CONTRACT_ID];
+  exempt_object value = 2;
+  bool removed = 3;
+}
+
+message entry_object {
+  uint32 app = 1;
+  uint64 cap = 2 [jstype = JS_STRING];
+  uint32 max_args = 3;
+}
+
+message window_object {
+  uint64 base = 1 [jstype = JS_STRING];
+  repeated uint32 n = 2;
+  repeated uint64 mana = 3 [jstype = JS_STRING];
+  repeated uint64 new_mana = 4 [jstype = JS_STRING];
+}
+
+message user_object {
+  uint64 first_seen = 1 [jstype = JS_STRING];
+  uint64 last_block = 2 [jstype = JS_STRING];
+  uint64 minute = 3 [jstype = JS_STRING];
+  uint32 n_min = 4;
+  uint64 cooldown_until = 5 [jstype = JS_STRING];
+  window_object day = 6;
+}
+
+// Price per accepted stablecoin (owner-set; Monetization prices it). Token address/decimals: see stablecoins.md.
+message price_object {
+  bool active = 1;
+  uint64 per_mana_day = 2 [jstype = JS_STRING];     // token units per 1 Mana of daily allowance per day
+  uint64 per_big_mana = 3 [jstype = JS_STRING];     // token units per 1 Mana of big upload
+  uint64 min_days = 4 [jstype = JS_STRING];
+  uint64 max_per_purchase = 5 [jstype = JS_STRING]; // token units; thin liquidity (stablecoins.md), owner-set
+}
+
+// A sold daily allowance. kind 1 = calls into contract `target`; kind 2 = txs whose payee is account `target`.
+message allowance_object {
+  uint32 id = 1;
+  bytes buyer = 2 [(koinos.btype) = ADDRESS];
+  uint32 kind = 3;
+  bytes target = 4 [(koinos.btype) = ADDRESS];
+  uint64 mana_per_day = 5 [jstype = JS_STRING];
+  uint64 expiry = 6 [jstype = JS_STRING];
+  window_object day = 7;
+}
+
+// A prepaid big upload for `payee`: up to `mana` in total, each tx up to `mana`, until expiry.
+message ticket_object {
+  bytes buyer = 1 [(koinos.btype) = ADDRESS];
+  uint64 mana = 2 [jstype = JS_STRING];
+  uint64 remaining = 3 [jstype = JS_STRING];
+  uint64 expiry = 4 [jstype = JS_STRING];
+  bool allow_upload = 5;                             // may pay for uploading the payee's own contract
+}
+
+// Station-wide big-upload state. Debt is repaid at the sold slice's daily rate (the slice pauses while it repays),
+// so total spend never exceeds the refill and the reserve always reloads.
+message big_object {
+  uint64 debt = 1 [jstype = JS_STRING];
+  uint64 debt_ts = 2 [jstype = JS_STRING];
+  uint64 last_buy = 3 [jstype = JS_STRING];
+  window_object week = 4;
+  uint32 next_id = 5;                                // allowance ids
+}
+
+// Explicit indexes (no open-ended storage scans): Carl's app ids and open sold-allowance ids.
+message registry_object {
+  repeated uint32 app_ids = 1;
+  repeated uint32 open_ids = 2;
+}
+
+message revenue_object {
+  uint64 total = 1 [jstype = JS_STRING];             // collected, not yet withdrawn (token units)
+}
+
+// ════════ Read-only ════════
+
+// @description Station budgets, Mana, floors and big-upload state.
+// @read-only true
+message get_status_arguments {}
+
+message get_status_result {
+  config_object config = 1;
+  uint64 mana = 2 [jstype = JS_STRING];
+  uint64 daily_budget = 3 [jstype = JS_STRING];
+  uint64 reserve_floor = 4 [jstype = JS_STRING];      // koin_amount - daily_budget (80%)
+  uint64 big_floor = 5 [jstype = JS_STRING];          // admin_min + daily_budget: big uploads never go below
+  uint64 used_24h = 6 [jstype = JS_STRING];
+  uint64 sold_capacity = 7 [jstype = JS_STRING];      // derived: daily budget − reservations
+  uint64 sold_committed = 8 [jstype = JS_STRING];
+  uint64 big_debt = 9 [jstype = JS_STRING];
+}
+
+// @description One user's counters.
+// @read-only true
+message get_user_arguments {
+  bytes user = 1 [(koinos.btype) = ADDRESS];
+}
+
+message get_user_result {
+  user_object user = 1;
+  uint32 actions_24h = 2;
+  uint64 mana_24h = 3 [jstype = JS_STRING];
+}
+
+// @description One of Carl's apps: allowance and rolling 24 h use.
+// @read-only true
+message get_app_arguments {
+  uint32 app = 1;
+}
+
+message get_app_result {
+  app_object app = 1;
+  uint64 allowance = 2 [jstype = JS_STRING];
+  uint64 used_24h = 3 [jstype = JS_STRING];
+  uint64 new_used_24h = 4 [jstype = JS_STRING];
+}
+
+// @description Allowlist entry for a contract + entry point.
+// @read-only true
+message get_entry_arguments {
+  bytes contract_id = 1 [(koinos.btype) = CONTRACT_ID];
+  uint32 entry_point = 2;
+}
+
+message get_entry_result {
+  entry_object entry = 1;
+}
+
+// @description Price of a sold daily allowance.
+// @read-only true
+message quote_allowance_arguments {
+  bytes token = 1 [(koinos.btype) = CONTRACT_ID];
+  uint64 mana_per_day = 2 [jstype = JS_STRING];
+  uint64 days = 3 [jstype = JS_STRING];
+}
+
+message quote_allowance_result {
+  uint64 price = 1 [jstype = JS_STRING];   // token units (vUSDT / vUSDC: 8 decimals)
+  bool available = 2;
+  string reason = 3;
+}
+
+// @description Price of a big upload and whether the reserve can take it now.
+// @read-only true
+message quote_big_upload_arguments {
+  bytes token = 1 [(koinos.btype) = CONTRACT_ID];
+  uint64 mana = 2 [jstype = JS_STRING];
+}
+
+message quote_big_upload_result {
+  uint64 price = 1 [jstype = JS_STRING];
+  bool available = 2;
+  string reason = 3;
+}
+
+// @description A sold allowance by id.
+// @read-only true
+message get_allowance_arguments {
+  uint32 id = 1;
+}
+
+message get_allowance_result {
+  allowance_object allowance = 1;
+  uint64 used_24h = 2 [jstype = JS_STRING];
+}
+
+// @description A big-upload ticket by payee.
+// @read-only true
+message get_ticket_arguments {
+  bytes payee = 1 [(koinos.btype) = ADDRESS];
+}
+
+message get_ticket_result {
+  ticket_object ticket = 1;
+}
+
+// ════════ Buy (anyone) ════════
+
+// @description Buy a daily Mana allowance for an app contract (kind 1) or an account (kind 2) for N prepaid days.
+// @read-only false
+message buy_allowance_arguments {
+  bytes buyer = 1 [(koinos.btype) = ADDRESS];
+  uint32 kind = 2;
+  bytes target = 3 [(koinos.btype) = ADDRESS];
+  uint64 mana_per_day = 4 [jstype = JS_STRING];
+  uint64 days = 5 [jstype = JS_STRING];
+  bytes token = 6 [(koinos.btype) = CONTRACT_ID];
+  uint64 max_price = 7 [jstype = JS_STRING];          // the quote the buyer accepted
+}
+
+message buy_allowance_result {
+  uint32 id = 1;
+  uint64 expiry = 2 [jstype = JS_STRING];
+  uint64 paid = 3 [jstype = JS_STRING];
+}
+
+// @description Extend a sold allowance by N prepaid days.
+// @read-only false
+message renew_arguments {
+  bytes payer = 1 [(koinos.btype) = ADDRESS];
+  uint32 id = 2;
+  uint64 days = 3 [jstype = JS_STRING];
+  bytes token = 4 [(koinos.btype) = CONTRACT_ID];
+  uint64 max_price = 5 [jstype = JS_STRING];
+}
+
+message renew_result {
+  uint64 expiry = 1 [jstype = JS_STRING];
+  uint64 paid = 2 [jstype = JS_STRING];
+}
+
+// @description Buy a one-time big upload (prepaid quoted Mana, expires) for `payee`.
+// @read-only false
+message buy_big_upload_arguments {
+  bytes buyer = 1 [(koinos.btype) = ADDRESS];
+  bytes payee = 2 [(koinos.btype) = ADDRESS];
+  uint64 mana = 3 [jstype = JS_STRING];
+  bytes token = 4 [(koinos.btype) = CONTRACT_ID];
+  uint64 max_price = 5 [jstype = JS_STRING];
+  bool allow_upload = 6;
+}
+
+message buy_big_upload_result {
+  uint64 expiry = 1 [jstype = JS_STRING];
+  uint64 paid = 2 [jstype = JS_STRING];
+}
+
+// @description After a ticket expires, release its unused Mana from the big-upload debt (anyone).
+// @read-only false
+message close_ticket_arguments {
+  bytes payee = 1 [(koinos.btype) = ADDRESS];
+}
+
+message close_ticket_result {}
+
+// ════════ Admin (owner only) ════════
+
+// @description First-time setup (station key).
+// @read-only false
+message init_arguments {
+  config_object config = 1;
+}
+
+message init_result {}
+
+// @description Replace the settings (owner).
+// @read-only false
+message set_config_arguments {
+  config_object config = 1;
+}
+
+message set_config_result {}
+
+// @description Kill switch (owner).
+// @read-only false
+message set_paused_arguments {
+  bool paused = 1;
+}
+
+message set_paused_result {}
+
+// @description Add or change one of Carl's apps, its allowance and any explicit boost (owner).
+// @read-only false
+message set_app_arguments {
+  uint32 app = 1;
+  app_object value = 2;
+}
+
+message set_app_result {}
+
+// @description Allow or remove a contract + entry point (owner).
+// @read-only false
+message set_entry_arguments {
+  bytes contract_id = 1 [(koinos.btype) = CONTRACT_ID];
+  uint32 entry_point = 2;
+  entry_object value = 3;
+  bool remove = 4;
+}
+
+message set_entry_result {}
+
+// @description Add, change or remove a fee-exempt contract (owner only; emits station.exempt_changed).
+// @read-only false
+message set_exempt_arguments {
+  bytes contract_id = 1 [(koinos.btype) = CONTRACT_ID];
+  exempt_object value = 2;
+  bool remove = 3;
+}
+
+message set_exempt_result {}
+
+// @description A fee-exempt entry (empty if not exempt).
+// @read-only true
+message get_exempt_arguments {
+  bytes contract_id = 1 [(koinos.btype) = CONTRACT_ID];
+}
+
+message get_exempt_result {
+  exempt_object exempt = 1;
+}
+
+// @description Set the price for a stablecoin (owner).
+// @read-only false
+message set_price_arguments {
+  bytes token = 1 [(koinos.btype) = CONTRACT_ID];
+  price_object value = 2;
+}
+
+message set_price_result {}
+
+// @description Send collected stablecoin revenue to `to` (owner).
+// @read-only false
+message withdraw_revenue_arguments {
+  bytes token = 1 [(koinos.btype) = CONTRACT_ID];
+  bytes to = 2 [(koinos.btype) = ADDRESS];
+  uint64 amount = 3 [jstype = JS_STRING];
+}
+
+message withdraw_revenue_result {}
+
+// @description End a sold allowance early and optionally refund from revenue (owner; policy is an open decision).
+// @read-only false
+message cancel_allowance_arguments {
+  uint32 id = 1;
+  bytes token = 2 [(koinos.btype) = CONTRACT_ID];
+  uint64 refund = 3 [jstype = JS_STRING];
+}
+
+message cancel_allowance_result {}

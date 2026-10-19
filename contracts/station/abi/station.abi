@@ -1,0 +1,159 @@
+{
+    "methods": {
+        "get_status": {
+            "argument": "station.get_status_arguments",
+            "return": "station.get_status_result",
+            "description": "Station budgets, Mana, floors and big-upload state.",
+            "entry-point": "0x72cdbfdd",
+            "read-only": true
+        },
+        "get_user": {
+            "argument": "station.get_user_arguments",
+            "return": "station.get_user_result",
+            "description": "One user's counters.",
+            "entry-point": "0xbf1e2a1a",
+            "read-only": true
+        },
+        "get_app": {
+            "argument": "station.get_app_arguments",
+            "return": "station.get_app_result",
+            "description": "One of Carl's apps: allowance and rolling 24 h use.",
+            "entry-point": "0xa6d19fee",
+            "read-only": true
+        },
+        "get_entry": {
+            "argument": "station.get_entry_arguments",
+            "return": "station.get_entry_result",
+            "description": "Allowlist entry for a contract + entry point.",
+            "entry-point": "0x208b3061",
+            "read-only": true
+        },
+        "quote_allowance": {
+            "argument": "station.quote_allowance_arguments",
+            "return": "station.quote_allowance_result",
+            "description": "Price of a sold daily allowance.",
+            "entry-point": "0x160c1364",
+            "read-only": true
+        },
+        "quote_big_upload": {
+            "argument": "station.quote_big_upload_arguments",
+            "return": "station.quote_big_upload_result",
+            "description": "Price of a big upload and whether the reserve can take it now.",
+            "entry-point": "0xcdde618e",
+            "read-only": true
+        },
+        "get_allowance": {
+            "argument": "station.get_allowance_arguments",
+            "return": "station.get_allowance_result",
+            "description": "A sold allowance by id.",
+            "entry-point": "0x8b7ac5fe",
+            "read-only": true
+        },
+        "get_ticket": {
+            "argument": "station.get_ticket_arguments",
+            "return": "station.get_ticket_result",
+            "description": "A big-upload ticket by payee.",
+            "entry-point": "0x31b048e0",
+            "read-only": true
+        },
+        "buy_allowance": {
+            "argument": "station.buy_allowance_arguments",
+            "return": "station.buy_allowance_result",
+            "description": "Buy a daily Mana allowance for an app contract (kind 1) or an account (kind 2) for N prepaid days.",
+            "entry-point": "0x60422f5f",
+            "read-only": false
+        },
+        "renew": {
+            "argument": "station.renew_arguments",
+            "return": "station.renew_result",
+            "description": "Extend a sold allowance by N prepaid days.",
+            "entry-point": "0xa36a2ce1",
+            "read-only": false
+        },
+        "buy_big_upload": {
+            "argument": "station.buy_big_upload_arguments",
+            "return": "station.buy_big_upload_result",
+            "description": "Buy a one-time big upload (prepaid quoted Mana, expires) for `payee`.",
+            "entry-point": "0x1c1d9f26",
+            "read-only": false
+        },
+        "close_ticket": {
+            "argument": "station.close_ticket_arguments",
+            "return": "station.close_ticket_result",
+            "description": "After a ticket expires, release its unused Mana from the big-upload debt (anyone).",
+            "entry-point": "0xfebe723c",
+            "read-only": false
+        },
+        "init": {
+            "argument": "station.init_arguments",
+            "return": "station.init_result",
+            "description": "First-time setup (station key).",
+            "entry-point": "0xbb54068a",
+            "read-only": false
+        },
+        "set_config": {
+            "argument": "station.set_config_arguments",
+            "return": "station.set_config_result",
+            "description": "Replace the settings (owner).",
+            "entry-point": "0x4ba58c89",
+            "read-only": false
+        },
+        "set_paused": {
+            "argument": "station.set_paused_arguments",
+            "return": "station.set_paused_result",
+            "description": "Kill switch (owner).",
+            "entry-point": "0x35fbb717",
+            "read-only": false
+        },
+        "set_app": {
+            "argument": "station.set_app_arguments",
+            "return": "station.set_app_result",
+            "description": "Add or change one of Carl's apps, its allowance and any explicit boost (owner).",
+            "entry-point": "0x87ab2112",
+            "read-only": false
+        },
+        "set_entry": {
+            "argument": "station.set_entry_arguments",
+            "return": "station.set_entry_result",
+            "description": "Allow or remove a contract + entry point (owner).",
+            "entry-point": "0x53a076a4",
+            "read-only": false
+        },
+        "set_exempt": {
+            "argument": "station.set_exempt_arguments",
+            "return": "station.set_exempt_result",
+            "description": "Add, change or remove a fee-exempt contract (owner only; emits station.exempt_changed).",
+            "entry-point": "0x664110b4",
+            "read-only": false
+        },
+        "get_exempt": {
+            "argument": "station.get_exempt_arguments",
+            "return": "station.get_exempt_result",
+            "description": "A fee-exempt entry (empty if not exempt).",
+            "entry-point": "0xef2023e6",
+            "read-only": true
+        },
+        "set_price": {
+            "argument": "station.set_price_arguments",
+            "return": "station.set_price_result",
+            "description": "Set the price for a stablecoin (owner).",
+            "entry-point": "0x2ddf5b5e",
+            "read-only": false
+        },
+        "withdraw_revenue": {
+            "argument": "station.withdraw_revenue_arguments",
+            "return": "station.withdraw_revenue_result",
+            "description": "Send collected stablecoin revenue to `to` (owner).",
+            "entry-point": "0xeeec00ea",
+            "read-only": false
+        },
+        "cancel_allowance": {
+            "argument": "station.cancel_allowance_arguments",
+            "return": "station.cancel_allowance_result",
+            "description": "End a sold allowance early and optionally refund from revenue (owner; policy is an open decision).",
+            "entry-point": "0xc7643cce",
+            "read-only": false
+        }
+    },
+    "types": "CuYvChxhc3NlbWJseS9wcm90by9zdGF0aW9uLnByb3RvEgdzdGF0aW9uGhRrb2lub3Mvb3B0aW9ucy5wcm90byLgBQoNY29uZmlnX29iamVjdBIaCgVvd25lchgBIAEoDEIEgLUYBlIFb3duZXISFgoGcGF1c2VkGAIgASgIUgZwYXVzZWQSIwoLa29pbl9hbW91bnQYAyABKARCAjABUgprb2luQW1vdW50EhsKCXJlZmlsbF9icBgEIAEoDVIIcmVmaWxsQnASHwoJYWRtaW5fbWluGAUgASgEQgIwAVIIYWRtaW5NaW4SHQoIaGFyZF9tYXgYBiABKARCAjABUgdoYXJkTWF4EhcKB3Blcl9taW4YByABKA1SBnBlck1pbhIjCgtjb29sZG93bl9tcxgIIAEoBEICMAFSCmNvb2xkb3duTXMSHwoLZGF5X2FjdGlvbnMYCSABKA1SCmRheUFjdGlvbnMSHQoIZGF5X21hbmEYCiABKARCAjABUgdkYXlNYW5hEh8KC25ld19hY3Rpb25zGAsgASgNUgpuZXdBY3Rpb25zEh0KCG5ld19tYW5hGAwgASgEQgIwAVIHbmV3TWFuYRIXCgduZXdfcGN0GA0gASgNUgZuZXdQY3QSFwoHbWF4X29wcxgOIAEoDVIGbWF4T3BzEhsKB2JpZ19tYXgYECABKARCAjABUgZiaWdNYXgSKgoPYmlnX2Nvb2xkb3duX21zGBEgASgEQgIwAVINYmlnQ29vbGRvd25NcxIkCgxiaWdfd2Vla19jYXAYEiABKARCAjABUgpiaWdXZWVrQ2FwEiQKDGJpZ19tYXhfZGVidBgTIAEoBEICMAFSCmJpZ01heERlYnQSJgoNYmlnX3RpY2tldF9tcxgUIAEoBEICMAFSC2JpZ1RpY2tldE1zEiUKDm1heF9hbGxvd2FuY2VzGBUgASgNUg1tYXhBbGxvd2FuY2VzEh0KCG1heF9kYXlzGBYgASgEQgIwAVIHbWF4RGF5cxIgCgh0cmVhc3VyeRgXIAEoDEIEgLUYBlIIdHJlYXN1cnlKBAgPEBAilQEKCmFwcF9vYmplY3QSJwoNcmVzZXJ2ZWRfbWFuYRgBIAEoBEICMAFSDHJlc2VydmVkTWFuYRIWCgZhY3RpdmUYAiABKAhSBmFjdGl2ZRIhCgpib29zdF9tYW5hGAMgASgEQgIwAVIJYm9vc3RNYW5hEiMKC2Jvb3N0X3VudGlsGAQgASgEQgIwAVIKYm9vc3RVbnRpbCI5Cg1leGVtcHRfb2JqZWN0EhAKA2FwcBgBIAEoDVIDYXBwEhYKBnN0cmljdBgCIAEoCFIGc3RyaWN0In0KDGV4ZW1wdF9ldmVudBIlCgtjb250cmFjdF9pZBgBIAEoDEIEgLUYBVIKY29udHJhY3RJZBIsCgV2YWx1ZRgCIAEoCzIWLnN0YXRpb24uZXhlbXB0X29iamVjdFIFdmFsdWUSGAoHcmVtb3ZlZBgDIAEoCFIHcmVtb3ZlZCJRCgxlbnRyeV9vYmplY3QSEAoDYXBwGAEgASgNUgNhcHASFAoDY2FwGAIgASgEQgIwAVIDY2FwEhkKCG1heF9hcmdzGAMgASgNUgdtYXhBcmdzImwKDXdpbmRvd19vYmplY3QSFgoEYmFzZRgBIAEoBEICMAFSBGJhc2USDAoBbhgCIAMoDVIBbhIWCgRtYW5hGAMgAygEQgIwAVIEbWFuYRIdCghuZXdfbWFuYRgEIAMoBEICMAFSB25ld01hbmEi2QEKC3VzZXJfb2JqZWN0EiEKCmZpcnN0X3NlZW4YASABKARCAjABUglmaXJzdFNlZW4SIQoKbGFzdF9ibG9jaxgCIAEoBEICMAFSCWxhc3RCbG9jaxIaCgZtaW51dGUYAyABKARCAjABUgZtaW51dGUSEwoFbl9taW4YBCABKA1SBG5NaW4SKQoOY29vbGRvd25fdW50aWwYBSABKARCAjABUg1jb29sZG93blVudGlsEigKA2RheRgGIAEoCzIWLnN0YXRpb24ud2luZG93X29iamVjdFIDZGF5Ir8BCgxwcmljZV9vYmplY3QSFgoGYWN0aXZlGAEgASgIUgZhY3RpdmUSJAoMcGVyX21hbmFfZGF5GAIgASgEQgIwAVIKcGVyTWFuYURheRIkCgxwZXJfYmlnX21hbmEYAyABKARCAjABUgpwZXJCaWdNYW5hEh0KCG1pbl9kYXlzGAQgASgEQgIwAVIHbWluRGF5cxIsChBtYXhfcGVyX3B1cmNoYXNlGAUgASgEQgIwAVIObWF4UGVyUHVyY2hhc2Ui3AEKEGFsbG93YW5jZV9vYmplY3QSDgoCaWQYASABKA1SAmlkEhoKBWJ1eWVyGAIgASgMQgSAtRgGUgVidXllchISCgRraW5kGAMgASgNUgRraW5kEhwKBnRhcmdldBgEIAEoDEIEgLUYBlIGdGFyZ2V0EiQKDG1hbmFfcGVyX2RheRgFIAEoBEICMAFSCm1hbmFQZXJEYXkSGgoGZXhwaXJ5GAYgASgEQgIwAVIGZXhwaXJ5EigKA2RheRgHIAEoCzIWLnN0YXRpb24ud2luZG93X29iamVjdFIDZGF5IqQBCg10aWNrZXRfb2JqZWN0EhoKBWJ1eWVyGAEgASgMQgSAtRgGUgVidXllchIWCgRtYW5hGAIgASgEQgIwAVIEbWFuYRIgCglyZW1haW5pbmcYAyABKARCAjABUglyZW1haW5pbmcSGgoGZXhwaXJ5GAQgASgEQgIwAVIGZXhwaXJ5EiEKDGFsbG93X3VwbG9hZBgFIAEoCFILYWxsb3dVcGxvYWQipQEKCmJpZ19vYmplY3QSFgoEZGVidBgBIAEoBEICMAFSBGRlYnQSGwoHZGVidF90cxgCIAEoBEICMAFSBmRlYnRUcxIdCghsYXN0X2J1eRgDIAEoBEICMAFSB2xhc3RCdXkSKgoEd2VlaxgEIAEoCzIWLnN0YXRpb24ud2luZG93X29iamVjdFIEd2VlaxIXCgduZXh0X2lkGAUgASgNUgZuZXh0SWQiRQoPcmVnaXN0cnlfb2JqZWN0EhcKB2FwcF9pZHMYASADKA1SBmFwcElkcxIZCghvcGVuX2lkcxgCIAMoDVIHb3BlbklkcyIqCg5yZXZlbnVlX29iamVjdBIYCgV0b3RhbBgBIAEoBEICMAFSBXRvdGFsIhYKFGdldF9zdGF0dXNfYXJndW1lbnRzIt4CChFnZXRfc3RhdHVzX3Jlc3VsdBIuCgZjb25maWcYASABKAsyFi5zdGF0aW9uLmNvbmZpZ19vYmplY3RSBmNvbmZpZxIWCgRtYW5hGAIgASgEQgIwAVIEbWFuYRIlCgxkYWlseV9idWRnZXQYAyABKARCAjABUgtkYWlseUJ1ZGdldBInCg1yZXNlcnZlX2Zsb29yGAQgASgEQgIwAVIMcmVzZXJ2ZUZsb29yEh8KCWJpZ19mbG9vchgFIAEoBEICMAFSCGJpZ0Zsb29yEh0KCHVzZWRfMjRoGAYgASgEQgIwAVIHdXNlZDI0aBInCg1zb2xkX2NhcGFjaXR5GAcgASgEQgIwAVIMc29sZENhcGFjaXR5EikKDnNvbGRfY29tbWl0dGVkGAggASgEQgIwAVINc29sZENvbW1pdHRlZBIdCghiaWdfZGVidBgJIAEoBEICMAFSB2JpZ0RlYnQiLgoSZ2V0X3VzZXJfYXJndW1lbnRzEhgKBHVzZXIYASABKAxCBIC1GAZSBHVzZXIiewoPZ2V0X3VzZXJfcmVzdWx0EigKBHVzZXIYASABKAsyFC5zdGF0aW9uLnVzZXJfb2JqZWN0UgR1c2VyEh8KC2FjdGlvbnNfMjRoGAIgASgNUgphY3Rpb25zMjRoEh0KCG1hbmFfMjRoGAMgASgEQgIwAVIHbWFuYTI0aCIlChFnZXRfYXBwX2FyZ3VtZW50cxIQCgNhcHAYASABKA1SA2FwcCKeAQoOZ2V0X2FwcF9yZXN1bHQSJQoDYXBwGAEgASgLMhMuc3RhdGlvbi5hcHBfb2JqZWN0UgNhcHASIAoJYWxsb3dhbmNlGAIgASgEQgIwAVIJYWxsb3dhbmNlEh0KCHVzZWRfMjRoGAMgASgEQgIwAVIHdXNlZDI0aBIkCgxuZXdfdXNlZF8yNGgYBCABKARCAjABUgpuZXdVc2VkMjRoIl0KE2dldF9lbnRyeV9hcmd1bWVudHMSJQoLY29udHJhY3RfaWQYASABKAxCBIC1GAVSCmNvbnRyYWN0SWQSHwoLZW50cnlfcG9pbnQYAiABKA1SCmVudHJ5UG9pbnQiPwoQZ2V0X2VudHJ5X3Jlc3VsdBIrCgVlbnRyeRgBIAEoCzIVLnN0YXRpb24uZW50cnlfb2JqZWN0UgVlbnRyeSJ1ChlxdW90ZV9hbGxvd2FuY2VfYXJndW1lbnRzEhoKBXRva2VuGAEgASgMQgSAtRgFUgV0b2tlbhIkCgxtYW5hX3Blcl9kYXkYAiABKARCAjABUgptYW5hUGVyRGF5EhYKBGRheXMYAyABKARCAjABUgRkYXlzImgKFnF1b3RlX2FsbG93YW5jZV9yZXN1bHQSGAoFcHJpY2UYASABKARCAjABUgVwcmljZRIcCglhdmFpbGFibGUYAiABKAhSCWF2YWlsYWJsZRIWCgZyZWFzb24YAyABKAlSBnJlYXNvbiJQChpxdW90ZV9iaWdfdXBsb2FkX2FyZ3VtZW50cxIaCgV0b2tlbhgBIAEoDEIEgLUYBVIFdG9rZW4SFgoEbWFuYRgCIAEoBEICMAFSBG1hbmEiaQoXcXVvdGVfYmlnX3VwbG9hZF9yZXN1bHQSGAoFcHJpY2UYASABKARCAjABUgVwcmljZRIcCglhdmFpbGFibGUYAiABKAhSCWF2YWlsYWJsZRIWCgZyZWFzb24YAyABKAlSBnJlYXNvbiIpChdnZXRfYWxsb3dhbmNlX2FyZ3VtZW50cxIOCgJpZBgBIAEoDVICaWQibgoUZ2V0X2FsbG93YW5jZV9yZXN1bHQSNwoJYWxsb3dhbmNlGAEgASgLMhkuc3RhdGlvbi5hbGxvd2FuY2Vfb2JqZWN0UglhbGxvd2FuY2USHQoIdXNlZF8yNGgYAiABKARCAjABUgd1c2VkMjRoIjIKFGdldF90aWNrZXRfYXJndW1lbnRzEhoKBXBheWVlGAEgASgMQgSAtRgGUgVwYXllZSJDChFnZXRfdGlja2V0X3Jlc3VsdBIuCgZ0aWNrZXQYASABKAsyFi5zdGF0aW9uLnRpY2tldF9vYmplY3RSBnRpY2tldCLiAQoXYnV5X2FsbG93YW5jZV9hcmd1bWVudHMSGgoFYnV5ZXIYASABKAxCBIC1GAZSBWJ1eWVyEhIKBGtpbmQYAiABKA1SBGtpbmQSHAoGdGFyZ2V0GAMgASgMQgSAtRgGUgZ0YXJnZXQSJAoMbWFuYV9wZXJfZGF5GAQgASgEQgIwAVIKbWFuYVBlckRheRIWCgRkYXlzGAUgASgEQgIwAVIEZGF5cxIaCgV0b2tlbhgGIAEoDEIEgLUYBVIFdG9rZW4SHwoJbWF4X3ByaWNlGAcgASgEQgIwAVIIbWF4UHJpY2UiWgoUYnV5X2FsbG93YW5jZV9yZXN1bHQSDgoCaWQYASABKA1SAmlkEhoKBmV4cGlyeRgCIAEoBEICMAFSBmV4cGlyeRIWCgRwYWlkGAMgASgEQgIwAVIEcGFpZCKSAQoPcmVuZXdfYXJndW1lbnRzEhoKBXBheWVyGAEgASgMQgSAtRgGUgVwYXllchIOCgJpZBgCIAEoDVICaWQSFgoEZGF5cxgDIAEoBEICMAFSBGRheXMSGgoFdG9rZW4YBCABKAxCBIC1GAVSBXRva2VuEh8KCW1heF9wcmljZRgFIAEoBEICMAFSCG1heFByaWNlIkIKDHJlbmV3X3Jlc3VsdBIaCgZleHBpcnkYASABKARCAjABUgZleHBpcnkSFgoEcGFpZBgCIAEoBEICMAFSBHBhaWQiygEKGGJ1eV9iaWdfdXBsb2FkX2FyZ3VtZW50cxIaCgVidXllchgBIAEoDEIEgLUYBlIFYnV5ZXISGgoFcGF5ZWUYAiABKAxCBIC1GAZSBXBheWVlEhYKBG1hbmEYAyABKARCAjABUgRtYW5hEhoKBXRva2VuGAQgASgMQgSAtRgFUgV0b2tlbhIfCgltYXhfcHJpY2UYBSABKARCAjABUghtYXhQcmljZRIhCgxhbGxvd191cGxvYWQYBiABKAhSC2FsbG93VXBsb2FkIksKFWJ1eV9iaWdfdXBsb2FkX3Jlc3VsdBIaCgZleHBpcnkYASABKARCAjABUgZleHBpcnkSFgoEcGFpZBgCIAEoBEICMAFSBHBhaWQiNAoWY2xvc2VfdGlja2V0X2FyZ3VtZW50cxIaCgVwYXllZRgBIAEoDEIEgLUYBlIFcGF5ZWUiFQoTY2xvc2VfdGlja2V0X3Jlc3VsdCJACg5pbml0X2FyZ3VtZW50cxIuCgZjb25maWcYASABKAsyFi5zdGF0aW9uLmNvbmZpZ19vYmplY3RSBmNvbmZpZyINCgtpbml0X3Jlc3VsdCJGChRzZXRfY29uZmlnX2FyZ3VtZW50cxIuCgZjb25maWcYASABKAsyFi5zdGF0aW9uLmNvbmZpZ19vYmplY3RSBmNvbmZpZyITChFzZXRfY29uZmlnX3Jlc3VsdCIuChRzZXRfcGF1c2VkX2FyZ3VtZW50cxIWCgZwYXVzZWQYASABKAhSBnBhdXNlZCITChFzZXRfcGF1c2VkX3Jlc3VsdCJQChFzZXRfYXBwX2FyZ3VtZW50cxIQCgNhcHAYASABKA1SA2FwcBIpCgV2YWx1ZRgCIAEoCzITLnN0YXRpb24uYXBwX29iamVjdFIFdmFsdWUiEAoOc2V0X2FwcF9yZXN1bHQiogEKE3NldF9lbnRyeV9hcmd1bWVudHMSJQoLY29udHJhY3RfaWQYASABKAxCBIC1GAVSCmNvbnRyYWN0SWQSHwoLZW50cnlfcG9pbnQYAiABKA1SCmVudHJ5UG9pbnQSKwoFdmFsdWUYAyABKAsyFS5zdGF0aW9uLmVudHJ5X29iamVjdFIFdmFsdWUSFgoGcmVtb3ZlGAQgASgIUgZyZW1vdmUiEgoQc2V0X2VudHJ5X3Jlc3VsdCKDAQoUc2V0X2V4ZW1wdF9hcmd1bWVudHMSJQoLY29udHJhY3RfaWQYASABKAxCBIC1GAVSCmNvbnRyYWN0SWQSLAoFdmFsdWUYAiABKAsyFi5zdGF0aW9uLmV4ZW1wdF9vYmplY3RSBXZhbHVlEhYKBnJlbW92ZRgDIAEoCFIGcmVtb3ZlIhMKEXNldF9leGVtcHRfcmVzdWx0Ij0KFGdldF9leGVtcHRfYXJndW1lbnRzEiUKC2NvbnRyYWN0X2lkGAEgASgMQgSAtRgFUgpjb250cmFjdElkIkMKEWdldF9leGVtcHRfcmVzdWx0Ei4KBmV4ZW1wdBgBIAEoCzIWLnN0YXRpb24uZXhlbXB0X29iamVjdFIGZXhlbXB0Il4KE3NldF9wcmljZV9hcmd1bWVudHMSGgoFdG9rZW4YASABKAxCBIC1GAVSBXRva2VuEisKBXZhbHVlGAIgASgLMhUuc3RhdGlvbi5wcmljZV9vYmplY3RSBXZhbHVlIhIKEHNldF9wcmljZV9yZXN1bHQiagoad2l0aGRyYXdfcmV2ZW51ZV9hcmd1bWVudHMSGgoFdG9rZW4YASABKAxCBIC1GAVSBXRva2VuEhQKAnRvGAIgASgMQgSAtRgGUgJ0bxIaCgZhbW91bnQYAyABKARCAjABUgZhbW91bnQiGQoXd2l0aGRyYXdfcmV2ZW51ZV9yZXN1bHQiZAoaY2FuY2VsX2FsbG93YW5jZV9hcmd1bWVudHMSDgoCaWQYASABKA1SAmlkEhoKBXRva2VuGAIgASgMQgSAtRgFUgV0b2tlbhIaCgZyZWZ1bmQYAyABKARCAjABUgZyZWZ1bmQiGQoXY2FuY2VsX2FsbG93YW5jZV9yZXN1bHRiBnByb3RvMwrnAwoca29pbm9zL2NoYWluL2F1dGhvcml0eS5wcm90bxIMa29pbm9zLmNoYWluGhRrb2lub3Mvb3B0aW9ucy5wcm90byJVCgtjYWxsX3RhcmdldBIlCgtjb250cmFjdF9pZBgBIAEoDEIEgLUYBlIKY29udHJhY3RJZBIfCgtlbnRyeV9wb2ludBgCIAEoDVIKZW50cnlQb2ludCKIAQoTYXV0aG9yaXplX2FyZ3VtZW50cxI0CgR0eXBlGAEgASgOMiAua29pbm9zLmNoYWluLmF1dGhvcml6YXRpb25fdHlwZVIEdHlwZRIyCgRjYWxsGAIgASgLMhkua29pbm9zLmNoYWluLmNhbGxfdGFyZ2V0SABSBGNhbGyIAQFCBwoFX2NhbGwiKAoQYXV0aG9yaXplX3Jlc3VsdBIUCgV2YWx1ZRgBIAEoCFIFdmFsdWUqWQoSYXV0aG9yaXphdGlvbl90eXBlEhEKDWNvbnRyYWN0X2NhbGwQABIbChd0cmFuc2FjdGlvbl9hcHBsaWNhdGlvbhABEhMKD2NvbnRyYWN0X3VwbG9hZBACQjRaMmdpdGh1Yi5jb20va29pbm9zL2tvaW5vcy1wcm90by1nb2xhbmcva29pbm9zL2NoYWluYgZwcm90bzM="
+}

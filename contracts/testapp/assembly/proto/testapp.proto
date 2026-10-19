@@ -1,0 +1,30 @@
+syntax = "proto3";
+package testapp;
+import "koinos/options.proto";
+
+message counter_object { uint64 n = 1 [jstype = JS_STRING]; }
+
+// @description Typical small game action: bump the caller's counter (needs the caller's signature).
+// @read-only false
+message play_arguments { bytes user = 1 [(koinos.btype) = ADDRESS]; }
+message play_result { uint64 n = 1 [jstype = JS_STRING]; }
+
+// @description Heavier action: write `items` records (to measure a bigger action's cost).
+// @read-only false
+message heavy_arguments { bytes user = 1 [(koinos.btype) = ADDRESS]; uint32 items = 2; }
+message heavy_result {}
+
+// @description Never allowlisted in the station (to test refusals).
+// @read-only false
+message nope_arguments {}
+message nope_result {}
+
+// @description Always reverts after doing work (to test "included but reverted is still charged").
+// @read-only false
+message boom_arguments {}
+message boom_result {}
+
+// @description Read a counter.
+// @read-only true
+message get_arguments { bytes user = 1 [(koinos.btype) = ADDRESS]; }
+message get_result { uint64 n = 1 [jstype = JS_STRING]; }

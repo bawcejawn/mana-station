@@ -1,0 +1,132 @@
+{
+  "methods": {
+    "play": {
+      "entry_point": 2879704219,
+      "argument": "testapp.play_arguments",
+      "return": "testapp.play_result",
+      "read_only": false,
+      "description": "Typical small game action: bump the caller's counter (needs the caller's signature)."
+    },
+    "heavy": {
+      "entry_point": 584421982,
+      "argument": "testapp.heavy_arguments",
+      "return": "testapp.heavy_result",
+      "read_only": false,
+      "description": "Heavier action: write `items` records (to measure a bigger action's cost)."
+    },
+    "nope": {
+      "entry_point": 3392603306,
+      "argument": "testapp.nope_arguments",
+      "return": "testapp.nope_result",
+      "read_only": false,
+      "description": "Never allowlisted in the station (to test refusals)."
+    },
+    "boom": {
+      "entry_point": 2180326199,
+      "argument": "testapp.boom_arguments",
+      "return": "testapp.boom_result",
+      "read_only": false,
+      "description": "Always reverts after doing work (to test \"included but reverted is still charged\")."
+    },
+    "get": {
+      "entry_point": 697873187,
+      "argument": "testapp.get_arguments",
+      "return": "testapp.get_result",
+      "read_only": true,
+      "description": "Read a counter."
+    }
+  },
+  "koilib_types": {
+    "nested": {
+      "testapp": {
+        "nested": {
+          "counter_object": {
+            "fields": {
+              "n": {
+                "type": "uint64",
+                "id": 1,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              }
+            }
+          },
+          "play_arguments": {
+            "fields": {
+              "user": {
+                "type": "bytes",
+                "id": 1,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              }
+            }
+          },
+          "play_result": {
+            "fields": {
+              "n": {
+                "type": "uint64",
+                "id": 1,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              }
+            }
+          },
+          "heavy_arguments": {
+            "fields": {
+              "user": {
+                "type": "bytes",
+                "id": 1,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "items": {
+                "type": "uint32",
+                "id": 2
+              }
+            }
+          },
+          "heavy_result": {
+            "fields": {}
+          },
+          "nope_arguments": {
+            "fields": {}
+          },
+          "nope_result": {
+            "fields": {}
+          },
+          "boom_arguments": {
+            "fields": {}
+          },
+          "boom_result": {
+            "fields": {}
+          },
+          "get_arguments": {
+            "fields": {
+              "user": {
+                "type": "bytes",
+                "id": 1,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              }
+            }
+          },
+          "get_result": {
+            "fields": {
+              "n": {
+                "type": "uint64",
+                "id": 1,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

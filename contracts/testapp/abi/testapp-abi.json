@@ -1,0 +1,132 @@
+{
+    "methods": {
+        "play": {
+            "input": "testapp.play_arguments",
+            "output": "testapp.play_result",
+            "description": "Typical small game action: bump the caller's counter (needs the caller's signature).",
+            "entryPoint": 2879704219,
+            "readOnly": false
+        },
+        "heavy": {
+            "input": "testapp.heavy_arguments",
+            "output": "testapp.heavy_result",
+            "description": "Heavier action: write `items` records (to measure a bigger action's cost).",
+            "entryPoint": 584421982,
+            "readOnly": false
+        },
+        "nope": {
+            "input": "testapp.nope_arguments",
+            "output": "testapp.nope_result",
+            "description": "Never allowlisted in the station (to test refusals).",
+            "entryPoint": 3392603306,
+            "readOnly": false
+        },
+        "boom": {
+            "input": "testapp.boom_arguments",
+            "output": "testapp.boom_result",
+            "description": "Always reverts after doing work (to test \"included but reverted is still charged\").",
+            "entryPoint": 2180326199,
+            "readOnly": false
+        },
+        "get": {
+            "input": "testapp.get_arguments",
+            "output": "testapp.get_result",
+            "description": "Read a counter.",
+            "entryPoint": 697873187,
+            "readOnly": true
+        }
+    },
+    "types": {
+        "nested": {
+            "testapp": {
+                "nested": {
+                    "counter_object": {
+                        "fields": {
+                            "n": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "play_arguments": {
+                        "fields": {
+                            "user": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            }
+                        }
+                    },
+                    "play_result": {
+                        "fields": {
+                            "n": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "heavy_arguments": {
+                        "fields": {
+                            "user": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "items": {
+                                "type": "uint32",
+                                "id": 2
+                            }
+                        }
+                    },
+                    "heavy_result": {
+                        "fields": {}
+                    },
+                    "nope_arguments": {
+                        "fields": {}
+                    },
+                    "nope_result": {
+                        "fields": {}
+                    },
+                    "boom_arguments": {
+                        "fields": {}
+                    },
+                    "boom_result": {
+                        "fields": {}
+                    },
+                    "get_arguments": {
+                        "fields": {
+                            "user": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            }
+                        }
+                    },
+                    "get_result": {
+                        "fields": {
+                            "n": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

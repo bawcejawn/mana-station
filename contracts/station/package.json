@@ -1,0 +1,26 @@
+{
+  "name": "mana-station",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "description": "Mana Station: pays Mana only for allowlisted calls into approved apps (TESTNET prototype)",
+  "scripts": {
+    "prebuild": "node scripts/prebuild.cjs",
+    "build": "koinos-sdk-as-cli build-all release 0 station.proto --generate_authorize && node scripts/make-abi.cjs",
+    "build:sim": "node scripts/prebuild.cjs && koinos-sdk-as-cli build-all release 1 station.proto --generate_authorize",
+    "test": "npm run build:sim && node node_modules/@as-pect/cli/bin/asp.js --config as-pect.config.js"
+  },
+  "devDependencies": {
+    "@as-pect/assembly": "^8.1.0",
+    "@as-pect/cli": "8.1.0",
+    "@as-pect/core": "^8.1.0",
+    "@as-pect/transform": "^8.1.0",
+    "@koinos/mock-vm": "1.3.0",
+    "@koinos/sdk-as": "1.5.1",
+    "@koinos/sdk-as-cli": "1.0.2",
+    "assemblyscript": "0.27.37"
+  },
+  "dependencies": {
+    "koilib": "9.4.1"
+  }
+}

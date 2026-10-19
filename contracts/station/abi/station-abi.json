@@ -1,0 +1,1368 @@
+{
+    "methods": {
+        "get_status": {
+            "input": "station.get_status_arguments",
+            "output": "station.get_status_result",
+            "description": "Station budgets, Mana, floors and big-upload state.",
+            "entryPoint": 1926086621,
+            "readOnly": true
+        },
+        "authorize": {
+            "input": "koinos.chain.authorize_arguments",
+            "output": "koinos.chain.authorize_result",
+            "description": "Check if authorized",
+            "entryPoint": 1244511632,
+            "read-only": false
+        },
+        "get_user": {
+            "input": "station.get_user_arguments",
+            "output": "station.get_user_result",
+            "description": "One user's counters.",
+            "entryPoint": 3206425114,
+            "readOnly": true
+        },
+        "get_app": {
+            "input": "station.get_app_arguments",
+            "output": "station.get_app_result",
+            "description": "One of Carl's apps: allowance and rolling 24 h use.",
+            "entryPoint": 2798755822,
+            "readOnly": true
+        },
+        "get_entry": {
+            "input": "station.get_entry_arguments",
+            "output": "station.get_entry_result",
+            "description": "Allowlist entry for a contract + entry point.",
+            "entryPoint": 545992801,
+            "readOnly": true
+        },
+        "quote_allowance": {
+            "input": "station.quote_allowance_arguments",
+            "output": "station.quote_allowance_result",
+            "description": "Price of a sold daily allowance.",
+            "entryPoint": 369890148,
+            "readOnly": true
+        },
+        "quote_big_upload": {
+            "input": "station.quote_big_upload_arguments",
+            "output": "station.quote_big_upload_result",
+            "description": "Price of a big upload and whether the reserve can take it now.",
+            "entryPoint": 3453903246,
+            "readOnly": true
+        },
+        "get_allowance": {
+            "input": "station.get_allowance_arguments",
+            "output": "station.get_allowance_result",
+            "description": "A sold allowance by id.",
+            "entryPoint": 2340079102,
+            "readOnly": true
+        },
+        "get_ticket": {
+            "input": "station.get_ticket_arguments",
+            "output": "station.get_ticket_result",
+            "description": "A big-upload ticket by payee.",
+            "entryPoint": 833636576,
+            "readOnly": true
+        },
+        "buy_allowance": {
+            "input": "station.buy_allowance_arguments",
+            "output": "station.buy_allowance_result",
+            "description": "Buy a daily Mana allowance for an app contract (kind 1) or an account (kind 2) for N prepaid days.",
+            "entryPoint": 1614950239,
+            "readOnly": false
+        },
+        "renew": {
+            "input": "station.renew_arguments",
+            "output": "station.renew_result",
+            "description": "Extend a sold allowance by N prepaid days.",
+            "entryPoint": 2741644513,
+            "readOnly": false
+        },
+        "buy_big_upload": {
+            "input": "station.buy_big_upload_arguments",
+            "output": "station.buy_big_upload_result",
+            "description": "Buy a one-time big upload (prepaid quoted Mana, expires) for `payee`.",
+            "entryPoint": 471703334,
+            "readOnly": false
+        },
+        "close_ticket": {
+            "input": "station.close_ticket_arguments",
+            "output": "station.close_ticket_result",
+            "description": "After a ticket expires, release its unused Mana from the big-upload debt (anyone).",
+            "entryPoint": 4273893948,
+            "readOnly": false
+        },
+        "init": {
+            "input": "station.init_arguments",
+            "output": "station.init_result",
+            "description": "First-time setup (station key).",
+            "entryPoint": 3142846090,
+            "readOnly": false
+        },
+        "set_config": {
+            "input": "station.set_config_arguments",
+            "output": "station.set_config_result",
+            "description": "Replace the settings (owner).",
+            "entryPoint": 1269140617,
+            "readOnly": false
+        },
+        "set_paused": {
+            "input": "station.set_paused_arguments",
+            "output": "station.set_paused_result",
+            "description": "Kill switch (owner).",
+            "entryPoint": 905688855,
+            "readOnly": false
+        },
+        "set_app": {
+            "input": "station.set_app_arguments",
+            "output": "station.set_app_result",
+            "description": "Add or change one of Carl's apps, its allowance and any explicit boost (owner).",
+            "entryPoint": 2276139282,
+            "readOnly": false
+        },
+        "set_entry": {
+            "input": "station.set_entry_arguments",
+            "output": "station.set_entry_result",
+            "description": "Allow or remove a contract + entry point (owner).",
+            "entryPoint": 1403025060,
+            "readOnly": false
+        },
+        "set_exempt": {
+            "input": "station.set_exempt_arguments",
+            "output": "station.set_exempt_result",
+            "description": "Add, change or remove a fee-exempt contract (owner only; emits station.exempt_changed).",
+            "entryPoint": 1715540148,
+            "readOnly": false
+        },
+        "get_exempt": {
+            "input": "station.get_exempt_arguments",
+            "output": "station.get_exempt_result",
+            "description": "A fee-exempt entry (empty if not exempt).",
+            "entryPoint": 4011860966,
+            "readOnly": true
+        },
+        "set_price": {
+            "input": "station.set_price_arguments",
+            "output": "station.set_price_result",
+            "description": "Set the price for a stablecoin (owner).",
+            "entryPoint": 769612638,
+            "readOnly": false
+        },
+        "withdraw_revenue": {
+            "input": "station.withdraw_revenue_arguments",
+            "output": "station.withdraw_revenue_result",
+            "description": "Send collected stablecoin revenue to `to` (owner).",
+            "entryPoint": 4008444138,
+            "readOnly": false
+        },
+        "cancel_allowance": {
+            "input": "station.cancel_allowance_arguments",
+            "output": "station.cancel_allowance_result",
+            "description": "End a sold allowance early and optionally refund from revenue (owner; policy is an open decision).",
+            "entryPoint": 3345235150,
+            "readOnly": false
+        }
+    },
+    "types": {
+        "nested": {
+            "station": {
+                "nested": {
+                    "config_object": {
+                        "fields": {
+                            "owner": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "paused": {
+                                "type": "bool",
+                                "id": 2
+                            },
+                            "koinAmount": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "refillBp": {
+                                "type": "uint32",
+                                "id": 4
+                            },
+                            "adminMin": {
+                                "type": "uint64",
+                                "id": 5,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "hardMax": {
+                                "type": "uint64",
+                                "id": 6,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "perMin": {
+                                "type": "uint32",
+                                "id": 7
+                            },
+                            "cooldownMs": {
+                                "type": "uint64",
+                                "id": 8,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "dayActions": {
+                                "type": "uint32",
+                                "id": 9
+                            },
+                            "dayMana": {
+                                "type": "uint64",
+                                "id": 10,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "newActions": {
+                                "type": "uint32",
+                                "id": 11
+                            },
+                            "newMana": {
+                                "type": "uint64",
+                                "id": 12,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "newPct": {
+                                "type": "uint32",
+                                "id": 13
+                            },
+                            "maxOps": {
+                                "type": "uint32",
+                                "id": 14
+                            },
+                            "bigMax": {
+                                "type": "uint64",
+                                "id": 16,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "bigCooldownMs": {
+                                "type": "uint64",
+                                "id": 17,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "bigWeekCap": {
+                                "type": "uint64",
+                                "id": 18,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "bigMaxDebt": {
+                                "type": "uint64",
+                                "id": 19,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "bigTicketMs": {
+                                "type": "uint64",
+                                "id": 20,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "maxAllowances": {
+                                "type": "uint32",
+                                "id": 21
+                            },
+                            "maxDays": {
+                                "type": "uint64",
+                                "id": 22,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "treasury": {
+                                "type": "bytes",
+                                "id": 23,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            }
+                        },
+                        "reserved": [
+                            [
+                                15,
+                                15
+                            ]
+                        ]
+                    },
+                    "app_object": {
+                        "fields": {
+                            "reservedMana": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "active": {
+                                "type": "bool",
+                                "id": 2
+                            },
+                            "boostMana": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "boostUntil": {
+                                "type": "uint64",
+                                "id": 4,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "exempt_object": {
+                        "fields": {
+                            "app": {
+                                "type": "uint32",
+                                "id": 1
+                            },
+                            "strict": {
+                                "type": "bool",
+                                "id": 2
+                            }
+                        }
+                    },
+                    "exempt_event": {
+                        "fields": {
+                            "contractId": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "CONTRACT_ID"
+                                }
+                            },
+                            "value": {
+                                "type": "exempt_object",
+                                "id": 2
+                            },
+                            "removed": {
+                                "type": "bool",
+                                "id": 3
+                            }
+                        }
+                    },
+                    "entry_object": {
+                        "fields": {
+                            "app": {
+                                "type": "uint32",
+                                "id": 1
+                            },
+                            "cap": {
+                                "type": "uint64",
+                                "id": 2,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "maxArgs": {
+                                "type": "uint32",
+                                "id": 3
+                            }
+                        }
+                    },
+                    "window_object": {
+                        "fields": {
+                            "base": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "n": {
+                                "rule": "repeated",
+                                "type": "uint32",
+                                "id": 2
+                            },
+                            "mana": {
+                                "rule": "repeated",
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "newMana": {
+                                "rule": "repeated",
+                                "type": "uint64",
+                                "id": 4,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "user_object": {
+                        "fields": {
+                            "firstSeen": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "lastBlock": {
+                                "type": "uint64",
+                                "id": 2,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "minute": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "nMin": {
+                                "type": "uint32",
+                                "id": 4
+                            },
+                            "cooldownUntil": {
+                                "type": "uint64",
+                                "id": 5,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "day": {
+                                "type": "window_object",
+                                "id": 6
+                            }
+                        }
+                    },
+                    "price_object": {
+                        "fields": {
+                            "active": {
+                                "type": "bool",
+                                "id": 1
+                            },
+                            "perManaDay": {
+                                "type": "uint64",
+                                "id": 2,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "perBigMana": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "minDays": {
+                                "type": "uint64",
+                                "id": 4,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "maxPerPurchase": {
+                                "type": "uint64",
+                                "id": 5,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "allowance_object": {
+                        "fields": {
+                            "id": {
+                                "type": "uint32",
+                                "id": 1
+                            },
+                            "buyer": {
+                                "type": "bytes",
+                                "id": 2,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "kind": {
+                                "type": "uint32",
+                                "id": 3
+                            },
+                            "target": {
+                                "type": "bytes",
+                                "id": 4,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "manaPerDay": {
+                                "type": "uint64",
+                                "id": 5,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "expiry": {
+                                "type": "uint64",
+                                "id": 6,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "day": {
+                                "type": "window_object",
+                                "id": 7
+                            }
+                        }
+                    },
+                    "ticket_object": {
+                        "fields": {
+                            "buyer": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "mana": {
+                                "type": "uint64",
+                                "id": 2,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "remaining": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "expiry": {
+                                "type": "uint64",
+                                "id": 4,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "allowUpload": {
+                                "type": "bool",
+                                "id": 5
+                            }
+                        }
+                    },
+                    "big_object": {
+                        "fields": {
+                            "debt": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "debtTs": {
+                                "type": "uint64",
+                                "id": 2,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "lastBuy": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "week": {
+                                "type": "window_object",
+                                "id": 4
+                            },
+                            "nextId": {
+                                "type": "uint32",
+                                "id": 5
+                            }
+                        }
+                    },
+                    "registry_object": {
+                        "fields": {
+                            "appIds": {
+                                "rule": "repeated",
+                                "type": "uint32",
+                                "id": 1
+                            },
+                            "openIds": {
+                                "rule": "repeated",
+                                "type": "uint32",
+                                "id": 2
+                            }
+                        }
+                    },
+                    "revenue_object": {
+                        "fields": {
+                            "total": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "get_status_arguments": {
+                        "fields": {}
+                    },
+                    "get_status_result": {
+                        "fields": {
+                            "config": {
+                                "type": "config_object",
+                                "id": 1
+                            },
+                            "mana": {
+                                "type": "uint64",
+                                "id": 2,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "dailyBudget": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "reserveFloor": {
+                                "type": "uint64",
+                                "id": 4,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "bigFloor": {
+                                "type": "uint64",
+                                "id": 5,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "used_24h": {
+                                "type": "uint64",
+                                "id": 6,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "soldCapacity": {
+                                "type": "uint64",
+                                "id": 7,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "soldCommitted": {
+                                "type": "uint64",
+                                "id": 8,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "bigDebt": {
+                                "type": "uint64",
+                                "id": 9,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "get_user_arguments": {
+                        "fields": {
+                            "user": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            }
+                        }
+                    },
+                    "get_user_result": {
+                        "fields": {
+                            "user": {
+                                "type": "user_object",
+                                "id": 1
+                            },
+                            "actions_24h": {
+                                "type": "uint32",
+                                "id": 2
+                            },
+                            "mana_24h": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "get_app_arguments": {
+                        "fields": {
+                            "app": {
+                                "type": "uint32",
+                                "id": 1
+                            }
+                        }
+                    },
+                    "get_app_result": {
+                        "fields": {
+                            "app": {
+                                "type": "app_object",
+                                "id": 1
+                            },
+                            "allowance": {
+                                "type": "uint64",
+                                "id": 2,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "used_24h": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "newUsed_24h": {
+                                "type": "uint64",
+                                "id": 4,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "get_entry_arguments": {
+                        "fields": {
+                            "contractId": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "CONTRACT_ID"
+                                }
+                            },
+                            "entryPoint": {
+                                "type": "uint32",
+                                "id": 2
+                            }
+                        }
+                    },
+                    "get_entry_result": {
+                        "fields": {
+                            "entry": {
+                                "type": "entry_object",
+                                "id": 1
+                            }
+                        }
+                    },
+                    "quote_allowance_arguments": {
+                        "fields": {
+                            "token": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "CONTRACT_ID"
+                                }
+                            },
+                            "manaPerDay": {
+                                "type": "uint64",
+                                "id": 2,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "days": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "quote_allowance_result": {
+                        "fields": {
+                            "price": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "available": {
+                                "type": "bool",
+                                "id": 2
+                            },
+                            "reason": {
+                                "type": "string",
+                                "id": 3
+                            }
+                        }
+                    },
+                    "quote_big_upload_arguments": {
+                        "fields": {
+                            "token": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "CONTRACT_ID"
+                                }
+                            },
+                            "mana": {
+                                "type": "uint64",
+                                "id": 2,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "quote_big_upload_result": {
+                        "fields": {
+                            "price": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "available": {
+                                "type": "bool",
+                                "id": 2
+                            },
+                            "reason": {
+                                "type": "string",
+                                "id": 3
+                            }
+                        }
+                    },
+                    "get_allowance_arguments": {
+                        "fields": {
+                            "id": {
+                                "type": "uint32",
+                                "id": 1
+                            }
+                        }
+                    },
+                    "get_allowance_result": {
+                        "fields": {
+                            "allowance": {
+                                "type": "allowance_object",
+                                "id": 1
+                            },
+                            "used_24h": {
+                                "type": "uint64",
+                                "id": 2,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "get_ticket_arguments": {
+                        "fields": {
+                            "payee": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            }
+                        }
+                    },
+                    "get_ticket_result": {
+                        "fields": {
+                            "ticket": {
+                                "type": "ticket_object",
+                                "id": 1
+                            }
+                        }
+                    },
+                    "buy_allowance_arguments": {
+                        "fields": {
+                            "buyer": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "kind": {
+                                "type": "uint32",
+                                "id": 2
+                            },
+                            "target": {
+                                "type": "bytes",
+                                "id": 3,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "manaPerDay": {
+                                "type": "uint64",
+                                "id": 4,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "days": {
+                                "type": "uint64",
+                                "id": 5,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "token": {
+                                "type": "bytes",
+                                "id": 6,
+                                "options": {
+                                    "(koinos.btype)": "CONTRACT_ID"
+                                }
+                            },
+                            "maxPrice": {
+                                "type": "uint64",
+                                "id": 7,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "buy_allowance_result": {
+                        "fields": {
+                            "id": {
+                                "type": "uint32",
+                                "id": 1
+                            },
+                            "expiry": {
+                                "type": "uint64",
+                                "id": 2,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "paid": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "renew_arguments": {
+                        "fields": {
+                            "payer": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "id": {
+                                "type": "uint32",
+                                "id": 2
+                            },
+                            "days": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "token": {
+                                "type": "bytes",
+                                "id": 4,
+                                "options": {
+                                    "(koinos.btype)": "CONTRACT_ID"
+                                }
+                            },
+                            "maxPrice": {
+                                "type": "uint64",
+                                "id": 5,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "renew_result": {
+                        "fields": {
+                            "expiry": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "paid": {
+                                "type": "uint64",
+                                "id": 2,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "buy_big_upload_arguments": {
+                        "fields": {
+                            "buyer": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "payee": {
+                                "type": "bytes",
+                                "id": 2,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "mana": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "token": {
+                                "type": "bytes",
+                                "id": 4,
+                                "options": {
+                                    "(koinos.btype)": "CONTRACT_ID"
+                                }
+                            },
+                            "maxPrice": {
+                                "type": "uint64",
+                                "id": 5,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "allowUpload": {
+                                "type": "bool",
+                                "id": 6
+                            }
+                        }
+                    },
+                    "buy_big_upload_result": {
+                        "fields": {
+                            "expiry": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "paid": {
+                                "type": "uint64",
+                                "id": 2,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "close_ticket_arguments": {
+                        "fields": {
+                            "payee": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            }
+                        }
+                    },
+                    "close_ticket_result": {
+                        "fields": {}
+                    },
+                    "init_arguments": {
+                        "fields": {
+                            "config": {
+                                "type": "config_object",
+                                "id": 1
+                            }
+                        }
+                    },
+                    "init_result": {
+                        "fields": {}
+                    },
+                    "set_config_arguments": {
+                        "fields": {
+                            "config": {
+                                "type": "config_object",
+                                "id": 1
+                            }
+                        }
+                    },
+                    "set_config_result": {
+                        "fields": {}
+                    },
+                    "set_paused_arguments": {
+                        "fields": {
+                            "paused": {
+                                "type": "bool",
+                                "id": 1
+                            }
+                        }
+                    },
+                    "set_paused_result": {
+                        "fields": {}
+                    },
+                    "set_app_arguments": {
+                        "fields": {
+                            "app": {
+                                "type": "uint32",
+                                "id": 1
+                            },
+                            "value": {
+                                "type": "app_object",
+                                "id": 2
+                            }
+                        }
+                    },
+                    "set_app_result": {
+                        "fields": {}
+                    },
+                    "set_entry_arguments": {
+                        "fields": {
+                            "contractId": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "CONTRACT_ID"
+                                }
+                            },
+                            "entryPoint": {
+                                "type": "uint32",
+                                "id": 2
+                            },
+                            "value": {
+                                "type": "entry_object",
+                                "id": 3
+                            },
+                            "remove": {
+                                "type": "bool",
+                                "id": 4
+                            }
+                        }
+                    },
+                    "set_entry_result": {
+                        "fields": {}
+                    },
+                    "set_exempt_arguments": {
+                        "fields": {
+                            "contractId": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "CONTRACT_ID"
+                                }
+                            },
+                            "value": {
+                                "type": "exempt_object",
+                                "id": 2
+                            },
+                            "remove": {
+                                "type": "bool",
+                                "id": 3
+                            }
+                        }
+                    },
+                    "set_exempt_result": {
+                        "fields": {}
+                    },
+                    "get_exempt_arguments": {
+                        "fields": {
+                            "contractId": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "CONTRACT_ID"
+                                }
+                            }
+                        }
+                    },
+                    "get_exempt_result": {
+                        "fields": {
+                            "exempt": {
+                                "type": "exempt_object",
+                                "id": 1
+                            }
+                        }
+                    },
+                    "set_price_arguments": {
+                        "fields": {
+                            "token": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "CONTRACT_ID"
+                                }
+                            },
+                            "value": {
+                                "type": "price_object",
+                                "id": 2
+                            }
+                        }
+                    },
+                    "set_price_result": {
+                        "fields": {}
+                    },
+                    "withdraw_revenue_arguments": {
+                        "fields": {
+                            "token": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "CONTRACT_ID"
+                                }
+                            },
+                            "to": {
+                                "type": "bytes",
+                                "id": 2,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "amount": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "withdraw_revenue_result": {
+                        "fields": {}
+                    },
+                    "cancel_allowance_arguments": {
+                        "fields": {
+                            "id": {
+                                "type": "uint32",
+                                "id": 1
+                            },
+                            "token": {
+                                "type": "bytes",
+                                "id": 2,
+                                "options": {
+                                    "(koinos.btype)": "CONTRACT_ID"
+                                }
+                            },
+                            "refund": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "cancel_allowance_result": {
+                        "fields": {}
+                    }
+                }
+            },
+            "koinos": {
+                "nested": {
+                    "chain": {
+                        "options": {
+                            "go_package": "github.com/koinos/koinos-proto-golang/koinos/chain"
+                        },
+                        "nested": {
+                            "authorization_type": {
+                                "values": {
+                                    "contract_call": 0,
+                                    "transaction_application": 1,
+                                    "contract_upload": 2
+                                }
+                            },
+                            "call_target": {
+                                "fields": {
+                                    "contractId": {
+                                        "type": "bytes",
+                                        "id": 1,
+                                        "options": {
+                                            "(btype)": "ADDRESS"
+                                        }
+                                    },
+                                    "entryPoint": {
+                                        "type": "uint32",
+                                        "id": 2
+                                    }
+                                }
+                            },
+                            "authorize_arguments": {
+                                "oneofs": {
+                                    "_call": {
+                                        "oneof": [
+                                            "call"
+                                        ]
+                                    }
+                                },
+                                "fields": {
+                                    "type": {
+                                        "type": "authorization_type",
+                                        "id": 1
+                                    },
+                                    "call": {
+                                        "type": "call_target",
+                                        "id": 2,
+                                        "options": {
+                                            "proto3_optional": true
+                                        }
+                                    }
+                                }
+                            },
+                            "authorize_result": {
+                                "fields": {
+                                    "value": {
+                                        "type": "bool",
+                                        "id": 1
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,40 @@
+{
+    "methods": {
+        "play": {
+            "argument": "testapp.play_arguments",
+            "return": "testapp.play_result",
+            "description": "Typical small game action: bump the caller's counter (needs the caller's signature).",
+            "entry-point": "0xaba4cc9b",
+            "read-only": false
+        },
+        "heavy": {
+            "argument": "testapp.heavy_arguments",
+            "return": "testapp.heavy_result",
+            "description": "Heavier action: write `items` records (to measure a bigger action's cost).",
+            "entry-point": "0x22d5925e",
+            "read-only": false
+        },
+        "nope": {
+            "argument": "testapp.nope_arguments",
+            "return": "testapp.nope_result",
+            "description": "Never allowlisted in the station (to test refusals).",
+            "entry-point": "0xca3704aa",
+            "read-only": false
+        },
+        "boom": {
+            "argument": "testapp.boom_arguments",
+            "return": "testapp.boom_result",
+            "description": "Always reverts after doing work (to test \"included but reverted is still charged\").",
+            "entry-point": "0x81f52337",
+            "read-only": false
+        },
+        "get": {
+            "argument": "testapp.get_arguments",
+            "return": "testapp.get_result",
+            "description": "Read a counter.",
+            "entry-point": "0x2998b323",
+            "read-only": true
+        }
+    },
+    "types": "CpYDChxhc3NlbWJseS9wcm90by90ZXN0YXBwLnByb3RvEgd0ZXN0YXBwGhRrb2lub3Mvb3B0aW9ucy5wcm90byIiCg5jb3VudGVyX29iamVjdBIQCgFuGAEgASgEQgIwAVIBbiIqCg5wbGF5X2FyZ3VtZW50cxIYCgR1c2VyGAEgASgMQgSAtRgGUgR1c2VyIh8KC3BsYXlfcmVzdWx0EhAKAW4YASABKARCAjABUgFuIkEKD2hlYXZ5X2FyZ3VtZW50cxIYCgR1c2VyGAEgASgMQgSAtRgGUgR1c2VyEhQKBWl0ZW1zGAIgASgNUgVpdGVtcyIOCgxoZWF2eV9yZXN1bHQiEAoObm9wZV9hcmd1bWVudHMiDQoLbm9wZV9yZXN1bHQiEAoOYm9vbV9hcmd1bWVudHMiDQoLYm9vbV9yZXN1bHQiKQoNZ2V0X2FyZ3VtZW50cxIYCgR1c2VyGAEgASgMQgSAtRgGUgR1c2VyIh4KCmdldF9yZXN1bHQSEAoBbhgBIAEoBEICMAFSAW5iBnByb3RvMw=="
+}
