@@ -1,5 +1,5 @@
 
-ÑK
+•L
 assembly/proto/station.protostationkoinos/options.proto" 
 config_object
 owner (B€µRowner
@@ -98,7 +98,7 @@ unit_price
 term_start (B0R	termStart!
 
 total_paid (B0R	totalPaid!
-purchase_ids (RpurchaseIds"ù
+purchase_ids (RpurchaseIds"½
 ticket_object
 buyer (B€µRbuyer
 mana (B0Rmana 
@@ -108,7 +108,10 @@ total_paid (B0R	totalPaid!
 token (B€µRtoken
 paid (B0Rpaid
 purchase_id (R
-purchaseId"Œ
+purchaseId
+bought	 (B0Rbought&
+prev_last_buy
+ (B0RprevLastBuy"Œ
 
 big_object
 debt (B0Rdebt

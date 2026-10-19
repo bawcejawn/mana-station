@@ -46,6 +46,7 @@ export const ALLOWANCE_TERMS = "Prepaid. Your payment is held in the station's e
 export const BIG_TERMS = "Prepaid one-time big upload, held in the station's escrow. Cancel any time, or let it expire: unused Mana is refunded in full, pro rata (no minimum charge; rounded down by less than one token base unit). After a refund, the same buyer waits one cooldown period before buying another ticket. Paused time extends the ticket. No auto-renew. Non-transferable; not redeemable for crypto or cash except these refunds. A buyer may be suspended for abuse, sanctions or AUP reasons; the operator may refund unused Mana (never to a sanctioned party).";
 const MAX_OPEN_PURCHASES: i32 = 128;                 // bounded loops (pause credit)
 const MAX_TERMS: i32 = 8;
+const DEFAULT_TICKET_MS: u64 = 86_400_000;          // ticket lifetime when big_ticket_ms = 0 (Carl, 8:02 PM: 24 h)
 const TX_BUFFER: u32 = 64 * 1024;                   // normal sponsored txs
 const BIG_TX_BUFFER: u32 = 1024 * 1024;             // big-upload ticket txs (contract bytecode)                            // open escrow terms per allowance
 const DEFAULT_ALERT_MANA: u64 = 15_000 * MANA;     // Carl: alert below 15k by default
@@ -587,11 +588,13 @@ export class Station {
     System.require(q.available, q.reason != null ? q.reason! : "unavailable");
     System.require(q.price <= args.max_price, "price above the accepted quote");
     const b = this.big.get()!;
+    const prevLast = b.last_buy;
     b.debt = this.debtNow(c, b, now) + args.mana; b.debt_ts = now; b.last_buy = now;
     if (b.week == null) b.week = new station.window_object();
     roll(b.week!, now / DAY, WEEK_N, false); add(b.week!, now / DAY, WEEK_N, args.mana, false);
     this.big.put(b);
-    const t = new station.ticket_object(args.buyer, args.mana, args.mana, now + c.big_ticket_ms, args.allow_upload, args.token, q.price);
+    const t = new station.ticket_object(args.buyer, args.mana, args.mana, now + (c.big_ticket_ms > 0 ? c.big_ticket_ms : DEFAULT_TICKET_MS), args.allow_upload, args.token, q.price);
+    t.bought = now; t.prev_last_buy = prevLast;
     const e = this.newPurchase(2, args.buyer!, args.token!, q.price, now, t.expiry);
     e.payee = args.payee; e.mana = args.mana; this.escrow.put(u32Key(e.id), e); t.purchase_id = e.id;
     this.tickets.put(args.payee!, t);
@@ -751,8 +754,21 @@ export class Station {
   settleTicket(c: station.config_object, payee: Uint8Array, t: station.ticket_object, buyerCooldown: bool, action: string, now: u64, noRefund: bool = false): u64[] {
     const e = this.escrow.get(u32Key(t.purchase_id));
     let r: u64 = 0, rel: u64 = 0;
+    // Fee-free hold fix (Carl, 8:02 PM): unused Mana is released from every counter, once (the ticket is removed here,
+    // so a ticket can't be settled twice), and no counter can go below 0.
     const b = this.big.get()!; const d = this.debtNow(c, b, now);
-    b.debt = t.remaining >= d ? 0 : d - t.remaining; b.debt_ts = now; this.big.put(b);
+    const unused = t.remaining;
+    b.debt = unused >= d ? 0 : d - unused; b.debt_ts = now;                 // outstanding
+    if (unused > 0 && b.week != null) {                                       // weekly cap: only used Mana counts
+      roll(b.week!, now / DAY, WEEK_N, false);
+      const slot = t.bought / DAY;
+      if (slot + u64(WEEK_N) > b.week!.base && slot <= b.week!.base) {        // purchase day still in the 7-day window
+        const i = i32(slot % u64(WEEK_N));
+        b.week!.mana[i] = b.week!.mana[i] > unused ? b.week!.mana[i] - unused : 0;
+      }
+    }
+    if (unused > 0 && b.last_buy == t.bought) b.last_buy = t.prev_last_buy; // lift the station-wide wait this ticket started
+    this.big.put(b);
     this.tickets.remove(payee);
     if (e != null && !e.closed) {
       r = noRefund ? 0 : this.ticketRefund(e!, t);

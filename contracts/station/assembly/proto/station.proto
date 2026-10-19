@@ -27,7 +27,7 @@ message config_object {
   uint64 big_cooldown_ms = 17 [jstype = JS_STRING]; // between big-upload purchases (station-wide)
   uint64 big_week_cap = 18 [jstype = JS_STRING];    // total big uploads per rolling 7 days (Mana)
   uint64 big_max_debt = 19 [jstype = JS_STRING];    // reserve that big uploads may owe at once (Mana)
-  uint64 big_ticket_ms = 20 [jstype = JS_STRING];   // a big-upload ticket expires after this
+  uint64 big_ticket_ms = 20 [jstype = JS_STRING];   // ticket lifetime; 0 = default 24 h (Carl, 8:02 PM). Owner-adjustable
   uint32 max_allowances = 21;                       // sold allowances open at once (bounded loops)
   uint64 max_days = 22 [jstype = JS_STRING];        // longest prepaid period per buy / renew
   // Where ESCROW RELEASES go (Carl, 7:47 PM: payments are held in the station's escrow until the term ends).
@@ -128,6 +128,8 @@ message ticket_object {
   bytes token = 6 [(koinos.btype) = CONTRACT_ID];    // price snapshot at purchase
   uint64 paid = 7 [jstype = JS_STRING];
   uint32 purchase_id = 8;                            // escrow purchase
+  uint64 bought = 9 [jstype = JS_STRING];            // purchase time (weekly-cap slot, station wait)
+  uint64 prev_last_buy = 10 [jstype = JS_STRING];    // station-wide last purchase before this one (restored on release)
 }
 
 // Station-wide big-upload state. Debt is repaid at the sold slice's daily rate (the slice pauses while it repays),

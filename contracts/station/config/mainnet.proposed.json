@@ -18,7 +18,7 @@
     "big_cooldown_ms": "86400000",
     "big_week_cap": "1200000000000",
     "big_max_debt": "600000000000",
-    "big_ticket_ms": "259200000",
+    "big_ticket_ms": "86400000",
     "max_allowances": 50,
     "max_days": "90",
     "treasury": "empty = release destination is the owner wallet (DECIDED by Carl 5:18 PM; since 7:47 PM payments are escrowed first). Owner-changeable to another external wallet; the station's own id is refused",
@@ -88,7 +88,8 @@
     "big_week_cap": "12,000 Mana per rolling 7 days",
     "big_max_debt": "6,000 Mana outstanding",
     "scaling": "debt is repaid at the sellable slice's rate: 6,000 takes 6,000 / sellable days (e.g. 40k KOIN → 2,000/day → 3 days). Suggested rule: big_max_debt ≈ 3 × sellable/day, week cap ≈ 2 × big_max; re-set when koin_amount changes",
-    "at_30k": "unavailable: sellable slice is 0 (quote reason 'no repayment capacity')"
+    "at_30k": "unavailable: sellable slice is 0 (quote reason 'no repayment capacity')",
+    "big_ticket_ms": "24 h (DECIDED 8:02 PM; 0 also means 24 h); owner-adjustable"
   },
   "_buffer": {
     "status": "DECIDED by Carl (5:22 PM)",
@@ -126,6 +127,6 @@
     "pause": "paused time is credited: the escrow clock stops while paused and every running/upcoming term, allowance and ticket is extended by the pause on unpause",
     "suspension": "owner_refund refunds unused days/Mana (no minimum charge) for buyers not at fault (reason 4) or by owner choice for abuse/AUP; sanctions (reason 2): refund AND release frozen until legal review (reclassify a false match to reason 4)",
     "invariant": "per token: station balance == held == collected − refunded − released",
-    "ticket_anti_spam": "no fee: after a buyer gets unused Mana back, that buyer waits big_cooldown_ms (24 h) before another ticket. Existing limits still apply: station-wide 24 h purchase cooldown, 6,000 per request, 6,000 outstanding, 12,000 per 7 days, 72 h ticket life, owner suspend switch"
+    "ticket_anti_spam": "fee-free (Carl, 8:02 PM): on cancel/refund/expiry the UNUSED Mana is released from the outstanding and weekly counters (only used Mana counts toward the 12,000/week), and the station-wide 24 h purchase wait reverts to the previous purchase; the refunded buyer still waits 24 h; ticket life 24 h. Counters are clamped at 0 and freed once (the ticket is removed at settlement)"
   }
 }

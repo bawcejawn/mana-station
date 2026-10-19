@@ -429,11 +429,12 @@ Carl's reasoning: "someone needs the mana for 4 days but bought for 7 … keep t
     - big uploads only; Carl's apps and sold allowances are untouched;
     - the owner suspend switch.
   - **Added (no fee):** a per-buyer cooldown. After a buyer gets unused Mana back (cancel or expiry), that buyer must wait `big_cooldown_ms` (24 h) before buying another ticket. Owner refunds don't trigger it.
-  - **Residual risk (Carl decision, not built):** one address (or several) can still keep big uploads blocked for others for free. Each cycle is: buy, which starts the station-wide 24 h cooldown and books up to 6,000 outstanding for up to 72 h; then cancel with a full refund. Non-fee options:
-    - (a) on cancel, release the station-wide cooldown and the weekly-cap booking for the unused Mana;
-    - (b) shorter ticket life (`big_ticket_ms`, e.g. 24 h);
-    - (c) unused tickets release their booking after N hours unless used.
-    - (a) + (b) is the simplest.
+  - **Hold fix (a) + (b), decided by Carl (Oct 19, 8:02 PM), fee-free, built:**
+    - (a) When a ticket is settled with unused Mana (buyer cancel, expiry, owner refund, owner settle), the unused Mana is released from the **outstanding** counter and from the **weekly** counter (its purchase-day bucket). Only used Mana counts toward the 12,000/week. The **station-wide 24 h purchase wait** reverts to the previous purchase, if this ticket started it.
+    - The per-buyer 24 h wait after a refund stays.
+    - (b) Ticket lifetime defaults to **24 h** (`big_ticket_ms`; 0 also means 24 h), owner-adjustable.
+    - Safety: counters are clamped at 0. A ticket is removed at settlement, so it can't be freed twice; a second cancel, close or owner refund fails "no ticket". A purchase day that has left the 7-day window frees nothing.
+    - Result: buy-and-cancel loops from any number of addresses leave no booking behind, and other buyers can purchase right away. The remaining hold is one open ticket for up to 24 h, bounded by the 6,000 outstanding limit, plus the owner suspend switch.
 - **Release (`release(purchase_id)`):**
   - Anyone may call it, only after the term ends, and it pays out once (`closed`).
   - It goes to the treasury: Carl's owner wallet by default. The station itself is refused as treasury.
@@ -456,6 +457,14 @@ Carl's reasoning: "someone needs the mana for 4 days but bought for 7 … keep t
   - "Prepaid. Your payment is held in the station's escrow until the term ends, then released to the operator. Cancel any time: unused whole days are refunded (the current day counts as used, so 1 day is the minimum charge). If the operator pauses the station, paused time is credited … No auto-renew …"
   - The ticket version adds "unused Mana is refunded pro rata, with a minimum charge of 20%".
 - **Found while testing: SDK buffer limit.** The koinos-sdk-as system-call buffer defaults to **1 KiB**. Reading a tx's operations in `authorize` would fail for any tx larger than that, including every big upload of a contract. `authorize` now sets 64 KiB, or 1 MiB for ticket holders. UNVERIFIED against the chain's real max tx size and the memory/Mana cost: testnet item.
+
+**Tests (after the hold fix): 42/42 pass.** New:
+- an attacker loop (6 addresses × buy 300 + cancel) leaves outstanding 0 and the week free; another buyer buys at once; the attacker is still in its own 24 h wait;
+- only used Mana counts toward the weekly cap and outstanding; a second cancel, close or owner refund fails; no underflow after the week rolls off;
+- the station wait restores to the previous purchase, not 0;
+- 24 h default ticket life, owner-adjustable.
+
+Mutation check, each change alone, every one caught: no wait restore → 2 fail; no weekly release → 2; no outstanding release → 4; wrong default life → 1; no buyer wait → 2; wait cleared instead of restored → 1. Release wasm 59,725 bytes.
 
 **Tests (after the no-minimum decision): 39/39 pass.** New: 0 used → full refund, then the same buyer is on cooldown while another buyer can buy; expiry with no use → full refund; exact pro rata with 10.5 used (447,500 / 52,500); 128-bit `mulDiv` edge cases. Mutation check: whole-Mana rounding → 1 fail; no buyer cooldown → 1; a hidden 20% charge → 3. Release wasm 59,347 bytes.
 
@@ -514,7 +523,7 @@ Release wasm: 58,724 bytes; ABI 30 methods.
 2. v2 budget: 20% of `koin_amount` per rolling 24 h (6,000 at 30k), always refilled; 80% reserve; `admin_min` 100 is untouchable.
 3. Absolute reservations (Knode and Stories 3,000 each) for exempt Carl projects; only an owner boost exceeds them. The sellable slice = budget − reservations (0 at 30k). Per-user anti-spam is unchanged.
 4. The derived sellable slice backs prepaid vUSDT/vUSDC allowances (pull payment, auto expiry, renew), exempt overflow and big-upload debt repayment. It is 0 at 30k, so all three stay off until KOIN is added.
-5. 39/39 simulated-chain tests pass (escrow; tickets refunded exactly pro rata, no minimum). Earlier: 37/37 (escrow, pro-rata refunds, release after the term, pause credit). Earlier: 30/30 (incl. per-buyer suspend switch). Earlier: 28/28 (no refunds, vUSDT + vUSDC, approved big-upload limits). Earlier: 25/25 (payments go directly to Carl; exempt apps get a 20% buffer from the reserve with alerts; paid allowances hard-capped). Earlier: 23/23, with the introductory prices applied (1/7/30-day tiers, price snapshot, no auto-renew) (owner-only fee-exempt allowlist with events; fee-free, not limit-free). Testnet is parked. Knode `set_sponsor_limit(0)` waits until the station is fully launched.
+5. 42/42 simulated-chain tests pass (escrow, exact ticket refunds, fee-free hold fix). Earlier: 39/39 (escrow; tickets refunded exactly pro rata, no minimum). Earlier: 37/37 (escrow, pro-rata refunds, release after the term, pause credit). Earlier: 30/30 (incl. per-buyer suspend switch). Earlier: 28/28 (no refunds, vUSDT + vUSDC, approved big-upload limits). Earlier: 25/25 (payments go directly to Carl; exempt apps get a 20% buffer from the reserve with alerts; paid allowances hard-capped). Earlier: 23/23, with the introductory prices applied (1/7/30-day tiers, price snapshot, no auto-renew) (owner-only fee-exempt allowlist with events; fee-free, not limit-free). Testnet is parked. Knode `set_sponsor_limit(0)` waits until the station is fully launched.
 
 **Decided (2026-10-19):** rolling windows; testnet OK (parked); Knode off only after launch; own Mana is the default payer; v2 budget model; vUSDT primary / vUSDC optional; Chainge USDT rejected.
 
@@ -529,7 +538,7 @@ Release wasm: 58,724 bytes; ABI 30 methods.
 **Decided (Oct 19, 7:47 PM, Carl):** escrow with pro-rata refunds of unused whole days (current day = used), release after the term ends to the owner wallet, ticket refunds exactly pro rata with no minimum (Carl, 7:59 PM) plus a per-buyer no-fee cooldown after a refund, pause credit, owner refunds for buyers not at fault, sanctions freeze. Supersedes "no refunds".
 
 **Still for Carl (flags, not open design decisions):**
-1. Ticket spam residual risk: choose (a) release the station cooldown/week booking on cancel, (b) shorter ticket life, or (c) auto-release unused bookings. Sanctions freeze: lawyer on blocked funds. See §7e.
+1. Sanctions freeze: lawyer on what to do with blocked escrow funds. (Ticket hold fix (a)+(b) decided and built 8:02 PM.) See §7e.
 2. When to add KOIN: at 30k there is nothing to sell and no big uploads (e.g. +10k → 2,000/day).
 3. Testnet: still blocked by the box's egress allowlist (TLS cut for harbinger-api / harbinger-rest; mainnet passes). The host allowlist must add both. Verify `authorize` events, cost and the Kondor "Optimize mana" margin there before mainnet.
 

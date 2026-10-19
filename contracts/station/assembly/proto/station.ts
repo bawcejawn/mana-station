@@ -1097,6 +1097,16 @@ export namespace station {
         writer.uint32(64);
         writer.uint32(message.purchase_id);
       }
+
+      if (message.bought != 0) {
+        writer.uint32(72);
+        writer.uint64(message.bought);
+      }
+
+      if (message.prev_last_buy != 0) {
+        writer.uint32(80);
+        writer.uint64(message.prev_last_buy);
+      }
     }
 
     static decode(reader: Reader, length: i32): ticket_object {
@@ -1138,6 +1148,14 @@ export namespace station {
             message.purchase_id = reader.uint32();
             break;
 
+          case 9:
+            message.bought = reader.uint64();
+            break;
+
+          case 10:
+            message.prev_last_buy = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -1155,6 +1173,8 @@ export namespace station {
     token: Uint8Array | null;
     paid: u64;
     purchase_id: u32;
+    bought: u64;
+    prev_last_buy: u64;
 
     constructor(
       buyer: Uint8Array | null = null,
@@ -1164,7 +1184,9 @@ export namespace station {
       allow_upload: bool = false,
       token: Uint8Array | null = null,
       paid: u64 = 0,
-      purchase_id: u32 = 0
+      purchase_id: u32 = 0,
+      bought: u64 = 0,
+      prev_last_buy: u64 = 0
     ) {
       this.buyer = buyer;
       this.mana = mana;
@@ -1174,6 +1196,8 @@ export namespace station {
       this.token = token;
       this.paid = paid;
       this.purchase_id = purchase_id;
+      this.bought = bought;
+      this.prev_last_buy = prev_last_buy;
     }
   }
 

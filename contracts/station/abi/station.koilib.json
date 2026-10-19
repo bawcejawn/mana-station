@@ -723,6 +723,20 @@
               "purchase_id": {
                 "type": "uint32",
                 "id": 8
+              },
+              "bought": {
+                "type": "uint64",
+                "id": 9,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "prev_last_buy": {
+                "type": "uint64",
+                "id": 10,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
               }
             }
           },
