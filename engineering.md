@@ -300,6 +300,42 @@ Code: `contracts/station/` (v1 kept in `contracts/v1-archive/`). Proposed mainne
 
 Release wasm: 42,566 bytes (about 30 Mana to upload, EST). Proposed settings: `contracts/station/config/mainnet.proposed.json`.
 
+**7b. Introductory prices (Carl approved via the Orchestrator, 17:11 UTC; source monetization_legal.md §8b). Applied locally.**
+- **Schema** (`price_object`, per token, 8 decimals):
+  - `price_1d` / `price_7d` / `price_30d` are per 1,000 Mana/day for the whole term: 3,000,000 / 20,000,000 / 75,000,000 ($0.03 / $0.20 / $0.75).
+  - `big_per_1000` = 5,000,000 ($0.05 per 1,000 Mana).
+  - `big_min_mana` = 5,000 Mana, so the minimum order is 25,000,000 ($0.25).
+  - `max_per_purchase` stays as before.
+  - The old `per_mana_day` / `per_big_mana` / `min_days` fields are retired.
+  - Price = ceil(whole Mana × tier / 1,000).
+- **Durations:** only 1, 7 and 30 days. Any other N is refused with "days must be 1, 7 or 30" (I took the preferred option: no per-day pricing for other N). A tier priced 0 is not offered.
+- **Changes apply to new purchases only:**
+  - Each allowance stores `token`, `term_days`, `unit_price`, `paid`, `term_start` and `total_paid`.
+  - Each big-upload ticket stores `token` and `paid`.
+  - `set_price` never touches existing terms. Everything is prepaid, so nothing is charged later.
+- **Renewal = a new term at the price CURRENT at renewal time,** not the original price.
+  - It starts when the running term ends; the running term keeps what it paid.
+  - The allowance's snapshot is replaced by the new term's values and `total_paid` accumulates.
+  - Every term is emitted as an event (`station.allowance_bought` / `station.allowance_renewed`).
+  - The `max_price` guard protects the payer from a price change between quote and renew.
+- **No auto-renew anywhere:** there is no scheduled or third-party charge path. `renew` needs the payer's own signature (the owner can't either), and expiry simply ends service.
+- **Conflict (Carl decision):** the old big-upload limits (2,000 per request, 6,000 weekly, 6,000 outstanding) were inconsistent with the 5,000 minimum.
+  - Proposed: per-request max 6,000, weekly 12,000, outstanding 6,000.
+  - Debt is repaid at the sellable rate, so 6,000 takes 6,000 / sellable days (3 days at 40k KOIN).
+  - Suggested rule: outstanding ≈ 3 × sellable/day, weekly ≈ 2 × per-request max; re-set these when `koin_amount` changes.
+  - **At 30k, big uploads stay unavailable** because the sellable slice is 0.
+
+**Tests: 23/23 pass** (4 new). A mutation check (big minimum removed, any N priced, renewal snapshot not updated) fails 3 tests.
+
+| New check | Result |
+|---|---|
+| Price snapshot on purchase; a price change leaves the existing term (price, expiry, balance, service) alone; new buys and renewals pay the new price; renewing at the old price is refused | PASS |
+| Only 1/7/30 days (2, 3 and 14 refused); 1,000 Mana/day → 3,000,000 / 75,000,000; a tier priced 0 is not offered | PASS |
+| Big-upload minimum enforced (below it refused); ticket stores what was paid; 5,000 Mana quotes 25,000,000 | PASS |
+| No auto-renew: after expiry nothing is charged and expiry is unchanged; a third party or the owner can't renew | PASS |
+
+Release wasm: 44,024 bytes.
+
 ## VERIFY answers (Designer list and design.md)
 1. **Ordinary wallet as a station?** Yes, by uploading the contract to that address. It then becomes a contract account for the overridden types only. The private key keeps every type that isn't overridden. Use a separate account (§2). Each provider needs their own station contract account (§5). VERIFIED (authority docs; Fogata and Knode patterns).
 2. **Paying for calls into other contracts?** YES. The payer filters operations in `authorize` (§1, §2). VERIFIED in source. Testnet confirmation still recommended.
@@ -328,17 +364,19 @@ Release wasm: 42,566 bytes (about 30 Mana to upload, EST). Proposed settings: `c
 2. v2 budget: 20% of `koin_amount` per rolling 24 h (6,000 at 30k), always refilled; 80% reserve; `admin_min` 100 is untouchable.
 3. Absolute reservations (Knode and Stories 3,000 each) for exempt Carl projects; only an owner boost exceeds them. The sellable slice = budget − reservations (0 at 30k). Per-user anti-spam is unchanged.
 4. The derived sellable slice backs prepaid vUSDT/vUSDC allowances (pull payment, auto expiry, renew), exempt overflow and big-upload debt repayment. It is 0 at 30k, so all three stay off until KOIN is added.
-5. 19/19 simulated-chain tests pass (owner-only fee-exempt allowlist with events; fee-free, not limit-free). Testnet is parked. Knode `set_sponsor_limit(0)` waits until the station is fully launched.
+5. 23/23 simulated-chain tests pass, with the introductory prices applied (1/7/30-day tiers, price snapshot, no auto-renew) (owner-only fee-exempt allowlist with events; fee-free, not limit-free). Testnet is parked. Knode `set_sponsor_limit(0)` waits until the station is fully launched.
 
 **Decided (2026-10-19):** rolling windows; testnet OK (parked); Knode off only after launch; own Mana is the default payer; v2 budget model; vUSDT primary / vUSDC optional; Chainge USDT rejected.
 
 **Decided (4:37 PM):** option A (reservations 3,000 + 3,000; sellable derived, 0 at 30k); fee-exempt allowlist for Carl's projects; prices blank until Monetization.
 
+**Decided (17:11 UTC):** introductory prices from §8b; tiers 1/7/30 days only; price changes for new purchases only; renewals at the current price; no auto-renew.
+
 **Decisions for Carl (open):**
 1. **Exempt overflow:** exempt usage beyond a reservation (and other Carl projects with no reservation) is taken only from the unsold sellable slice, and refused when there is none (always, at 30k). Alternatives: give each extra project its own reservation (which shrinks the sellable slice), or let exempt overflow take priority over sales.
 2. Treasury: the station (then `withdraw_revenue`) or Carl's wallet.
 3. Refund/cancel policy: non-refundable once started / pro-rata on owner cancel / off-chain only.
-4. Big-upload limits (2,000 per request, 24 h cooldown, 6,000/week, 6,000 max debt, 72 h tickets). Only matter once KOIN is added.
+4. Big-upload limits: proposed 6,000 per request (above the 5,000 minimum), 12,000/week, 6,000 outstanding, 24 h cooldown, 72 h tickets, scaled to the sellable slice (§7b). They only matter once KOIN is added; at 30k big uploads are unavailable.
 5. vUSDC on or off; per-purchase max (proposed 500 vUSDT / 100 vUSDC).
 6. When to add KOIN to open a sellable slice (e.g. +10k → 2,000/day).
 7. Testnet: still parked (the box can't reach Harbinger).

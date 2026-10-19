@@ -75,7 +75,7 @@
       "argument": "station.renew_arguments",
       "return": "station.renew_result",
       "read_only": false,
-      "description": "Extend a sold allowance by N prepaid days."
+      "description": "Extend a sold allowance by one more 1, 7 or 30 day term, paid now at the price CURRENT at renewal"
     },
     "buy_big_upload": {
       "entry_point": 471703334,
@@ -463,35 +463,63 @@
                 "type": "bool",
                 "id": 1
               },
-              "per_mana_day": {
-                "type": "uint64",
-                "id": 2,
-                "options": {
-                  "jstype": "JS_STRING"
-                }
-              },
-              "per_big_mana": {
-                "type": "uint64",
-                "id": 3,
-                "options": {
-                  "jstype": "JS_STRING"
-                }
-              },
-              "min_days": {
-                "type": "uint64",
-                "id": 4,
-                "options": {
-                  "jstype": "JS_STRING"
-                }
-              },
               "max_per_purchase": {
                 "type": "uint64",
                 "id": 5,
                 "options": {
                   "jstype": "JS_STRING"
                 }
+              },
+              "price_1d": {
+                "type": "uint64",
+                "id": 6,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "price_7d": {
+                "type": "uint64",
+                "id": 7,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "price_30d": {
+                "type": "uint64",
+                "id": 8,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "big_per_1000": {
+                "type": "uint64",
+                "id": 9,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "big_min_mana": {
+                "type": "uint64",
+                "id": 10,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
               }
-            }
+            },
+            "reserved": [
+              [
+                2,
+                2
+              ],
+              [
+                3,
+                3
+              ],
+              [
+                4,
+                4
+              ]
+            ]
           },
           "allowance_object": {
             "fields": {
@@ -534,6 +562,48 @@
               "day": {
                 "type": "window_object",
                 "id": 7
+              },
+              "token": {
+                "type": "bytes",
+                "id": 8,
+                "options": {
+                  "(koinos.btype)": "CONTRACT_ID"
+                }
+              },
+              "term_days": {
+                "type": "uint64",
+                "id": 9,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "unit_price": {
+                "type": "uint64",
+                "id": 10,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "paid": {
+                "type": "uint64",
+                "id": 11,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "term_start": {
+                "type": "uint64",
+                "id": 12,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "total_paid": {
+                "type": "uint64",
+                "id": 13,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
               }
             }
           },
@@ -570,6 +640,20 @@
               "allow_upload": {
                 "type": "bool",
                 "id": 5
+              },
+              "token": {
+                "type": "bytes",
+                "id": 6,
+                "options": {
+                  "(koinos.btype)": "CONTRACT_ID"
+                }
+              },
+              "paid": {
+                "type": "uint64",
+                "id": 7,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
               }
             }
           },
@@ -829,6 +913,13 @@
               "reason": {
                 "type": "string",
                 "id": 3
+              },
+              "unit_price": {
+                "type": "uint64",
+                "id": 4,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
               }
             }
           },
@@ -866,6 +957,13 @@
               "reason": {
                 "type": "string",
                 "id": 3
+              },
+              "unit_price": {
+                "type": "uint64",
+                "id": 4,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
               }
             }
           },
@@ -1031,6 +1129,13 @@
               "paid": {
                 "type": "uint64",
                 "id": 2,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "unit_price": {
+                "type": "uint64",
+                "id": 3,
                 "options": {
                   "jstype": "JS_STRING"
                 }

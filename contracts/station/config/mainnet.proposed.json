@@ -1,18 +1,22 @@
 {
-  "_note": "PROPOSED mainnet settings, v2 with Carl's 4:37 PM answers (option A). Not deployed. Units: KOIN/Mana in satoshis (1e8); stablecoins 8 decimals. OPEN = still Carl's decision.",
+  "_note": "PROPOSED mainnet settings, v2 with Carl's 4:37 PM answers (option A) and the 5:11 PM introductory prices. Not deployed. Units: KOIN/Mana in satoshis (1e8); stablecoins 8 decimals. OPEN = still Carl's decision.",
   "config": {
     "owner": "<Carl's offline owner wallet>",
     "koin_amount": "3000000000000",
     "refill_bp": 2000,
     "admin_min": "10000000000",
     "hard_max": "300000000",
-    "per_min": 5, "cooldown_ms": "600000",
-    "day_actions": 25, "day_mana": "6000000000",
-    "new_actions": 10, "new_mana": "2500000000", "new_pct": 25,
+    "per_min": 5,
+    "cooldown_ms": "600000",
+    "day_actions": 25,
+    "day_mana": "6000000000",
+    "new_actions": 10,
+    "new_mana": "2500000000",
+    "new_pct": 25,
     "max_ops": 2,
-    "big_max": "200000000000",
+    "big_max": "600000000000",
     "big_cooldown_ms": "86400000",
-    "big_week_cap": "600000000000",
+    "big_week_cap": "1200000000000",
     "big_max_debt": "600000000000",
     "big_ticket_ms": "259200000",
     "max_allowances": 50,
@@ -27,19 +31,59 @@
     "reserve": "80% of koin_amount; big floor = admin_min + daily budget"
   },
   "apps": {
-    "1_knode":   { "reserved_mana": "300000000000", "active": true },
-    "2_stories": { "reserved_mana": "300000000000", "active": true }
+    "1_knode": {
+      "reserved_mana": "300000000000",
+      "active": true
+    },
+    "2_stories": {
+      "reserved_mana": "300000000000",
+      "active": true
+    }
   },
   "exempt": {
-    "1Mpmf2ERhjYpX7CCiM11WERuM4j17uT1sr": { "_name": "Knode (Kpred)", "app": 1, "strict": true },
-    "<Stories contract id, not deployed yet>": { "_name": "SwarmTales Stories", "app": 2, "strict": true },
+    "1Mpmf2ERhjYpX7CCiM11WERuM4j17uT1sr": {
+      "_name": "Knode (Kpred)",
+      "app": 1,
+      "strict": true
+    },
+    "<Stories contract id, not deployed yet>": {
+      "_name": "SwarmTales Stories",
+      "app": 2,
+      "strict": true
+    },
     "_other_carl_projects": "app 0: fee-free but only from the unsold sellable slice (refused while it is 0)"
   },
   "entries": "per-action caps for the strict exempt contracts: set after the testnet measurement (3 Mana each until then)",
   "prices": {
-    "vUSDT 12VoHz41a4HtfiyhTWbg9RXqGMRbYk6pXh": { "active": true, "per_mana_day": "", "per_big_mana": "", "min_days": "1", "max_per_purchase": "OPEN (proposed 50000000000 = 500 vUSDT)" },
-    "vUSDC 1N8iYrYEJdCVK1rhbqv3qZUzHcpoeKmFnj": { "active": "OPEN", "per_mana_day": "", "per_big_mana": "", "min_days": "1", "max_per_purchase": "OPEN (proposed 10000000000 = 100 vUSDC)" },
-    "_prices": "blank: Monetization will set them (lower than first proposed)",
+    "vUSDT 12VoHz41a4HtfiyhTWbg9RXqGMRbYk6pXh": {
+      "active": true,
+      "price_1d": "3000000",
+      "price_7d": "20000000",
+      "price_30d": "75000000",
+      "big_per_1000": "5000000",
+      "big_min_mana": "500000000000",
+      "max_per_purchase": "OPEN (proposed 50000000000 = 500 vUSDT)"
+    },
+    "vUSDC 1N8iYrYEJdCVK1rhbqv3qZUzHcpoeKmFnj": {
+      "active": "OPEN",
+      "price_1d": "3000000",
+      "price_7d": "20000000",
+      "price_30d": "75000000",
+      "big_per_1000": "5000000",
+      "big_min_mana": "500000000000",
+      "max_per_purchase": "OPEN (proposed 10000000000 = 100 vUSDC)"
+    },
+    "_units": "token base units, 8 decimals. Allowance prices are per 1,000 Mana/day for the whole term ($0.03 / $0.20 / $0.75); big upload $0.05 per 1,000 Mana, minimum 5,000 Mana = 25,000,000 ($0.25). Price = ceil(whole Mana × tier / 1,000)",
+    "_source": "Carl approved via Orchestrator 2026-10-19 17:11 UTC; monetization_legal.md §8b (introductory; may increase for new purchases)",
+    "_rules": "durations only 1, 7, 30 days (others refused). Price changes apply to new purchases and renewals only; each allowance/ticket stores token, tier price and amount paid. Renewal is charged at the price current at renewal time. No auto-renew: renew needs the payer's own signature",
     "rejected": "Chainge USDT 19WrWze3XAoMa3Mwqys4rJMP6emZX2wfpH (set_price refuses it)"
+  },
+  "_big_upload_limits": {
+    "status": "CARL DECISION (proposed; replaces 2,000 / 6,000 / 6,000, which conflicted with the 5,000 minimum)",
+    "big_max": "6,000 Mana per request (must be >= the 5,000 minimum)",
+    "big_week_cap": "12,000 Mana per rolling 7 days",
+    "big_max_debt": "6,000 Mana outstanding",
+    "scaling": "debt is repaid at the sellable slice's rate: 6,000 takes 6,000 / sellable days (e.g. 40k KOIN → 2,000/day → 3 days). Suggested rule: big_max_debt ≈ 3 × sellable/day, week cap ≈ 2 × big_max; re-set when koin_amount changes",
+    "at_30k": "unavailable: sellable slice is 0 (quote reason 'no repayment capacity')"
   }
 }

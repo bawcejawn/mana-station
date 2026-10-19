@@ -80,12 +80,17 @@ message user_object {
 }
 
 // Price per accepted stablecoin (owner-set; Monetization prices it). Token address/decimals: see stablecoins.md.
+// Prices per token (8 decimals). Tiers only: a buy or renew must be 1, 7 or 30 days; a tier priced 0 is not offered.
+// Prices are owner-adjustable and apply to NEW purchases and renewals only: each allowance stores what it paid.
 message price_object {
   bool active = 1;
-  uint64 per_mana_day = 2 [jstype = JS_STRING];     // token units per 1 Mana of daily allowance per day
-  uint64 per_big_mana = 3 [jstype = JS_STRING];     // token units per 1 Mana of big upload
-  uint64 min_days = 4 [jstype = JS_STRING];
+  reserved 2, 3, 4;                                  // were per_mana_day / per_big_mana / min_days
   uint64 max_per_purchase = 5 [jstype = JS_STRING]; // token units; thin liquidity (stablecoins.md), owner-set
+  uint64 price_1d = 6 [jstype = JS_STRING];         // token units per 1,000 Mana/day, whole 1-day term
+  uint64 price_7d = 7 [jstype = JS_STRING];         // per 1,000 Mana/day, whole 7-day term
+  uint64 price_30d = 8 [jstype = JS_STRING];        // per 1,000 Mana/day, whole 30-day term
+  uint64 big_per_1000 = 9 [jstype = JS_STRING];     // token units per 1,000 Mana of big upload (one-time)
+  uint64 big_min_mana = 10 [jstype = JS_STRING];    // smallest big-upload order (Mana, 8 decimals)
 }
 
 // A sold daily allowance. kind 1 = calls into contract `target`; kind 2 = txs whose payee is account `target`.
@@ -97,6 +102,13 @@ message allowance_object {
   uint64 mana_per_day = 5 [jstype = JS_STRING];
   uint64 expiry = 6 [jstype = JS_STRING];
   window_object day = 7;
+  // Price snapshot of the CURRENT prepaid term (set at buy, replaced at each renewal; every term is also in an event).
+  bytes token = 8 [(koinos.btype) = CONTRACT_ID];
+  uint64 term_days = 9 [jstype = JS_STRING];         // 1, 7 or 30
+  uint64 unit_price = 10 [jstype = JS_STRING];       // tier price per 1,000 Mana/day in force when this term was paid
+  uint64 paid = 11 [jstype = JS_STRING];             // paid for this term
+  uint64 term_start = 12 [jstype = JS_STRING];
+  uint64 total_paid = 13 [jstype = JS_STRING];       // all terms together
 }
 
 // A prepaid big upload for `payee`: up to `mana` in total, each tx up to `mana`, until expiry.
@@ -106,6 +118,8 @@ message ticket_object {
   uint64 remaining = 3 [jstype = JS_STRING];
   uint64 expiry = 4 [jstype = JS_STRING];
   bool allow_upload = 5;                             // may pay for uploading the payee's own contract
+  bytes token = 6 [(koinos.btype) = CONTRACT_ID];    // price snapshot at purchase
+  uint64 paid = 7 [jstype = JS_STRING];
 }
 
 // Station-wide big-upload state. Debt is repaid at the sold slice's daily rate (the slice pauses while it repays),
@@ -194,6 +208,7 @@ message quote_allowance_result {
   uint64 price = 1 [jstype = JS_STRING];   // token units (vUSDT / vUSDC: 8 decimals)
   bool available = 2;
   string reason = 3;
+  uint64 unit_price = 4 [jstype = JS_STRING]; // tier price per 1,000 Mana(/day) used
 }
 
 // @description Price of a big upload and whether the reserve can take it now.
@@ -207,6 +222,7 @@ message quote_big_upload_result {
   uint64 price = 1 [jstype = JS_STRING];
   bool available = 2;
   string reason = 3;
+  uint64 unit_price = 4 [jstype = JS_STRING];
 }
 
 // @description A sold allowance by id.
@@ -250,7 +266,8 @@ message buy_allowance_result {
   uint64 paid = 3 [jstype = JS_STRING];
 }
 
-// @description Extend a sold allowance by N prepaid days.
+// @description Extend a sold allowance by one more 1, 7 or 30 day term, paid now at the price CURRENT at renewal
+// (not the original price). Only by explicit call signed by the payer: there is no auto-renew.
 // @read-only false
 message renew_arguments {
   bytes payer = 1 [(koinos.btype) = ADDRESS];
@@ -263,6 +280,7 @@ message renew_arguments {
 message renew_result {
   uint64 expiry = 1 [jstype = JS_STRING];
   uint64 paid = 2 [jstype = JS_STRING];
+  uint64 unit_price = 3 [jstype = JS_STRING];        // current tier price applied to this renewal
 }
 
 // @description Buy a one-time big upload (prepaid quoted Mana, expires) for `payee`.

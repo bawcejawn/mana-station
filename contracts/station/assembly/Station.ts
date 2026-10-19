@@ -42,6 +42,17 @@ function u32Key(n: u32): Uint8Array { const k = new Uint8Array(4); k[0] = u8(n >
 function entryKey(contract: Uint8Array, ep: u32): Uint8Array { const k = new Uint8Array(contract.length + 4); k.set(contract, 0); k.set(u32Key(ep), contract.length); return k; }
 function pct(amount: u64, bp: u32): u64 { return amount / 10_000 * u64(bp); }
 function wholeManaUp(m: u64): u64 { return (m + MANA - 1) / MANA; }
+const MAX_WHOLE_MANA: u64 = 100_000_000;            // quote bound (no u64 overflow with prices <= MAX_UNIT_PRICE)
+const MAX_UNIT_PRICE: u64 = 10_000_000_000;         // 100 tokens per 1,000 Mana(/day)
+/** Tier price per 1,000 Mana/day for a whole term; 0 = this duration is not offered. Only 1, 7 and 30 days exist. */
+function tierPrice(p: station.price_object, days: u64): u64 {
+  if (days == 1) return p.price_1d;
+  if (days == 7) return p.price_7d;
+  if (days == 30) return p.price_30d;
+  return 0;
+}
+/** ceil(whole Mana × unit / 1,000). */
+function per1000(manaUnits: u64, unit: u64): u64 { return (wholeManaUp(manaUnits) * unit + 999) / 1000; }
 
 function txOps(): protocol.operation[] {
   if (BUILD_FOR_TESTING) return System.getTransaction().operations;
@@ -351,9 +362,11 @@ export class Station {
     const r = new station.quote_allowance_result();
     const p = this.prices.get(token);
     if (p == null || !p.active) { r.reason = "token not accepted"; return r; }
-    r.price = wholeManaUp(manaPerDay) * days * p.per_mana_day;
-    if (days < (p.min_days > 0 ? p.min_days : 1) || days > c.max_days) { r.reason = "days out of range"; return r; }
+    const unit = tierPrice(p, days);
+    if (unit == 0) { r.reason = "days must be 1, 7 or 30"; return r; }
     if (manaPerDay < MANA) { r.reason = "at least 1 Mana per day"; return r; }
+    if (wholeManaUp(manaPerDay) > MAX_WHOLE_MANA) { r.reason = "too large"; return r; }
+    r.price = per1000(manaPerDay, unit); r.unit_price = unit;
     if (r.price > p.max_per_purchase) { r.reason = "above the per-purchase maximum"; return r; }
     const cm = this.committed(c, now, false);
     let held: u64 = 0;
@@ -368,9 +381,11 @@ export class Station {
   bigQuote(c: station.config_object, token: Uint8Array, mana: u64, now: u64): station.quote_allowance_result {
     const r = new station.quote_allowance_result(); const p = this.prices.get(token);
     if (p == null || !p.active) { r.reason = "token not accepted"; return r; }
-    r.price = wholeManaUp(mana) * p.per_big_mana;
     const b = this.big.get()!;
-    if (mana < MANA || mana > c.big_max) { r.reason = "outside the per-request range"; return r; }
+    if (p.big_per_1000 == 0) { r.reason = "big uploads not priced for this token"; return r; }
+    if (mana < p.big_min_mana || mana < MANA) { r.reason = "below the big-upload minimum"; return r; }
+    if (mana > c.big_max) { r.reason = "above the per-request maximum"; return r; }
+    r.price = per1000(mana, p.big_per_1000); r.unit_price = p.big_per_1000;
     if (r.price > p.max_per_purchase) { r.reason = "above the per-purchase maximum"; return r; }
     if (this.soldCap(c) == 0) { r.reason = "no repayment capacity (sellable slice is 0)"; return r; }
     if (b.last_buy > 0 && now < b.last_buy + c.big_cooldown_ms) { r.reason = "cooldown"; return r; }
@@ -383,7 +398,7 @@ export class Station {
   }
   quote_big_upload(args: station.quote_big_upload_arguments): station.quote_big_upload_result {
     const q = this.bigQuote(this.config.get()!, args.token!, args.mana, this.now());
-    return new station.quote_big_upload_result(q.price, q.available, q.reason);
+    return new station.quote_big_upload_result(q.price, q.available, q.reason, q.unit_price);
   }
   get_allowance(args: station.get_allowance_arguments): station.get_allowance_result {
     const r = new station.get_allowance_result(); const a = this.allowances.get(u32Key(args.id));
@@ -411,6 +426,7 @@ export class Station {
     this.collect(c, args.token!, args.buyer!, q.price);
     const b = this.big.get()!; b.next_id += 1; this.big.put(b);
     const a = new station.allowance_object(b.next_id, args.buyer, args.kind, args.target, args.mana_per_day, now + args.days * DAY, new station.window_object());
+    a.token = args.token; a.term_days = args.days; a.unit_price = q.unit_price; a.paid = q.price; a.term_start = now; a.total_paid = q.price;
     this.allowances.put(u32Key(a.id), a);
     const reg = this.registry.get()!; reg.open_ids.push(a.id); this.registry.put(reg);
     this.targets.put(args.target!, new station.revenue_object(u64(a.id)));
@@ -430,8 +446,13 @@ export class Station {
     System.require(start + args.days * DAY <= now + c.max_days * DAY, "prepaid period too long");
     System.require(q.price <= args.max_price, "price above the accepted quote");
     this.collect(c, args.token!, args.payer!, q.price);
-    a!.expiry = start + args.days * DAY; this.allowances.put(u32Key(a!.id), a!);
-    return new station.renew_result(a!.expiry, q.price);
+    // The running term keeps what it paid; the new term is priced at the CURRENT price and starts when the old one ends.
+    a!.expiry = start + args.days * DAY;
+    a!.token = args.token; a!.term_days = args.days; a!.unit_price = q.unit_price; a!.paid = q.price; a!.term_start = start;
+    a!.total_paid += q.price;
+    this.allowances.put(u32Key(a!.id), a!);
+    System.event("station.allowance_renewed", Protobuf.encode(a!, station.allowance_object.encode), [args.payer!, a!.target!]);
+    return new station.renew_result(a!.expiry, q.price, q.unit_price);
   }
   buy_big_upload(args: station.buy_big_upload_arguments): station.buy_big_upload_result {
     const c = this.config.get()!; const now = this.now();
@@ -448,7 +469,7 @@ export class Station {
     if (b.week == null) b.week = new station.window_object();
     roll(b.week!, now / DAY, WEEK_N, false); add(b.week!, now / DAY, WEEK_N, args.mana, false);
     this.big.put(b);
-    const t = new station.ticket_object(args.buyer, args.mana, args.mana, now + c.big_ticket_ms, args.allow_upload);
+    const t = new station.ticket_object(args.buyer, args.mana, args.mana, now + c.big_ticket_ms, args.allow_upload, args.token, q.price);
     this.tickets.put(args.payee!, t);
     System.event("station.big_upload_bought", Protobuf.encode(t, station.ticket_object.encode), [args.buyer!, args.payee!]);
     return new station.buy_big_upload_result(t.expiry, q.price);
@@ -525,7 +546,9 @@ export class Station {
   set_price(args: station.set_price_arguments): station.set_price_result {
     this.requireOwner(); System.require(args.value != null && args.token != null, "token and price required");
     System.require(!Arrays.equal(args.token!, Base58.decode(LEGACY_CHAINGE_USDT)), "legacy Chainge USDT is not accepted");
-    System.require(args.value!.per_mana_day <= 1_000_000_000_000 && args.value!.per_big_mana <= 1_000_000_000_000, "price too large");
+    const v = args.value!;
+    System.require(v.price_1d <= MAX_UNIT_PRICE && v.price_7d <= MAX_UNIT_PRICE && v.price_30d <= MAX_UNIT_PRICE && v.big_per_1000 <= MAX_UNIT_PRICE, "price too large");
+    // Affects new purchases and renewals only: existing allowances and tickets keep their stored snapshot and expiry.
     this.prices.put(args.token!, args.value!);
     return new station.set_price_result();
   }

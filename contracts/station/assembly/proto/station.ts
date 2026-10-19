@@ -726,24 +726,34 @@ export namespace station {
         writer.bool(message.active);
       }
 
-      if (message.per_mana_day != 0) {
-        writer.uint32(16);
-        writer.uint64(message.per_mana_day);
-      }
-
-      if (message.per_big_mana != 0) {
-        writer.uint32(24);
-        writer.uint64(message.per_big_mana);
-      }
-
-      if (message.min_days != 0) {
-        writer.uint32(32);
-        writer.uint64(message.min_days);
-      }
-
       if (message.max_per_purchase != 0) {
         writer.uint32(40);
         writer.uint64(message.max_per_purchase);
+      }
+
+      if (message.price_1d != 0) {
+        writer.uint32(48);
+        writer.uint64(message.price_1d);
+      }
+
+      if (message.price_7d != 0) {
+        writer.uint32(56);
+        writer.uint64(message.price_7d);
+      }
+
+      if (message.price_30d != 0) {
+        writer.uint32(64);
+        writer.uint64(message.price_30d);
+      }
+
+      if (message.big_per_1000 != 0) {
+        writer.uint32(72);
+        writer.uint64(message.big_per_1000);
+      }
+
+      if (message.big_min_mana != 0) {
+        writer.uint32(80);
+        writer.uint64(message.big_min_mana);
       }
     }
 
@@ -758,20 +768,28 @@ export namespace station {
             message.active = reader.bool();
             break;
 
-          case 2:
-            message.per_mana_day = reader.uint64();
-            break;
-
-          case 3:
-            message.per_big_mana = reader.uint64();
-            break;
-
-          case 4:
-            message.min_days = reader.uint64();
-            break;
-
           case 5:
             message.max_per_purchase = reader.uint64();
+            break;
+
+          case 6:
+            message.price_1d = reader.uint64();
+            break;
+
+          case 7:
+            message.price_7d = reader.uint64();
+            break;
+
+          case 8:
+            message.price_30d = reader.uint64();
+            break;
+
+          case 9:
+            message.big_per_1000 = reader.uint64();
+            break;
+
+          case 10:
+            message.big_min_mana = reader.uint64();
             break;
 
           default:
@@ -784,23 +802,29 @@ export namespace station {
     }
 
     active: bool;
-    per_mana_day: u64;
-    per_big_mana: u64;
-    min_days: u64;
     max_per_purchase: u64;
+    price_1d: u64;
+    price_7d: u64;
+    price_30d: u64;
+    big_per_1000: u64;
+    big_min_mana: u64;
 
     constructor(
       active: bool = false,
-      per_mana_day: u64 = 0,
-      per_big_mana: u64 = 0,
-      min_days: u64 = 0,
-      max_per_purchase: u64 = 0
+      max_per_purchase: u64 = 0,
+      price_1d: u64 = 0,
+      price_7d: u64 = 0,
+      price_30d: u64 = 0,
+      big_per_1000: u64 = 0,
+      big_min_mana: u64 = 0
     ) {
       this.active = active;
-      this.per_mana_day = per_mana_day;
-      this.per_big_mana = per_big_mana;
-      this.min_days = min_days;
       this.max_per_purchase = max_per_purchase;
+      this.price_1d = price_1d;
+      this.price_7d = price_7d;
+      this.price_30d = price_30d;
+      this.big_per_1000 = big_per_1000;
+      this.big_min_mana = big_min_mana;
     }
   }
 
@@ -845,6 +869,37 @@ export namespace station {
         window_object.encode(unique_name_day, writer);
         writer.ldelim();
       }
+
+      const unique_name_token = message.token;
+      if (unique_name_token !== null) {
+        writer.uint32(66);
+        writer.bytes(unique_name_token);
+      }
+
+      if (message.term_days != 0) {
+        writer.uint32(72);
+        writer.uint64(message.term_days);
+      }
+
+      if (message.unit_price != 0) {
+        writer.uint32(80);
+        writer.uint64(message.unit_price);
+      }
+
+      if (message.paid != 0) {
+        writer.uint32(88);
+        writer.uint64(message.paid);
+      }
+
+      if (message.term_start != 0) {
+        writer.uint32(96);
+        writer.uint64(message.term_start);
+      }
+
+      if (message.total_paid != 0) {
+        writer.uint32(104);
+        writer.uint64(message.total_paid);
+      }
     }
 
     static decode(reader: Reader, length: i32): allowance_object {
@@ -882,6 +937,30 @@ export namespace station {
             message.day = window_object.decode(reader, reader.uint32());
             break;
 
+          case 8:
+            message.token = reader.bytes();
+            break;
+
+          case 9:
+            message.term_days = reader.uint64();
+            break;
+
+          case 10:
+            message.unit_price = reader.uint64();
+            break;
+
+          case 11:
+            message.paid = reader.uint64();
+            break;
+
+          case 12:
+            message.term_start = reader.uint64();
+            break;
+
+          case 13:
+            message.total_paid = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -898,6 +977,12 @@ export namespace station {
     mana_per_day: u64;
     expiry: u64;
     day: window_object | null;
+    token: Uint8Array | null;
+    term_days: u64;
+    unit_price: u64;
+    paid: u64;
+    term_start: u64;
+    total_paid: u64;
 
     constructor(
       id: u32 = 0,
@@ -906,7 +991,13 @@ export namespace station {
       target: Uint8Array | null = null,
       mana_per_day: u64 = 0,
       expiry: u64 = 0,
-      day: window_object | null = null
+      day: window_object | null = null,
+      token: Uint8Array | null = null,
+      term_days: u64 = 0,
+      unit_price: u64 = 0,
+      paid: u64 = 0,
+      term_start: u64 = 0,
+      total_paid: u64 = 0
     ) {
       this.id = id;
       this.buyer = buyer;
@@ -915,6 +1006,12 @@ export namespace station {
       this.mana_per_day = mana_per_day;
       this.expiry = expiry;
       this.day = day;
+      this.token = token;
+      this.term_days = term_days;
+      this.unit_price = unit_price;
+      this.paid = paid;
+      this.term_start = term_start;
+      this.total_paid = total_paid;
     }
   }
 
@@ -945,6 +1042,17 @@ export namespace station {
         writer.uint32(40);
         writer.bool(message.allow_upload);
       }
+
+      const unique_name_token = message.token;
+      if (unique_name_token !== null) {
+        writer.uint32(50);
+        writer.bytes(unique_name_token);
+      }
+
+      if (message.paid != 0) {
+        writer.uint32(56);
+        writer.uint64(message.paid);
+      }
     }
 
     static decode(reader: Reader, length: i32): ticket_object {
@@ -974,6 +1082,14 @@ export namespace station {
             message.allow_upload = reader.bool();
             break;
 
+          case 6:
+            message.token = reader.bytes();
+            break;
+
+          case 7:
+            message.paid = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -988,19 +1104,25 @@ export namespace station {
     remaining: u64;
     expiry: u64;
     allow_upload: bool;
+    token: Uint8Array | null;
+    paid: u64;
 
     constructor(
       buyer: Uint8Array | null = null,
       mana: u64 = 0,
       remaining: u64 = 0,
       expiry: u64 = 0,
-      allow_upload: bool = false
+      allow_upload: bool = false,
+      token: Uint8Array | null = null,
+      paid: u64 = 0
     ) {
       this.buyer = buyer;
       this.mana = mana;
       this.remaining = remaining;
       this.expiry = expiry;
       this.allow_upload = allow_upload;
+      this.token = token;
+      this.paid = paid;
     }
   }
 
@@ -1717,6 +1839,11 @@ export namespace station {
         writer.uint32(26);
         writer.string(unique_name_reason);
       }
+
+      if (message.unit_price != 0) {
+        writer.uint32(32);
+        writer.uint64(message.unit_price);
+      }
     }
 
     static decode(reader: Reader, length: i32): quote_allowance_result {
@@ -1738,6 +1865,10 @@ export namespace station {
             message.reason = reader.string();
             break;
 
+          case 4:
+            message.unit_price = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -1750,15 +1881,18 @@ export namespace station {
     price: u64;
     available: bool;
     reason: string | null;
+    unit_price: u64;
 
     constructor(
       price: u64 = 0,
       available: bool = false,
-      reason: string | null = null
+      reason: string | null = null,
+      unit_price: u64 = 0
     ) {
       this.price = price;
       this.available = available;
       this.reason = reason;
+      this.unit_price = unit_price;
     }
   }
 
@@ -1826,6 +1960,11 @@ export namespace station {
         writer.uint32(26);
         writer.string(unique_name_reason);
       }
+
+      if (message.unit_price != 0) {
+        writer.uint32(32);
+        writer.uint64(message.unit_price);
+      }
     }
 
     static decode(reader: Reader, length: i32): quote_big_upload_result {
@@ -1847,6 +1986,10 @@ export namespace station {
             message.reason = reader.string();
             break;
 
+          case 4:
+            message.unit_price = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -1859,15 +2002,18 @@ export namespace station {
     price: u64;
     available: bool;
     reason: string | null;
+    unit_price: u64;
 
     constructor(
       price: u64 = 0,
       available: bool = false,
-      reason: string | null = null
+      reason: string | null = null,
+      unit_price: u64 = 0
     ) {
       this.price = price;
       this.available = available;
       this.reason = reason;
+      this.unit_price = unit_price;
     }
   }
 
@@ -2302,6 +2448,11 @@ export namespace station {
         writer.uint32(16);
         writer.uint64(message.paid);
       }
+
+      if (message.unit_price != 0) {
+        writer.uint32(24);
+        writer.uint64(message.unit_price);
+      }
     }
 
     static decode(reader: Reader, length: i32): renew_result {
@@ -2319,6 +2470,10 @@ export namespace station {
             message.paid = reader.uint64();
             break;
 
+          case 3:
+            message.unit_price = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -2330,10 +2485,12 @@ export namespace station {
 
     expiry: u64;
     paid: u64;
+    unit_price: u64;
 
-    constructor(expiry: u64 = 0, paid: u64 = 0) {
+    constructor(expiry: u64 = 0, paid: u64 = 0, unit_price: u64 = 0) {
       this.expiry = expiry;
       this.paid = paid;
+      this.unit_price = unit_price;
     }
   }
 

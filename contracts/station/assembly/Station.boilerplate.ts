@@ -83,6 +83,7 @@ export class Station {
     // res.price = ;
     // res.available = ;
     // res.reason = ;
+    // res.unit_price = ;
 
     return res;
   }
@@ -99,6 +100,7 @@ export class Station {
     // res.price = ;
     // res.available = ;
     // res.reason = ;
+    // res.unit_price = ;
 
     return res;
   }
@@ -161,6 +163,7 @@ export class Station {
     const res = new station.renew_result();
     // res.expiry = ;
     // res.paid = ;
+    // res.unit_price = ;
 
     return res;
   }
