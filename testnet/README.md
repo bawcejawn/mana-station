@@ -6,3 +6,8 @@
 - NOTE (4:25 PM): `run_tests.mjs` targets the v1 ABI (init/set_app fields). Update it to the v2 config before any testnet run.
 
 > 2026-10-19 19:50 UTC: still blocked (Harbinger TLS cut by the box egress proxy). run_tests.mjs targets the v1 ABI; update it to the v2+escrow ABI (abi/station.koilib.json, 30 methods) once Harbinger is reachable.
+
+## v2 (2026-10-19 21:00 UTC): runs on GitHub Actions (private repo bawcejawn/mana-station, manual `testnet` workflow)
+- The box cannot reach Harbinger, so `.github/workflows/testnet.yml` runs: unit tests → testnet build (`npm run build:testnet`, VUSDT = the worthless mock token `contracts/mocktoken`) → mainnet build + `check:mainnet` → `run_tests.mjs` against https://harbinger-api.koinos.io.
+- Keys: the whole `keys.testnet.json` is the Actions secret `TESTNET_KEYS` (never committed; masked; deleted at the end of the job). Roles added: token, buyer, spam1, spam2 (`genkeys.mjs` only adds missing roles).
+- `run_tests.mjs` (v2): funding, deploys paid by the funder, provisional config, Mana measurements (self vs sponsored, Kondor 1.1x), Stories app spam (rate limit, new-user pool, buffer), designated-apps-only refusals, escrow allowance (reservation refusal, suspend, cancel refund), tickets (big tx buffer, 5% fee, anti-spam), invariants. Results: job summary + `results.json` / `results.md` artifact.

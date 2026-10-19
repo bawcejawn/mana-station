@@ -1,0 +1,62 @@
+name: testnet
+# Manual only. Free standard runner, 20-minute cap. Harbinger TESTNET only, throwaway keys from the TESTNET_KEYS secret.
+on:
+  workflow_dispatch:
+    inputs:
+      run_testnet:
+        description: "Run the Harbinger scenarios after the unit tests"
+        default: "true"
+permissions:
+  contents: read
+concurrency:
+  group: harbinger-testnet   # never two runs against the same throwaway accounts at once
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install
+        working-directory: contracts/station
+        run: npm ci --no-audit --no-fund
+      - name: Unit tests (MockVM)
+        working-directory: contracts/station
+        run: npm test </dev/null
+      - name: Write throwaway testnet keys (secret, masked)
+        env:
+          TESTNET_KEYS: ${{ secrets.TESTNET_KEYS }}
+        run: |
+          umask 077
+          printf '%s' "$TESTNET_KEYS" > testnet/keys.testnet.json
+          node -e 'const k=require("./testnet/keys.testnet.json");for(const v of Object.values(k))if(v&&v.wif)console.log("::add-mask::"+v.wif)'
+          echo "MOCK_STABLE=$(node -p 'require("./testnet/keys.testnet.json").token.address')" >> "$GITHUB_ENV"
+      - name: Build testnet station (VUSDT = mock token), then mainnet build + check
+        working-directory: contracts/station
+        run: |
+          npm run build:testnet
+          npm run build
+          npm run check:mainnet
+      - name: Build testapp and mock token
+        run: |
+          (cd contracts/testapp && npm run build)
+          (cd contracts/mocktoken && npm run build)
+      - name: Harbinger scenarios
+        if: ${{ inputs.run_testnet == 'true' }}
+        env:
+          RPC: https://harbinger-api.koinos.io
+        run: node testnet/run_tests.mjs
+      - name: Remove keys
+        if: always()
+        run: rm -f testnet/keys.testnet.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: testnet-results
+          path: |
+            testnet/results.json
+            testnet/results.md
+          retention-days: 7

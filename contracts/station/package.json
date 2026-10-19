@@ -8,7 +8,9 @@
     "prebuild": "node scripts/prebuild.cjs",
     "build": "koinos-sdk-as-cli build-all release 0 station.proto --generate_authorize && node scripts/make-abi.cjs",
     "build:sim": "node scripts/prebuild.cjs && koinos-sdk-as-cli build-all release 1 station.proto --generate_authorize",
-    "test": "npm run build:sim && node node_modules/@as-pect/cli/bin/asp.js --config as-pect.config.js"
+    "test": "npm run build:sim && node node_modules/@as-pect/cli/bin/asp.js --config as-pect.config.js",
+    "build:testnet": "node scripts/build-testnet.cjs",
+    "check:mainnet": "node scripts/check-mainnet.cjs"
   },
   "devDependencies": {
     "@as-pect/assembly": "^8.1.0",

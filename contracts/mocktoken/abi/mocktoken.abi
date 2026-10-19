@@ -1,0 +1,68 @@
+{
+    "methods": {
+        "name": {
+            "argument": "mocktoken.name_arguments",
+            "return": "mocktoken.name_result",
+            "description": "Token name.",
+            "entry-point": "0x82a3537f",
+            "read-only": true
+        },
+        "symbol": {
+            "argument": "mocktoken.symbol_arguments",
+            "return": "mocktoken.symbol_result",
+            "description": "Token symbol.",
+            "entry-point": "0xb76a7ca1",
+            "read-only": true
+        },
+        "decimals": {
+            "argument": "mocktoken.decimals_arguments",
+            "return": "mocktoken.decimals_result",
+            "description": "Decimals.",
+            "entry-point": "0xee80fd2f",
+            "read-only": true
+        },
+        "total_supply": {
+            "argument": "mocktoken.total_supply_arguments",
+            "return": "mocktoken.total_supply_result",
+            "description": "Total supply.",
+            "entry-point": "0xb0da3934",
+            "read-only": true
+        },
+        "balance_of": {
+            "argument": "mocktoken.balance_of_arguments",
+            "return": "mocktoken.balance_of_result",
+            "description": "Balance of an account.",
+            "entry-point": "0x5c721497",
+            "read-only": true
+        },
+        "allowance": {
+            "argument": "mocktoken.allowance_arguments",
+            "return": "mocktoken.allowance_result",
+            "description": "Allowance granted by owner to spender.",
+            "entry-point": "0x32f09fa1",
+            "read-only": true
+        },
+        "transfer": {
+            "argument": "mocktoken.transfer_arguments",
+            "return": "mocktoken.transfer_result",
+            "description": "KCS-4 transfer: the caller contract may spend an approved allowance, otherwise `from` must authorize.",
+            "entry-point": "0x27f576ca",
+            "read-only": false
+        },
+        "approve": {
+            "argument": "mocktoken.approve_arguments",
+            "return": "mocktoken.approve_result",
+            "description": "KCS-4 approve.",
+            "entry-point": "0x74e21680",
+            "read-only": false
+        },
+        "mint": {
+            "argument": "mocktoken.mint_arguments",
+            "return": "mocktoken.mint_result",
+            "description": "Mint (token contract key only; testnet mock).",
+            "entry-point": "0xdc6f17bb",
+            "read-only": false
+        }
+    },
+    "types": "CsIICh5hc3NlbWJseS9wcm90by9tb2NrdG9rZW4ucHJvdG8SCW1vY2t0b2tlbhoUa29pbm9zL29wdGlvbnMucHJvdG8iKgoOYmFsYW5jZV9vYmplY3QSGAoFdmFsdWUYASABKARCAjABUgV2YWx1ZSIQCg5uYW1lX2FyZ3VtZW50cyIjCgtuYW1lX3Jlc3VsdBIUCgV2YWx1ZRgBIAEoCVIFdmFsdWUiEgoQc3ltYm9sX2FyZ3VtZW50cyIlCg1zeW1ib2xfcmVzdWx0EhQKBXZhbHVlGAEgASgJUgV2YWx1ZSIUChJkZWNpbWFsc19hcmd1bWVudHMiJwoPZGVjaW1hbHNfcmVzdWx0EhQKBXZhbHVlGAEgASgNUgV2YWx1ZSIYChZ0b3RhbF9zdXBwbHlfYXJndW1lbnRzIi8KE3RvdGFsX3N1cHBseV9yZXN1bHQSGAoFdmFsdWUYASABKARCAjABUgV2YWx1ZSIyChRiYWxhbmNlX29mX2FyZ3VtZW50cxIaCgVvd25lchgBIAEoDEIEgLUYBlIFb3duZXIiLQoRYmFsYW5jZV9vZl9yZXN1bHQSGAoFdmFsdWUYASABKARCAjABUgV2YWx1ZSJRChNhbGxvd2FuY2VfYXJndW1lbnRzEhoKBW93bmVyGAEgASgMQgSAtRgGUgVvd25lchIeCgdzcGVuZGVyGAIgASgMQgSAtRgGUgdzcGVuZGVyIiwKEGFsbG93YW5jZV9yZXN1bHQSGAoFdmFsdWUYASABKARCAjABUgV2YWx1ZSJyChJ0cmFuc2Zlcl9hcmd1bWVudHMSGAoEZnJvbRgBIAEoDEIEgLUYBlIEZnJvbRIUCgJ0bxgCIAEoDEIEgLUYBlICdG8SGAoFdmFsdWUYAyABKARCAjABUgV2YWx1ZRISCgRtZW1vGAQgASgJUgRtZW1vIhEKD3RyYW5zZmVyX3Jlc3VsdCJ9ChFhcHByb3ZlX2FyZ3VtZW50cxIaCgVvd25lchgBIAEoDEIEgLUYBlIFb3duZXISHgoHc3BlbmRlchgCIAEoDEIEgLUYBlIHc3BlbmRlchIYCgV2YWx1ZRgDIAEoBEICMAFSBXZhbHVlEhIKBG1lbW8YBCABKAlSBG1lbW8iEAoOYXBwcm92ZV9yZXN1bHQiVAoObWludF9hcmd1bWVudHMSFAoCdG8YASABKAxCBIC1GAZSAnRvEhgKBXZhbHVlGAIgASgEQgIwAVIFdmFsdWUSEgoEbWVtbxgDIAEoCVIEbWVtbyINCgttaW50X3Jlc3VsdCJuCg50cmFuc2Zlcl9ldmVudBIYCgRmcm9tGAEgASgMQgSAtRgGUgRmcm9tEhQKAnRvGAIgASgMQgSAtRgGUgJ0bxIYCgV2YWx1ZRgDIAEoBEICMAFSBXZhbHVlEhIKBG1lbW8YBCABKAlSBG1lbW9iBnByb3RvMw=="
+}

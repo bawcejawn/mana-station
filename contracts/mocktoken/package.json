@@ -1,0 +1,2 @@
+{ "name": "station-mocktoken", "version": "0.1.0", "private": true, "license": "MIT",
+  "scripts": { "build": "node scripts/prebuild.cjs && koinos-sdk-as-cli build-all release 0 mocktoken.proto && node scripts/make-abi.cjs" } }

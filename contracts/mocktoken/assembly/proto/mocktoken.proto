@@ -1,0 +1,52 @@
+syntax = "proto3";
+package mocktoken;
+import "koinos/options.proto";
+// TESTNET-ONLY mock KCS-4 stablecoin (8 decimals) standing in for vUSDT in Mana Station escrow tests. Worthless.
+message balance_object { uint64 value = 1 [jstype = JS_STRING]; }
+
+// @description Token name.
+// @read-only true
+message name_arguments {}
+message name_result { string value = 1; }
+
+// @description Token symbol.
+// @read-only true
+message symbol_arguments {}
+message symbol_result { string value = 1; }
+
+// @description Decimals.
+// @read-only true
+message decimals_arguments {}
+message decimals_result { uint32 value = 1; }
+
+// @description Total supply.
+// @read-only true
+message total_supply_arguments {}
+message total_supply_result { uint64 value = 1 [jstype = JS_STRING]; }
+
+// @description Balance of an account.
+// @read-only true
+message balance_of_arguments { bytes owner = 1 [(koinos.btype) = ADDRESS]; }
+message balance_of_result { uint64 value = 1 [jstype = JS_STRING]; }
+
+// @description Allowance granted by owner to spender.
+// @read-only true
+message allowance_arguments { bytes owner = 1 [(koinos.btype) = ADDRESS]; bytes spender = 2 [(koinos.btype) = ADDRESS]; }
+message allowance_result { uint64 value = 1 [jstype = JS_STRING]; }
+
+// @description KCS-4 transfer: the caller contract may spend an approved allowance, otherwise `from` must authorize.
+// @read-only false
+message transfer_arguments { bytes from = 1 [(koinos.btype) = ADDRESS]; bytes to = 2 [(koinos.btype) = ADDRESS]; uint64 value = 3 [jstype = JS_STRING]; string memo = 4; }
+message transfer_result {}
+
+// @description KCS-4 approve.
+// @read-only false
+message approve_arguments { bytes owner = 1 [(koinos.btype) = ADDRESS]; bytes spender = 2 [(koinos.btype) = ADDRESS]; uint64 value = 3 [jstype = JS_STRING]; string memo = 4; }
+message approve_result {}
+
+// @description Mint (token contract key only; testnet mock).
+// @read-only false
+message mint_arguments { bytes to = 1 [(koinos.btype) = ADDRESS]; uint64 value = 2 [jstype = JS_STRING]; string memo = 3; }
+message mint_result {}
+
+message transfer_event { bytes from = 1 [(koinos.btype) = ADDRESS]; bytes to = 2 [(koinos.btype) = ADDRESS]; uint64 value = 3 [jstype = JS_STRING]; string memo = 4; }

@@ -1,0 +1,302 @@
+{
+  "methods": {
+    "name": {
+      "entry_point": 2191741823,
+      "argument": "mocktoken.name_arguments",
+      "return": "mocktoken.name_result",
+      "read_only": true,
+      "description": "Token name."
+    },
+    "symbol": {
+      "entry_point": 3077209249,
+      "argument": "mocktoken.symbol_arguments",
+      "return": "mocktoken.symbol_result",
+      "read_only": true,
+      "description": "Token symbol."
+    },
+    "decimals": {
+      "entry_point": 4001430831,
+      "argument": "mocktoken.decimals_arguments",
+      "return": "mocktoken.decimals_result",
+      "read_only": true,
+      "description": "Decimals."
+    },
+    "total_supply": {
+      "entry_point": 2967091508,
+      "argument": "mocktoken.total_supply_arguments",
+      "return": "mocktoken.total_supply_result",
+      "read_only": true,
+      "description": "Total supply."
+    },
+    "balance_of": {
+      "entry_point": 1550980247,
+      "argument": "mocktoken.balance_of_arguments",
+      "return": "mocktoken.balance_of_result",
+      "read_only": true,
+      "description": "Balance of an account."
+    },
+    "allowance": {
+      "entry_point": 854630305,
+      "argument": "mocktoken.allowance_arguments",
+      "return": "mocktoken.allowance_result",
+      "read_only": true,
+      "description": "Allowance granted by owner to spender."
+    },
+    "transfer": {
+      "entry_point": 670398154,
+      "argument": "mocktoken.transfer_arguments",
+      "return": "mocktoken.transfer_result",
+      "read_only": false,
+      "description": "KCS-4 transfer: the caller contract may spend an approved allowance, otherwise `from` must authorize."
+    },
+    "approve": {
+      "entry_point": 1960973952,
+      "argument": "mocktoken.approve_arguments",
+      "return": "mocktoken.approve_result",
+      "read_only": false,
+      "description": "KCS-4 approve."
+    },
+    "mint": {
+      "entry_point": 3698268091,
+      "argument": "mocktoken.mint_arguments",
+      "return": "mocktoken.mint_result",
+      "read_only": false,
+      "description": "Mint (token contract key only; testnet mock)."
+    }
+  },
+  "koilib_types": {
+    "nested": {
+      "mocktoken": {
+        "nested": {
+          "balance_object": {
+            "fields": {
+              "value": {
+                "type": "uint64",
+                "id": 1,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              }
+            }
+          },
+          "name_arguments": {
+            "fields": {}
+          },
+          "name_result": {
+            "fields": {
+              "value": {
+                "type": "string",
+                "id": 1
+              }
+            }
+          },
+          "symbol_arguments": {
+            "fields": {}
+          },
+          "symbol_result": {
+            "fields": {
+              "value": {
+                "type": "string",
+                "id": 1
+              }
+            }
+          },
+          "decimals_arguments": {
+            "fields": {}
+          },
+          "decimals_result": {
+            "fields": {
+              "value": {
+                "type": "uint32",
+                "id": 1
+              }
+            }
+          },
+          "total_supply_arguments": {
+            "fields": {}
+          },
+          "total_supply_result": {
+            "fields": {
+              "value": {
+                "type": "uint64",
+                "id": 1,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              }
+            }
+          },
+          "balance_of_arguments": {
+            "fields": {
+              "owner": {
+                "type": "bytes",
+                "id": 1,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              }
+            }
+          },
+          "balance_of_result": {
+            "fields": {
+              "value": {
+                "type": "uint64",
+                "id": 1,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              }
+            }
+          },
+          "allowance_arguments": {
+            "fields": {
+              "owner": {
+                "type": "bytes",
+                "id": 1,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "spender": {
+                "type": "bytes",
+                "id": 2,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              }
+            }
+          },
+          "allowance_result": {
+            "fields": {
+              "value": {
+                "type": "uint64",
+                "id": 1,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              }
+            }
+          },
+          "transfer_arguments": {
+            "fields": {
+              "from": {
+                "type": "bytes",
+                "id": 1,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "to": {
+                "type": "bytes",
+                "id": 2,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "value": {
+                "type": "uint64",
+                "id": 3,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "memo": {
+                "type": "string",
+                "id": 4
+              }
+            }
+          },
+          "transfer_result": {
+            "fields": {}
+          },
+          "approve_arguments": {
+            "fields": {
+              "owner": {
+                "type": "bytes",
+                "id": 1,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "spender": {
+                "type": "bytes",
+                "id": 2,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "value": {
+                "type": "uint64",
+                "id": 3,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "memo": {
+                "type": "string",
+                "id": 4
+              }
+            }
+          },
+          "approve_result": {
+            "fields": {}
+          },
+          "mint_arguments": {
+            "fields": {
+              "to": {
+                "type": "bytes",
+                "id": 1,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "value": {
+                "type": "uint64",
+                "id": 2,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "memo": {
+                "type": "string",
+                "id": 3
+              }
+            }
+          },
+          "mint_result": {
+            "fields": {}
+          },
+          "transfer_event": {
+            "fields": {
+              "from": {
+                "type": "bytes",
+                "id": 1,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "to": {
+                "type": "bytes",
+                "id": 2,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "value": {
+                "type": "uint64",
+                "id": 3,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "memo": {
+                "type": "string",
+                "id": 4
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

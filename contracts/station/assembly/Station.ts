@@ -21,8 +21,8 @@ const APP_SLOT: u64 = 3_600_000; const APP_N: i32 = 24;     // 24 × 1 h
 const WEEK_N: i32 = 7;                                       // 7 × 1 day
 const GLOBAL_KEY: u32 = 0xffffffff;
 // Stablecoins (stablecoins.md, 2026-10-19). Prices are set per token by the owner; these are the defaults to set.
-export const VUSDT = "12VoHz41a4HtfiyhTWbg9RXqGMRbYk6pXh";   // primary, 8 decimals, Vortex-bridged
-export const VUSDC = "1N8iYrYEJdCVK1rhbqv3qZUzHcpoeKmFnj";   // optional, 8 decimals, Vortex-bridged
+import { VUSDT, VUSDC } from "./net";
+export { VUSDT, VUSDC };
 const LEGACY_CHAINGE_USDT = "19WrWze3XAoMa3Mwqys4rJMP6emZX2wfpH"; // rejected
 
 // Test build only.

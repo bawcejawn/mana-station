@@ -3,9 +3,10 @@ import { createRequire } from "module"; const require = createRequire(import.met
 const { Signer } = require("../contracts/station/node_modules/koilib");
 import { randomBytes } from "crypto"; import fs from "fs";
 const f = new URL("./keys.testnet.json", import.meta.url);
-if (fs.existsSync(f)) { console.log("keys exist, not overwriting"); process.exit(0); }
-const out = { WARNING: "TESTNET (Harbinger) throwaway keys. Not for mainnet. Generated " + new Date().toISOString() };
-for (const role of ["funder", "station", "owner", "app", "user1", "user2"]) {
+// Adds missing roles only; never overwrites an existing key.
+const out = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f)) : { WARNING: "TESTNET (Harbinger) throwaway keys. Not for mainnet. Generated " + new Date().toISOString() };
+for (const role of ["funder", "station", "owner", "app", "user1", "user2", "token", "buyer", "spam1", "spam2"]) {
+  if (out[role]) continue;
   const s = new Signer({ privateKey: randomBytes(32).toString("hex") });
   out[role] = { address: s.getAddress(), wif: s.getPrivateKey("wif") };
 }

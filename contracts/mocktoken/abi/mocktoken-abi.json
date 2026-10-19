@@ -1,0 +1,302 @@
+{
+    "methods": {
+        "name": {
+            "input": "mocktoken.name_arguments",
+            "output": "mocktoken.name_result",
+            "description": "Token name.",
+            "entryPoint": 2191741823,
+            "readOnly": true
+        },
+        "symbol": {
+            "input": "mocktoken.symbol_arguments",
+            "output": "mocktoken.symbol_result",
+            "description": "Token symbol.",
+            "entryPoint": 3077209249,
+            "readOnly": true
+        },
+        "decimals": {
+            "input": "mocktoken.decimals_arguments",
+            "output": "mocktoken.decimals_result",
+            "description": "Decimals.",
+            "entryPoint": 4001430831,
+            "readOnly": true
+        },
+        "total_supply": {
+            "input": "mocktoken.total_supply_arguments",
+            "output": "mocktoken.total_supply_result",
+            "description": "Total supply.",
+            "entryPoint": 2967091508,
+            "readOnly": true
+        },
+        "balance_of": {
+            "input": "mocktoken.balance_of_arguments",
+            "output": "mocktoken.balance_of_result",
+            "description": "Balance of an account.",
+            "entryPoint": 1550980247,
+            "readOnly": true
+        },
+        "allowance": {
+            "input": "mocktoken.allowance_arguments",
+            "output": "mocktoken.allowance_result",
+            "description": "Allowance granted by owner to spender.",
+            "entryPoint": 854630305,
+            "readOnly": true
+        },
+        "transfer": {
+            "input": "mocktoken.transfer_arguments",
+            "output": "mocktoken.transfer_result",
+            "description": "KCS-4 transfer: the caller contract may spend an approved allowance, otherwise `from` must authorize.",
+            "entryPoint": 670398154,
+            "readOnly": false
+        },
+        "approve": {
+            "input": "mocktoken.approve_arguments",
+            "output": "mocktoken.approve_result",
+            "description": "KCS-4 approve.",
+            "entryPoint": 1960973952,
+            "readOnly": false
+        },
+        "mint": {
+            "input": "mocktoken.mint_arguments",
+            "output": "mocktoken.mint_result",
+            "description": "Mint (token contract key only; testnet mock).",
+            "entryPoint": 3698268091,
+            "readOnly": false
+        }
+    },
+    "types": {
+        "nested": {
+            "mocktoken": {
+                "nested": {
+                    "balance_object": {
+                        "fields": {
+                            "value": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "name_arguments": {
+                        "fields": {}
+                    },
+                    "name_result": {
+                        "fields": {
+                            "value": {
+                                "type": "string",
+                                "id": 1
+                            }
+                        }
+                    },
+                    "symbol_arguments": {
+                        "fields": {}
+                    },
+                    "symbol_result": {
+                        "fields": {
+                            "value": {
+                                "type": "string",
+                                "id": 1
+                            }
+                        }
+                    },
+                    "decimals_arguments": {
+                        "fields": {}
+                    },
+                    "decimals_result": {
+                        "fields": {
+                            "value": {
+                                "type": "uint32",
+                                "id": 1
+                            }
+                        }
+                    },
+                    "total_supply_arguments": {
+                        "fields": {}
+                    },
+                    "total_supply_result": {
+                        "fields": {
+                            "value": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "balance_of_arguments": {
+                        "fields": {
+                            "owner": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            }
+                        }
+                    },
+                    "balance_of_result": {
+                        "fields": {
+                            "value": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "allowance_arguments": {
+                        "fields": {
+                            "owner": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "spender": {
+                                "type": "bytes",
+                                "id": 2,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            }
+                        }
+                    },
+                    "allowance_result": {
+                        "fields": {
+                            "value": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "transfer_arguments": {
+                        "fields": {
+                            "from": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "to": {
+                                "type": "bytes",
+                                "id": 2,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "value": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "memo": {
+                                "type": "string",
+                                "id": 4
+                            }
+                        }
+                    },
+                    "transfer_result": {
+                        "fields": {}
+                    },
+                    "approve_arguments": {
+                        "fields": {
+                            "owner": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "spender": {
+                                "type": "bytes",
+                                "id": 2,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "value": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "memo": {
+                                "type": "string",
+                                "id": 4
+                            }
+                        }
+                    },
+                    "approve_result": {
+                        "fields": {}
+                    },
+                    "mint_arguments": {
+                        "fields": {
+                            "to": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "value": {
+                                "type": "uint64",
+                                "id": 2,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "memo": {
+                                "type": "string",
+                                "id": 3
+                            }
+                        }
+                    },
+                    "mint_result": {
+                        "fields": {}
+                    },
+                    "transfer_event": {
+                        "fields": {
+                            "from": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "to": {
+                                "type": "bytes",
+                                "id": 2,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "value": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "memo": {
+                                "type": "string",
+                                "id": 4
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
