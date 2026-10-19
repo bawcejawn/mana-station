@@ -100,9 +100,21 @@
   },
   "_terms": {
     "status": "DECIDED by Carl (7:32 PM): no refunds",
-    "allowance": "Prepaid for future use. No refunds. No auto-renew: service stops at expiry unless you renew, at the price current then. Daily, 7-day and 30-day offers: buy only what you need. Non-transferable; not redeemable for crypto or cash. Introductory prices may increase for new purchases. Service may be paused (kill switch).",
-    "big_upload": "Prepaid one-time big upload for future use. No refunds. Unused Mana expires with the ticket. No auto-renew. Non-transferable; not redeemable for crypto or cash. Service may be paused (kill switch).",
+    "allowance": "Prepaid for future use. No refunds. No auto-renew: service stops at expiry unless you renew, at the price current then. Daily, 7-day and 30-day offers: buy only what you need. Non-transferable; not redeemable for crypto or cash. Introductory prices may increase for new purchases. Service may be paused (kill switch), and a buyer may be suspended for abuse, sanctions or AUP reasons: no refund, and paused or suspended time is not extended or credited.",
+    "big_upload": "Prepaid one-time big upload for future use. No refunds. Unused Mana expires with the ticket. No auto-renew. Non-transferable; not redeemable for crypto or cash. Service may be paused (kill switch), and a buyer may be suspended for abuse, sanctions or AUP reasons: no refund, and paused or suspended time is not extended or credited.",
     "where": "returned by quote_allowance / quote_big_upload (terms, refundable=false, auto_renew=false) and in every purchase_event; constants ALLOWANCE_TERMS / BIG_TERMS in Station.ts",
     "contract": "cancel_allowance removed; the station never pays tokens to buyers. Kill switch set_paused stays"
+  },
+  "_suspend": {
+    "status": "DECIDED by Carl (7:37 PM)",
+    "methods": "suspend_allowance(buyer, reason) / unsuspend_allowance(buyer, reason) / get_suspension(buyer); owner only",
+    "reason_codes": {
+      "1": "abuse",
+      "2": "sanctions / flagged address",
+      "3": "AUP violation",
+      "4": "legal or other"
+    },
+    "effect": "all allowances and big-upload tickets paid for by that buyer stop being sponsored; new buys/renewals by them refused; no money moves, no refund; suspended time is not extended or credited",
+    "events": "station.buyer_suspended / station.buyer_unsuspended (suspend_event: buyer, reason, suspended, at)"
   }
 }

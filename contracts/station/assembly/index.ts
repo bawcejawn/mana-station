@@ -198,6 +198,46 @@ export function main(): i32 {
       break;
     }
 
+    case 0xea86d421: {
+      const args = Protobuf.decode<ProtoNamespace.suspend_allowance_arguments>(
+        contractArgs.args,
+        ProtoNamespace.suspend_allowance_arguments.decode
+      );
+      const res = c.suspend_allowance(args);
+      retbuf = Protobuf.encode(
+        res,
+        ProtoNamespace.suspend_allowance_result.encode
+      );
+      break;
+    }
+
+    case 0x5e2456f4: {
+      const args =
+        Protobuf.decode<ProtoNamespace.unsuspend_allowance_arguments>(
+          contractArgs.args,
+          ProtoNamespace.unsuspend_allowance_arguments.decode
+        );
+      const res = c.unsuspend_allowance(args);
+      retbuf = Protobuf.encode(
+        res,
+        ProtoNamespace.unsuspend_allowance_result.encode
+      );
+      break;
+    }
+
+    case 0xc5ca826a: {
+      const args = Protobuf.decode<ProtoNamespace.get_suspension_arguments>(
+        contractArgs.args,
+        ProtoNamespace.get_suspension_arguments.decode
+      );
+      const res = c.get_suspension(args);
+      retbuf = Protobuf.encode(
+        res,
+        ProtoNamespace.get_suspension_result.encode
+      );
+      break;
+    }
+
     case 0x664110b4: {
       const args = Protobuf.decode<ProtoNamespace.set_exempt_arguments>(
         contractArgs.args,

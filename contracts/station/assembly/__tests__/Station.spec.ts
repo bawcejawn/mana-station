@@ -324,6 +324,60 @@ describe("introductory prices: tiers, snapshots, no auto-renew", () => {
   });
 });
 
+describe("per-buyer suspend switch (Carl, 7:37 PM)", () => {
+  it("suspended buyer refused (allowance + big ticket), others unaffected, unsuspend restores, no money moves, no extension", () => {
+    const s = setup(); gS = s;
+    const B2 = user(77), T2 = user(78);
+    testSetToken(USDT, B2, 10 * USD);
+    const r = buyAccount(s, U2, 10 * M, 7);
+    signedBy([BUYER]); s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U1, 100 * M, USDT, 1000 * USD, false));
+    signedBy([B2]); s.buy_allowance(new station.buy_allowance_arguments(B2, 2, T2, 10 * M, 7, USDT, 1000 * USD)); signedBy([]);
+    at(NOW + 62 * HOUR);                                                         // big-upload debt (100 at 40/day) repaid; ticket valid 72 h
+    const bal = testGetToken(USDT, BUYER), bal2 = testGetToken(USDT, B2), own = testGetToken(USDT, OWNER), sta = testGetToken(USDT, STATION);
+    MockVM.clearEvents();
+    signedBy([OWNER]); s.suspend_allowance(new station.suspend_allowance_arguments(BUYER, 2)); signedBy([]);
+    const ev = MockVM.getEvents(); expect(ev[ev.length - 1].name).toBe("station.buyer_suspended");
+    const se = Protobuf.decode<station.suspend_event>(ev[ev.length - 1].data!, station.suspend_event.decode);
+    expect(se.reason).toBe(2); expect(se.suspended).toBe(true);
+    expect(s.get_suspension(new station.get_suspension_arguments(BUYER)).suspension!.reason).toBe(2);
+    at(NOW + 3000); tx(U2, 2 * M, [op(OTHER, EP_PLAY)]); expect(ok(s)).toBe(false);      // allowance refused
+    at(NOW + 3000); tx(U1, 50 * M, [op(OTHER, EP_PLAY)]); expect(ok(s)).toBe(false);     // big ticket refused
+    at(NOW + 3000); tx(T2, 2 * M, [op(OTHER, EP_PLAY)]); expect(ok(s)).toBe(true);       // other buyer unaffected
+    at(NOW + 3000); expect(play(s, user(5))).toBe(true);                                 // Carl's apps unaffected
+    signedBy([BUYER]);
+    MockVM.commitTransaction(); expect(() => { gS!.buy_allowance(new station.buy_allowance_arguments(BUYER, 2, user(90), 10 * M, 1, USDT, 1000 * USD)); }).toThrow();
+    MockVM.commitTransaction(); expect(() => { gS!.renew(new station.renew_arguments(BUYER, 1, 1, USDT, 1000 * USD)); }).toThrow();
+    MockVM.commitTransaction(); expect(() => { gS!.buy_big_upload(new station.buy_big_upload_arguments(BUYER, user(91), 100 * M, USDT, 1000 * USD, false)); }).toThrow();
+    signedBy([]);
+    expect(testGetToken(USDT, BUYER)).toBe(bal); expect(testGetToken(USDT, B2)).toBe(bal2);  // no token movement
+    expect(testGetToken(USDT, OWNER)).toBe(own); expect(testGetToken(USDT, STATION)).toBe(sta);
+    MockVM.clearEvents();
+    signedBy([OWNER]); s.unsuspend_allowance(new station.unsuspend_allowance_arguments(BUYER, 0)); signedBy([]);
+    expect(MockVM.getEvents()[MockVM.getEvents().length - 1].name).toBe("station.buyer_unsuspended");
+    expect(s.get_suspension(new station.get_suspension_arguments(BUYER)).suspension).toBeNull();
+    at(NOW + 3000); tx(U2, 2 * M, [op(OTHER, EP_PLAY)]); expect(ok(s)).toBe(true);       // restored
+    at(NOW + 3000); tx(U1, 50 * M, [op(OTHER, EP_PLAY)]); expect(ok(s)).toBe(true);
+    expect(s.get_allowance(new station.get_allowance_arguments(r.id)).allowance!.expiry).toBe(r.expiry); // not extended
+    expect(testGetToken(USDT, BUYER)).toBe(bal);
+  });
+  it("owner only; reason codes checked", () => {
+    const s = setup(); gS = s;
+    signedBy([U1]);
+    MockVM.commitTransaction(); expect(() => { gS!.suspend_allowance(new station.suspend_allowance_arguments(BUYER, 1)); }).toThrow();
+    signedBy([BUYER]);
+    MockVM.commitTransaction(); expect(() => { gS!.suspend_allowance(new station.suspend_allowance_arguments(U2, 1)); }).toThrow();
+    signedBy([OWNER]);
+    MockVM.commitTransaction(); expect(() => { gS!.suspend_allowance(new station.suspend_allowance_arguments(BUYER, 0)); }).toThrow();
+    MockVM.commitTransaction(); expect(() => { gS!.suspend_allowance(new station.suspend_allowance_arguments(BUYER, 5)); }).toThrow();
+    MockVM.commitTransaction(); expect(() => { gS!.unsuspend_allowance(new station.unsuspend_allowance_arguments(BUYER, 0)); }).toThrow(); // not suspended
+    s.suspend_allowance(new station.suspend_allowance_arguments(BUYER, 1));
+    signedBy([BUYER]);
+    MockVM.commitTransaction(); expect(() => { gS!.unsuspend_allowance(new station.unsuspend_allowance_arguments(BUYER, 0)); }).toThrow(); // buyer can't lift it
+    signedBy([]);
+    expect(s.get_suspension(new station.get_suspension_arguments(BUYER)).suspension!.reason).toBe(1);
+  });
+});
+
 describe("big uploads from the reserve", () => {
   it("approved limits at mainnet scale: 6,000 per request, 12,000 per 7 days, 6,000 outstanding; owner-adjustable", () => {
     const s = setup(); gS = s;

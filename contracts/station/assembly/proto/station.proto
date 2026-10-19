@@ -399,6 +399,49 @@ message set_entry_arguments {
 
 message set_entry_result {}
 
+// A suspended buyer (Carl, 7:37 PM). Reason codes: 1 abuse, 2 sanctions / flagged address, 3 AUP violation, 4 legal or other.
+message suspend_object {
+  uint32 reason = 1;
+  uint64 since = 2 [jstype = JS_STRING];
+}
+
+message suspend_event {
+  bytes buyer = 1 [(koinos.btype) = ADDRESS];
+  uint32 reason = 2;
+  bool suspended = 3;                                   // false = unsuspended
+  uint64 at = 4 [jstype = JS_STRING];
+}
+
+// @description Suspend a buyer (owner only): every allowance and big-upload ticket that buyer paid for stops being
+// sponsored, and new buys / renewals by them are refused. Moves no money, no refund; suspended time is not extended or
+// credited. Emits station.buyer_suspended with the reason code.
+// @read-only false
+message suspend_allowance_arguments {
+  bytes buyer = 1 [(koinos.btype) = ADDRESS];
+  uint32 reason = 2;
+}
+
+message suspend_allowance_result {}
+
+// @description Lift a buyer's suspension (owner only). Expiry dates are unchanged. Emits station.buyer_unsuspended.
+// @read-only false
+message unsuspend_allowance_arguments {
+  bytes buyer = 1 [(koinos.btype) = ADDRESS];
+  uint32 reason = 2;                                    // why it was lifted (same codes, 0 = resolved)
+}
+
+message unsuspend_allowance_result {}
+
+// @description A buyer's suspension (empty if not suspended).
+// @read-only true
+message get_suspension_arguments {
+  bytes buyer = 1 [(koinos.btype) = ADDRESS];
+}
+
+message get_suspension_result {
+  suspend_object suspension = 1;
+}
+
 // @description Add, change or remove a fee-exempt contract (owner only; emits station.exempt_changed).
 // @read-only false
 message set_exempt_arguments {

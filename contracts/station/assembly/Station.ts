@@ -12,7 +12,7 @@ import { System, Storage, Protobuf, Arrays, Token, Base58, authority, value, pro
 import { station } from "./proto/station";
 
 const S_CONFIG: u32 = 0, S_APPS: u32 = 1, S_ENTRIES: u32 = 2, S_USERS: u32 = 3, S_APPWIN: u32 = 4,
-  S_PRICES: u32 = 5, S_ALLOW: u32 = 6, S_TARGET: u32 = 7, S_TICKETS: u32 = 8, S_BIG: u32 = 9, S_REVENUE: u32 = 10, S_EXEMPT: u32 = 11, S_REGISTRY: u32 = 12, S_GLOBALWIN: u32 = 13, S_OVERFLOWWIN: u32 = 14, S_BUFFERWIN: u32 = 15,
+  S_PRICES: u32 = 5, S_ALLOW: u32 = 6, S_TARGET: u32 = 7, S_TICKETS: u32 = 8, S_BIG: u32 = 9, S_REVENUE: u32 = 10, S_EXEMPT: u32 = 11, S_REGISTRY: u32 = 12, S_GLOBALWIN: u32 = 13, S_OVERFLOWWIN: u32 = 14, S_BUFFERWIN: u32 = 15, S_SUSPEND: u32 = 16,
   S_TESTLEDGER: u32 = 90;
 const DAY: u64 = 86_400_000;
 const MANA: u64 = 100_000_000;
@@ -42,8 +42,8 @@ function u32Key(n: u32): Uint8Array { const k = new Uint8Array(4); k[0] = u8(n >
 function entryKey(contract: Uint8Array, ep: u32): Uint8Array { const k = new Uint8Array(contract.length + 4); k.set(contract, 0); k.set(u32Key(ep), contract.length); return k; }
 function pct(amount: u64, bp: u32): u64 { return amount / 10_000 * u64(bp); }
 function wholeManaUp(m: u64): u64 { return (m + MANA - 1) / MANA; }
-export const ALLOWANCE_TERMS = "Prepaid for future use. No refunds. No auto-renew: service stops at expiry unless you renew, at the price current then. Daily, 7-day and 30-day offers: buy only what you need. Non-transferable; not redeemable for crypto or cash. Introductory prices may increase for new purchases. Service may be paused (kill switch).";
-export const BIG_TERMS = "Prepaid one-time big upload for future use. No refunds. Unused Mana expires with the ticket. No auto-renew. Non-transferable; not redeemable for crypto or cash. Service may be paused (kill switch).";
+export const ALLOWANCE_TERMS = "Prepaid for future use. No refunds. No auto-renew: service stops at expiry unless you renew, at the price current then. Daily, 7-day and 30-day offers: buy only what you need. Non-transferable; not redeemable for crypto or cash. Introductory prices may increase for new purchases. Service may be paused (kill switch), and a buyer may be suspended for abuse, sanctions or AUP reasons: no refund, and paused or suspended time is not extended or credited.";
+export const BIG_TERMS = "Prepaid one-time big upload for future use. No refunds. Unused Mana expires with the ticket. No auto-renew. Non-transferable; not redeemable for crypto or cash. Service may be paused (kill switch), and a buyer may be suspended for abuse, sanctions or AUP reasons: no refund, and paused or suspended time is not extended or credited.";
 const DEFAULT_ALERT_MANA: u64 = 15_000 * MANA;     // Carl: alert below 15k by default
 const MAX_WHOLE_MANA: u64 = 100_000_000;            // quote bound (no u64 overflow with prices <= MAX_UNIT_PRICE)
 const MAX_UNIT_PRICE: u64 = 10_000_000_000;         // 100 tokens per 1,000 Mana(/day)
@@ -103,6 +103,7 @@ export class Station {
   exempt: Storage.Map<Uint8Array, station.exempt_object> = new Storage.Map(System.getContractId(), S_EXEMPT, station.exempt_object.decode, station.exempt_object.encode, null);
   registry: Storage.Obj<station.registry_object> = new Storage.Obj(System.getContractId(), S_REGISTRY, station.registry_object.decode, station.registry_object.encode, () => new station.registry_object());
   globalWin: Storage.Obj<station.window_object> = new Storage.Obj(System.getContractId(), S_GLOBALWIN, station.window_object.decode, station.window_object.encode, () => new station.window_object());
+  suspended: Storage.Map<Uint8Array, station.suspend_object> = new Storage.Map(System.getContractId(), S_SUSPEND, station.suspend_object.decode, station.suspend_object.encode, null);
   bufferWin: Storage.Obj<station.window_object> = new Storage.Obj(System.getContractId(), S_BUFFERWIN, station.window_object.decode, station.window_object.encode, () => new station.window_object());
   overflowWin: Storage.Obj<station.window_object> = new Storage.Obj(System.getContractId(), S_OVERFLOWWIN, station.window_object.decode, station.window_object.encode, () => new station.window_object());
   lastNew: bool = false;
@@ -328,6 +329,7 @@ export class Station {
     if (id == null) return false;
     const s = this.allowances.get(u32Key(u32(id.total)));
     if (s == null || s.kind != kind || s.expiry <= now) return false;    // expired: cut off automatically
+    if (this.suspended.has(s.buyer!)) return false;                    // buyer suspended by the owner
     if (!globalRoom) return false;                                     // paid: hard cap, no buffer
     if (this.debtNow(c, this.big.get()!, now) > 0) return false;        // sold slice is repaying big uploads
     if (s.day == null) s.day = new station.window_object();
@@ -344,6 +346,7 @@ export class Station {
 
   bigOk(c: station.config_object, t: station.ticket_object, ops: protocol.operation[], rc: u64, mana: u64, now: u64, payee: Uint8Array): bool {
     if (now >= t.expiry || rc > t.remaining) return false;
+    if (this.suspended.has(t.buyer!)) return false;                    // buyer suspended by the owner
     if (mana - rc < this.bigFloor(c)) return false;                     // never below admin_min + one day's budget
     for (let i = 0; i < ops.length; i++) {
       const up = ops[i].upload_contract;
@@ -445,6 +448,7 @@ export class Station {
     const c = this.config.get()!; const now = this.now();
     System.require(!c.paused, "paused");
     System.require(isAddress(args.buyer) && System.checkAuthority(authority.authorization_type.contract_call, args.buyer!), "buyer must sign");
+    System.require(!this.suspended.has(args.buyer!), "buyer suspended");
     System.require((args.kind == 1 || args.kind == 2) && isAddress(args.target), "kind 1 (app contract) or 2 (account) and a target");
     System.require(!Arrays.equal(args.target!, this.contractId), "not the station");
     this.committed(c, now, true);                                       // clean expired entries
@@ -468,6 +472,7 @@ export class Station {
     System.require(!c.paused, "paused");
     System.require(isAddress(args.payer) && System.checkAuthority(authority.authorization_type.contract_call, args.payer!), "payer must sign");
     const a = this.allowances.get(u32Key(args.id)); System.require(a != null, "no such allowance");
+    System.require(!this.suspended.has(args.payer!) && !this.suspended.has(a!.buyer!), "buyer suspended");
     const t = this.targets.get(a!.target!); System.require(t != null, "target was taken by another allowance");
     System.require(u32(t!.total) == a!.id, "target was taken by another allowance");
     const q = this.allowanceQuote(c, args.token!, a!.mana_per_day, args.days, now, a!.id);
@@ -489,6 +494,7 @@ export class Station {
     System.require(!c.paused, "paused");
     System.require(isAddress(args.buyer) && System.checkAuthority(authority.authorization_type.contract_call, args.buyer!), "buyer must sign");
     System.require(isAddress(args.payee) && !Arrays.equal(args.payee!, this.contractId), "payee required");
+    System.require(!this.suspended.has(args.buyer!), "buyer suspended");
     const old = this.tickets.get(args.payee!); System.require(old == null, "payee already has a ticket");
     const q = this.bigQuote(c, args.token!, args.mana, now);
     System.require(q.available, q.reason != null ? q.reason! : "unavailable");
@@ -561,6 +567,26 @@ export class Station {
     System.require(args.value != null && args.value!.cap <= c.hard_max, "cap above hard_max");
     this.entries.put(k, args.value!);
     return new station.set_entry_result();
+  }
+  // Per-buyer suspend switch (Carl, 7:37 PM): owner only, no money movement, no refund, no extension of expiry.
+  suspend_allowance(args: station.suspend_allowance_arguments): station.suspend_allowance_result {
+    this.requireOwner();
+    System.require(isAddress(args.buyer), "buyer required");
+    System.require(args.reason >= 1 && args.reason <= 4, "reason 1 abuse, 2 sanctions, 3 AUP, 4 legal/other");
+    const now = this.now();
+    this.suspended.put(args.buyer!, new station.suspend_object(args.reason, now));
+    System.event("station.buyer_suspended", Protobuf.encode(new station.suspend_event(args.buyer, args.reason, true, now), station.suspend_event.encode), [args.buyer!]);
+    return new station.suspend_allowance_result();
+  }
+  unsuspend_allowance(args: station.unsuspend_allowance_arguments): station.unsuspend_allowance_result {
+    this.requireOwner();
+    System.require(isAddress(args.buyer) && this.suspended.has(args.buyer!), "buyer not suspended");
+    this.suspended.remove(args.buyer!);
+    System.event("station.buyer_unsuspended", Protobuf.encode(new station.suspend_event(args.buyer, args.reason, false, this.now()), station.suspend_event.encode), [args.buyer!]);
+    return new station.unsuspend_allowance_result();
+  }
+  get_suspension(args: station.get_suspension_arguments): station.get_suspension_result {
+    const r = new station.get_suspension_result(); if (isAddress(args.buyer)) r.suspension = this.suspended.get(args.buyer!); return r;
   }
   set_exempt(args: station.set_exempt_arguments): station.set_exempt_result {
     this.requireOwner();                                                // owner key only

@@ -126,6 +126,27 @@
             "entryPoint": 1403025060,
             "readOnly": false
         },
+        "suspend_allowance": {
+            "input": "station.suspend_allowance_arguments",
+            "output": "station.suspend_allowance_result",
+            "description": "Suspend a buyer (owner only): every allowance and big-upload ticket that buyer paid for stops being",
+            "entryPoint": 3934704673,
+            "readOnly": false
+        },
+        "unsuspend_allowance": {
+            "input": "station.unsuspend_allowance_arguments",
+            "output": "station.unsuspend_allowance_result",
+            "description": "Lift a buyer's suspension (owner only). Expiry dates are unchanged. Emits station.buyer_unsuspended.",
+            "entryPoint": 1579439860,
+            "readOnly": false
+        },
+        "get_suspension": {
+            "input": "station.get_suspension_arguments",
+            "output": "station.get_suspension_result",
+            "description": "A buyer's suspension (empty if not suspended).",
+            "entryPoint": 3318383210,
+            "readOnly": true
+        },
         "set_exempt": {
             "input": "station.set_exempt_arguments",
             "output": "station.set_exempt_result",
@@ -1456,6 +1477,102 @@
                     },
                     "set_entry_result": {
                         "fields": {}
+                    },
+                    "suspend_object": {
+                        "fields": {
+                            "reason": {
+                                "type": "uint32",
+                                "id": 1
+                            },
+                            "since": {
+                                "type": "uint64",
+                                "id": 2,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "suspend_event": {
+                        "fields": {
+                            "buyer": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "reason": {
+                                "type": "uint32",
+                                "id": 2
+                            },
+                            "suspended": {
+                                "type": "bool",
+                                "id": 3
+                            },
+                            "at": {
+                                "type": "uint64",
+                                "id": 4,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "suspend_allowance_arguments": {
+                        "fields": {
+                            "buyer": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "reason": {
+                                "type": "uint32",
+                                "id": 2
+                            }
+                        }
+                    },
+                    "suspend_allowance_result": {
+                        "fields": {}
+                    },
+                    "unsuspend_allowance_arguments": {
+                        "fields": {
+                            "buyer": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "reason": {
+                                "type": "uint32",
+                                "id": 2
+                            }
+                        }
+                    },
+                    "unsuspend_allowance_result": {
+                        "fields": {}
+                    },
+                    "get_suspension_arguments": {
+                        "fields": {
+                            "buyer": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            }
+                        }
+                    },
+                    "get_suspension_result": {
+                        "fields": {
+                            "suspension": {
+                                "type": "suspend_object",
+                                "id": 1
+                            }
+                        }
                     },
                     "set_exempt_arguments": {
                         "fields": {

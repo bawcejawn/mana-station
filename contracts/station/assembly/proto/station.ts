@@ -3493,6 +3493,345 @@ export namespace station {
     constructor() {}
   }
 
+  @unmanaged
+  export class suspend_object {
+    static encode(message: suspend_object, writer: Writer): void {
+      if (message.reason != 0) {
+        writer.uint32(8);
+        writer.uint32(message.reason);
+      }
+
+      if (message.since != 0) {
+        writer.uint32(16);
+        writer.uint64(message.since);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): suspend_object {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new suspend_object();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.reason = reader.uint32();
+            break;
+
+          case 2:
+            message.since = reader.uint64();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    reason: u32;
+    since: u64;
+
+    constructor(reason: u32 = 0, since: u64 = 0) {
+      this.reason = reason;
+      this.since = since;
+    }
+  }
+
+  export class suspend_event {
+    static encode(message: suspend_event, writer: Writer): void {
+      const unique_name_buyer = message.buyer;
+      if (unique_name_buyer !== null) {
+        writer.uint32(10);
+        writer.bytes(unique_name_buyer);
+      }
+
+      if (message.reason != 0) {
+        writer.uint32(16);
+        writer.uint32(message.reason);
+      }
+
+      if (message.suspended != false) {
+        writer.uint32(24);
+        writer.bool(message.suspended);
+      }
+
+      if (message.at != 0) {
+        writer.uint32(32);
+        writer.uint64(message.at);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): suspend_event {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new suspend_event();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.buyer = reader.bytes();
+            break;
+
+          case 2:
+            message.reason = reader.uint32();
+            break;
+
+          case 3:
+            message.suspended = reader.bool();
+            break;
+
+          case 4:
+            message.at = reader.uint64();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    buyer: Uint8Array | null;
+    reason: u32;
+    suspended: bool;
+    at: u64;
+
+    constructor(
+      buyer: Uint8Array | null = null,
+      reason: u32 = 0,
+      suspended: bool = false,
+      at: u64 = 0
+    ) {
+      this.buyer = buyer;
+      this.reason = reason;
+      this.suspended = suspended;
+      this.at = at;
+    }
+  }
+
+  export class suspend_allowance_arguments {
+    static encode(message: suspend_allowance_arguments, writer: Writer): void {
+      const unique_name_buyer = message.buyer;
+      if (unique_name_buyer !== null) {
+        writer.uint32(10);
+        writer.bytes(unique_name_buyer);
+      }
+
+      if (message.reason != 0) {
+        writer.uint32(16);
+        writer.uint32(message.reason);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): suspend_allowance_arguments {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new suspend_allowance_arguments();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.buyer = reader.bytes();
+            break;
+
+          case 2:
+            message.reason = reader.uint32();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    buyer: Uint8Array | null;
+    reason: u32;
+
+    constructor(buyer: Uint8Array | null = null, reason: u32 = 0) {
+      this.buyer = buyer;
+      this.reason = reason;
+    }
+  }
+
+  @unmanaged
+  export class suspend_allowance_result {
+    static encode(message: suspend_allowance_result, writer: Writer): void {}
+
+    static decode(reader: Reader, length: i32): suspend_allowance_result {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new suspend_allowance_result();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    constructor() {}
+  }
+
+  export class unsuspend_allowance_arguments {
+    static encode(
+      message: unsuspend_allowance_arguments,
+      writer: Writer
+    ): void {
+      const unique_name_buyer = message.buyer;
+      if (unique_name_buyer !== null) {
+        writer.uint32(10);
+        writer.bytes(unique_name_buyer);
+      }
+
+      if (message.reason != 0) {
+        writer.uint32(16);
+        writer.uint32(message.reason);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): unsuspend_allowance_arguments {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new unsuspend_allowance_arguments();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.buyer = reader.bytes();
+            break;
+
+          case 2:
+            message.reason = reader.uint32();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    buyer: Uint8Array | null;
+    reason: u32;
+
+    constructor(buyer: Uint8Array | null = null, reason: u32 = 0) {
+      this.buyer = buyer;
+      this.reason = reason;
+    }
+  }
+
+  @unmanaged
+  export class unsuspend_allowance_result {
+    static encode(message: unsuspend_allowance_result, writer: Writer): void {}
+
+    static decode(reader: Reader, length: i32): unsuspend_allowance_result {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new unsuspend_allowance_result();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    constructor() {}
+  }
+
+  export class get_suspension_arguments {
+    static encode(message: get_suspension_arguments, writer: Writer): void {
+      const unique_name_buyer = message.buyer;
+      if (unique_name_buyer !== null) {
+        writer.uint32(10);
+        writer.bytes(unique_name_buyer);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): get_suspension_arguments {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new get_suspension_arguments();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.buyer = reader.bytes();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    buyer: Uint8Array | null;
+
+    constructor(buyer: Uint8Array | null = null) {
+      this.buyer = buyer;
+    }
+  }
+
+  @unmanaged
+  export class get_suspension_result {
+    static encode(message: get_suspension_result, writer: Writer): void {
+      const unique_name_suspension = message.suspension;
+      if (unique_name_suspension !== null) {
+        writer.uint32(10);
+        writer.fork();
+        suspend_object.encode(unique_name_suspension, writer);
+        writer.ldelim();
+      }
+    }
+
+    static decode(reader: Reader, length: i32): get_suspension_result {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new get_suspension_result();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.suspension = suspend_object.decode(reader, reader.uint32());
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    suspension: suspend_object | null;
+
+    constructor(suspension: suspend_object | null = null) {
+      this.suspension = suspension;
+    }
+  }
+
   export class set_exempt_arguments {
     static encode(message: set_exempt_arguments, writer: Writer): void {
       const unique_name_contract_id = message.contract_id;

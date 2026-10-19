@@ -377,8 +377,16 @@ Release wasm: 45,371 bytes. Test note: MockVM's event list breaks past about 9 e
     - Texts (`ALLOWANCE_TERMS` / `BIG_TERMS`): "Prepaid for future use. No refunds. No auto-renew: service stops at expiry unless you renew, at the price current then. Daily, 7-day and 30-day offers: buy only what you need. Non-transferable; not redeemable for crypto or cash. Introductory prices may increase for new purchases. Service may be paused (kill switch)." The big-upload version adds "Unused Mana expires with the ticket."
   - **⚠ Flags against monetization_legal.md (Carl to confirm, or adjust the ToS with a lawyer; not silently changed):**
     1. §8 (5) says "Refunds only if Carl fails to deliver (pro rata, same token, to the paying address); otherwise non-refundable. Stated before purchase." §3 says paid plans get "credits only (e.g. pro-rata credit if availability <99%)". Carl's rule removes even the failure-to-deliver refund, for example during a kill-switch pause, a reserve shortfall or a bridge problem. Lower-risk option that keeps the contract change: honour failure-to-deliver cases off-chain from Carl's own wallet (the treasury is his wallet), or as a free renewal credit. Either way, the ToS must say exactly what applies.
-    2. §3/§4 require a **right to cut off** abusive buyers, and §8 says to **refuse sanctioned or flagged addresses**. Before, `cancel_allowance` could cut off one allowance. Now the only lever is the station-wide pause, which also stops every honest buyer and Carl's apps. Suggested (not built): an owner-only `suspend_allowance(id)` that ends one allowance with no money movement, limited to abuse or sanctions cases and stated in the ToS. Needs Carl's yes.
+    2. ~~Per-buyer cut-off~~ → **resolved, decided by Carl (7:37 PM): per-buyer suspend switch built** (below).
     3. "No refunds" plus "may be paused" makes honest disclosure essential. Both are in the terms text; the UI must show them before purchase. Consumer-law review of no-refund prepaid digital services is still a lawyer item ⚖.
+- **Per-buyer suspend switch: decided by Carl (7:37 PM).**
+  - `suspend_allowance(buyer, reason)` / `unsuspend_allowance(buyer, reason)`: owner only. `get_suspension(buyer)` is the read side.
+  - It works by **buyer address**, not allowance id, so one call covers every allowance and big-upload ticket that buyer paid for. That fits sanctions and abuse cases, where the person is the problem, not one purchase.
+  - While suspended, the station refuses to sponsor any of those allowances (account or app) and tickets. New buys, renewals and tickets by that buyer are refused too, so nobody pays for service they can't get.
+  - Other buyers and Carl's fee-exempt apps are unaffected.
+  - **No money moves and nothing is refunded. Suspended time is not extended or credited.** Expiry dates stay as they were, consistent with no refunds. This is stated in both terms texts.
+  - Reason codes: 1 abuse, 2 sanctions / flagged address, 3 AUP violation, 4 legal or other. Events: `station.buyer_suspended` / `station.buyer_unsuspended` (buyer, reason, suspended, time).
+  - Legal note (monetization_legal.md): this provides the required right to cut off. Whether a non-refundable suspension of a buyer who wasn't at fault (e.g. a false sanctions match) is acceptable is part of the lawyer review ⚖.
 - **Big-upload limits: decided by Carl, approved as proposed.**
   - 6,000 Mana per request (≥ the 5,000 minimum), 12,000 per rolling 7 days, 6,000 outstanding. All owner-adjustable via `set_config`.
   - Still unavailable at 30k: the sellable slice is 0, so there is no repayment capacity.
@@ -386,7 +394,9 @@ Release wasm: 45,371 bytes. Test note: MockVM's event list breaks past about 9 e
   - vUSDT (max 500 per purchase) and vUSDC (max 100 per purchase), both active. Payments go directly to Carl's wallet in the token paid.
   - vUSDC's lower max is deliberate: its liquidity on Koinos is thinner (stablecoins.md), so less is at risk if it can't be swapped or bridged out.
 
-**Tests: 28/28 pass.** New: no-refund terms on quotes and events; vUSDT + vUSDC with separate maxima; the approved big-upload limits at mainnet scale and owner adjustment. The refund test was changed to: a pause moves no money and the term continues.
+**Tests (after the suspend switch): 30/30 pass.** New: suspended buyer refused (allowance and big ticket), other buyer and Carl's app unaffected, buy/renew/ticket refused while suspended, no token movement, unsuspend restores service with expiry unchanged; owner only, reason codes checked. Mutation check (ticket check removed, owner check removed) fails 2. Release wasm 49,248 bytes, ABI 25 methods.
+
+**Tests (before the suspend switch): 28/28 pass.** New: no-refund terms on quotes and events; vUSDT + vUSDC with separate maxima; the approved big-upload limits at mainnet scale and owner adjustment. The refund test was changed to: a pause moves no money and the term continues.
 
 | New / changed check | Result |
 |---|---|
@@ -425,7 +435,7 @@ Release wasm: 46,705 bytes; ABI 22 methods (`cancel_allowance` gone).
 2. v2 budget: 20% of `koin_amount` per rolling 24 h (6,000 at 30k), always refilled; 80% reserve; `admin_min` 100 is untouchable.
 3. Absolute reservations (Knode and Stories 3,000 each) for exempt Carl projects; only an owner boost exceeds them. The sellable slice = budget − reservations (0 at 30k). Per-user anti-spam is unchanged.
 4. The derived sellable slice backs prepaid vUSDT/vUSDC allowances (pull payment, auto expiry, renew), exempt overflow and big-upload debt repayment. It is 0 at 30k, so all three stay off until KOIN is added.
-5. 28/28 simulated-chain tests pass (no refunds, vUSDT + vUSDC, approved big-upload limits). Earlier: 25/25 (payments go directly to Carl; exempt apps get a 20% buffer from the reserve with alerts; paid allowances hard-capped). Earlier: 23/23, with the introductory prices applied (1/7/30-day tiers, price snapshot, no auto-renew) (owner-only fee-exempt allowlist with events; fee-free, not limit-free). Testnet is parked. Knode `set_sponsor_limit(0)` waits until the station is fully launched.
+5. 30/30 simulated-chain tests pass (incl. per-buyer suspend switch). Earlier: 28/28 (no refunds, vUSDT + vUSDC, approved big-upload limits). Earlier: 25/25 (payments go directly to Carl; exempt apps get a 20% buffer from the reserve with alerts; paid allowances hard-capped). Earlier: 23/23, with the introductory prices applied (1/7/30-day tiers, price snapshot, no auto-renew) (owner-only fee-exempt allowlist with events; fee-free, not limit-free). Testnet is parked. Knode `set_sponsor_limit(0)` waits until the station is fully launched.
 
 **Decided (2026-10-19):** rolling windows; testnet OK (parked); Knode off only after launch; own Mana is the default payer; v2 budget model; vUSDT primary / vUSDC optional; Chainge USDT rejected.
 
@@ -435,10 +445,10 @@ Release wasm: 46,705 bytes; ABI 22 methods (`cancel_allowance` gone).
 
 **Decided (5:18 / 5:22 PM, Carl):** treasury = owner wallet (direct pull, owner-changeable); fee-exempt apps get a 20% buffer from the reserve, no debt or repayment, 6,100 floor untouchable, `buffer_used` / `reserve_low` (15k) events; paid allowances hard-capped.
 
-**Decided (7:32–7:33 PM, Carl):** no refunds (`cancel_allowance` removed; kill switch stays); big-upload limits 6,000 / 12,000 per 7 days / 6,000 outstanding, owner-adjustable; vUSDT (max 500) and vUSDC (max 100, lower for liquidity) both accepted; unreserved fee-exempt projects refused while the sellable slice is 0.
+**Decided (7:32–7:33 PM, Carl):** no refunds (`cancel_allowance` removed; kill switch stays); big-upload limits 6,000 / 12,000 per 7 days / 6,000 outstanding, owner-adjustable; vUSDT (max 500) and vUSDC (max 100, lower for liquidity) both accepted; unreserved fee-exempt projects refused while the sellable slice is 0. **Decided (7:37 PM, Carl):** per-buyer suspend switch (owner only, no money movement, no refund, no extension).
 
 **Still for Carl (flags, not open design decisions):**
-1. Legal fit of "no refunds" against monetization_legal.md: failure-to-deliver refunds or credits, and the per-buyer cut-off for abuse or sanctions (proposed `suspend_allowance`, not built). See §7d.
+1. Legal fit of "no refunds" against monetization_legal.md: failure-to-deliver refunds or credits (the per-buyer cut-off is now built: decided by Carl 7:37 PM). See §7d.
 2. When to add KOIN: at 30k there is nothing to sell and no big uploads (e.g. +10k → 2,000/day).
 3. Testnet is still parked (the box can't reach Harbinger). Verify `authorize` events, cost and the Kondor "Optimize mana" margin there before mainnet.
 

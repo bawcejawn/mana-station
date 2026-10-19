@@ -262,6 +262,45 @@ export class Station {
     return res;
   }
 
+  suspend_allowance(
+    args: station.suspend_allowance_arguments
+  ): station.suspend_allowance_result {
+    // const buyer = args.buyer;
+    // const reason = args.reason;
+
+    // YOUR CODE HERE
+
+    const res = new station.suspend_allowance_result();
+
+    return res;
+  }
+
+  unsuspend_allowance(
+    args: station.unsuspend_allowance_arguments
+  ): station.unsuspend_allowance_result {
+    // const buyer = args.buyer;
+    // const reason = args.reason;
+
+    // YOUR CODE HERE
+
+    const res = new station.unsuspend_allowance_result();
+
+    return res;
+  }
+
+  get_suspension(
+    args: station.get_suspension_arguments
+  ): station.get_suspension_result {
+    // const buyer = args.buyer;
+
+    // YOUR CODE HERE
+
+    const res = new station.get_suspension_result();
+    // res.suspension = ;
+
+    return res;
+  }
+
   set_exempt(args: station.set_exempt_arguments): station.set_exempt_result {
     // const contract_id = args.contract_id;
     // const value = args.value;
