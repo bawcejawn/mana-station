@@ -12,7 +12,7 @@ import { System, Storage, Protobuf, Arrays, Token, Base58, authority, value, pro
 import { station } from "./proto/station";
 
 const S_CONFIG: u32 = 0, S_APPS: u32 = 1, S_ENTRIES: u32 = 2, S_USERS: u32 = 3, S_APPWIN: u32 = 4,
-  S_PRICES: u32 = 5, S_ALLOW: u32 = 6, S_TARGET: u32 = 7, S_TICKETS: u32 = 8, S_BIG: u32 = 9, S_REVENUE: u32 = 10, S_EXEMPT: u32 = 11, S_REGISTRY: u32 = 12, S_GLOBALWIN: u32 = 13, S_OVERFLOWWIN: u32 = 14, S_BUFFERWIN: u32 = 15, S_SUSPEND: u32 = 16, S_ESCROW: u32 = 17, S_ESCROWTOT: u32 = 18,
+  S_PRICES: u32 = 5, S_ALLOW: u32 = 6, S_TARGET: u32 = 7, S_TICKETS: u32 = 8, S_BIG: u32 = 9, S_REVENUE: u32 = 10, S_EXEMPT: u32 = 11, S_REGISTRY: u32 = 12, S_GLOBALWIN: u32 = 13, S_OVERFLOWWIN: u32 = 14, S_BUFFERWIN: u32 = 15, S_SUSPEND: u32 = 16, S_ESCROW: u32 = 17, S_ESCROWTOT: u32 = 18, S_TICKETCD: u32 = 19,
   S_TESTLEDGER: u32 = 90;
 const DAY: u64 = 86_400_000;
 const MANA: u64 = 100_000_000;
@@ -43,8 +43,7 @@ function entryKey(contract: Uint8Array, ep: u32): Uint8Array { const k = new Uin
 function pct(amount: u64, bp: u32): u64 { return amount / 10_000 * u64(bp); }
 function wholeManaUp(m: u64): u64 { return (m + MANA - 1) / MANA; }
 export const ALLOWANCE_TERMS = "Prepaid. Your payment is held in the station's escrow until the term ends, then released to the operator. Cancel any time: unused whole days are refunded (the current day counts as used, so 1 day is the minimum charge). If the operator pauses the station, paused time is credited: your term is extended by the pause. No auto-renew: service stops at expiry unless you renew, at the price current then. Daily, 7-day and 30-day offers: buy only what you need. Non-transferable; not redeemable for crypto or cash except these refunds. Introductory prices may increase for new purchases. A buyer may be suspended for abuse, sanctions or AUP reasons; suspended time is not extended, and the operator may refund unused days (never to a sanctioned party).";
-export const BIG_TERMS = "Prepaid one-time big upload, held in the station's escrow. Cancel any time, or let it expire: unused Mana is refunded pro rata, with a minimum charge of 20% of the ticket. Paused time extends the ticket. No auto-renew. Non-transferable; not redeemable for crypto or cash except these refunds. A buyer may be suspended for abuse, sanctions or AUP reasons; the operator may refund unused Mana (never to a sanctioned party).";
-const BIG_MIN_CHARGE_BP: u32 = 2000;                 // ticket minimum charge (20%) on buyer cancel / expiry
+export const BIG_TERMS = "Prepaid one-time big upload, held in the station's escrow. Cancel any time, or let it expire: unused Mana is refunded in full, pro rata (no minimum charge; rounded down by less than one token base unit). After a refund, the same buyer waits one cooldown period before buying another ticket. Paused time extends the ticket. No auto-renew. Non-transferable; not redeemable for crypto or cash except these refunds. A buyer may be suspended for abuse, sanctions or AUP reasons; the operator may refund unused Mana (never to a sanctioned party).";
 const MAX_OPEN_PURCHASES: i32 = 128;                 // bounded loops (pause credit)
 const MAX_TERMS: i32 = 8;
 const TX_BUFFER: u32 = 64 * 1024;                   // normal sponsored txs
@@ -61,6 +60,22 @@ function tierPrice(p: station.price_object, days: u64): u64 {
 }
 /** ceil(whole Mana × unit / 1,000). */
 function per1000(manaUnits: u64, unit: u64): u64 { return (wholeManaUp(manaUnits) * unit + 999) / 1000; }
+
+/** floor(a × b / c) exactly, with a 128-bit intermediate (no overflow for any u64 inputs; requires c > 0). */
+export function mulDiv(a: u64, b: u64, c: u64): u64 {
+  const aL = a & 0xffffffff, aH = a >> 32, bL = b & 0xffffffff, bH = b >> 32;
+  const ll = aL * bL, lh = aL * bH, hl = aH * bL, hh = aH * bH;
+  const mid = (ll >> 32) + (lh & 0xffffffff) + (hl & 0xffffffff);
+  let lo = (ll & 0xffffffff) | (mid << 32);
+  let hi = hh + (lh >> 32) + (hl >> 32) + (mid >> 32);
+  let q: u64 = 0, r: u64 = 0;
+  for (let i = 127; i >= 0; i--) {                     // binary long division of (hi:lo) by c
+    const top = r >> 63;
+    r = (r << 1) | (i >= 64 ? (hi >> u64(i - 64)) & 1 : (lo >> u64(i)) & 1);
+    if (top != 0 || r >= c) { r -= c; if (i < 64) q |= (u64(1) << u64(i)); }
+  }
+  return q;                                            // callers keep a×b/c < 2^64 (refund ≤ amount)
+}
 
 function txOps(): protocol.operation[] {
   if (BUILD_FOR_TESTING) return System.getTransaction().operations;
@@ -105,6 +120,7 @@ export class Station {
   tickets: Storage.Map<Uint8Array, station.ticket_object> = new Storage.Map(System.getContractId(), S_TICKETS, station.ticket_object.decode, station.ticket_object.encode, null);
   big: Storage.Obj<station.big_object> = new Storage.Obj(System.getContractId(), S_BIG, station.big_object.decode, station.big_object.encode, () => new station.big_object());
   escrow: Storage.Map<Uint8Array, station.escrow_object> = new Storage.Map(System.getContractId(), S_ESCROW, station.escrow_object.decode, station.escrow_object.encode, null);
+  ticketCd: Storage.Map<Uint8Array, station.revenue_object> = new Storage.Map(System.getContractId(), S_TICKETCD, station.revenue_object.decode, station.revenue_object.encode, null);
   escrowTot: Storage.Map<Uint8Array, station.escrow_totals_object> = new Storage.Map(System.getContractId(), S_ESCROWTOT, station.escrow_totals_object.decode, station.escrow_totals_object.encode, () => new station.escrow_totals_object());
   exempt: Storage.Map<Uint8Array, station.exempt_object> = new Storage.Map(System.getContractId(), S_EXEMPT, station.exempt_object.decode, station.exempt_object.encode, null);
   registry: Storage.Obj<station.registry_object> = new Storage.Obj(System.getContractId(), S_REGISTRY, station.registry_object.decode, station.registry_object.encode, () => new station.registry_object());
@@ -164,15 +180,13 @@ export class Station {
   /** Refund = floor(amount × unused / days): rounds down by < 1 base unit (in Carl's favour); never creates value. */
   termRefund(e: station.escrow_object, t: u64): u64 {
     const u = this.unusedDays(e, t); if (u == 0) return 0;
-    const r = e.amount * u / e.days; const h = this.held(e); return r > h ? h : r;
+    const r = mulDiv(e.amount, u, e.days); const h = this.held(e); return r > h ? h : r;
   }
-  /** Ticket refund = floor(paid × unused whole Mana / total whole Mana), unused after a minimum charge (if any). */
-  ticketRefund(e: station.escrow_object, t: station.ticket_object, minCharge: bool): u64 {
-    let used = t.mana - t.remaining;
-    if (minCharge) { const m = pct(t.mana, BIG_MIN_CHARGE_BP); if (used < m) used = m; }
-    if (used >= t.mana) return 0;
-    const unusedW = (t.mana - used) / MANA; const totalW = wholeManaUp(t.mana);
-    const r = e.amount * unusedW / totalW; const h = this.held(e); return r > h ? h : r;
+  /** Ticket refund (Carl, 7:59 PM: no minimum charge) = floor(paid × unused Mana / ticket Mana), exact in base units:
+   *  rounds down by < 1 token base unit, in Carl's favour. */
+  ticketRefund(e: station.escrow_object, t: station.ticket_object): u64 {
+    if (t.mana == 0 || t.remaining == 0) return 0;
+    const r = mulDiv(e.amount, t.remaining, t.mana); const h = this.held(e); return r > h ? h : r;
   }
   doRefund(e: station.escrow_object, amount: u64, action: string): void {
     if (amount == 0) return;
@@ -567,6 +581,8 @@ export class Station {
     System.require(isAddress(args.payee) && !Arrays.equal(args.payee!, this.contractId), "payee required");
     System.require(!this.suspended.has(args.buyer!), "buyer suspended");
     const old = this.tickets.get(args.payee!); System.require(old == null, "payee already has a ticket");
+    const cd = this.ticketCd.get(args.buyer!);
+    System.require(cd == null || now >= cd.total, "buyer cooldown after a refunded ticket");
     const q = this.bigQuote(c, args.token!, args.mana, now);
     System.require(q.available, q.reason != null ? q.reason! : "unavailable");
     System.require(q.price <= args.max_price, "price above the accepted quote");
@@ -732,14 +748,17 @@ export class Station {
     return new station.cancel_allowance_result(r, x[1]);
   }
   /** Settle a ticket: refund unused Mana, release the rest to Carl, free its debt. */
-  settleTicket(c: station.config_object, payee: Uint8Array, t: station.ticket_object, minCharge: bool, action: string, now: u64, noRefund: bool = false): u64[] {
+  settleTicket(c: station.config_object, payee: Uint8Array, t: station.ticket_object, buyerCooldown: bool, action: string, now: u64, noRefund: bool = false): u64[] {
     const e = this.escrow.get(u32Key(t.purchase_id));
     let r: u64 = 0, rel: u64 = 0;
     const b = this.big.get()!; const d = this.debtNow(c, b, now);
     b.debt = t.remaining >= d ? 0 : d - t.remaining; b.debt_ts = now; this.big.put(b);
     this.tickets.remove(payee);
     if (e != null && !e.closed) {
-      r = noRefund ? 0 : this.ticketRefund(e!, t, minCharge);
+      r = noRefund ? 0 : this.ticketRefund(e!, t);
+      // Anti-spam without a fee (Carl, 7:59 PM): after a buyer gets unused Mana back (cancel or expiry), that buyer waits
+      // big_cooldown_ms before buying another ticket. Owner refunds don't trigger it.
+      if (buyerCooldown && r > 0) this.ticketCd.put(t.buyer!, new station.revenue_object(now + c.big_cooldown_ms));
       e!.end = now; this.escrow.put(u32Key(e!.id), e!);
       this.doRefund(e!, r, action);
       rel = this.doRelease(c, this.escrow.get(u32Key(e!.id))!, "ticket_settle");
@@ -757,7 +776,7 @@ export class Station {
       System.require(System.checkAuthority(authority.authorization_type.contract_call, c.owner!), "buyer suspended: owner only");
       System.require(sus.reason != 2, "sanctions: funds frozen in escrow pending legal review");
     }
-    const x = this.settleTicket(c, args.payee!, t!, sus == null, "ticket_settle", now, sus != null);
+    const x = this.settleTicket(c, args.payee!, t!, true, "ticket_settle", now, sus != null);
     return new station.close_ticket_result(x[0], x[1]);
   }
   cancel_big_upload(args: station.cancel_big_upload_arguments): station.cancel_big_upload_result {
@@ -805,7 +824,7 @@ export class Station {
     const c = this.config.get()!; const t = this.clock(c, this.now());
     r.purchase = e;
     if (e.kind == 1) { r.refundable_now = this.termRefund(e, t); r.releasable = !e.closed && t >= e.end; }
-    else { const tk = this.tickets.get(e.payee!); if (tk != null) r.refundable_now = this.ticketRefund(e, tk, true); }
+    else { const tk = this.tickets.get(e.payee!); if (tk != null) r.refundable_now = this.ticketRefund(e, tk); }
     return r;
   }
   get_escrow_totals(args: station.get_escrow_totals_arguments): station.get_escrow_totals_result {

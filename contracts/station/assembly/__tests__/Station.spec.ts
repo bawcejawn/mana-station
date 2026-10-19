@@ -1,6 +1,6 @@
 /** Mana Station v2 on a simulated chain (MockVM). Mana, KOIN balance and stablecoins are test values. Run: npm test */
 import { Base58, MockVM, authority, chain, System, protocol, Protobuf } from "@koinos/sdk-as";
-import { Station, testSetMana, testSetBalance, testSetToken, testGetToken, VUSDT, VUSDC, ALLOWANCE_TERMS, BIG_TERMS } from "../Station";
+import { Station, testSetMana, testSetBalance, testSetToken, testGetToken, VUSDT, VUSDC, ALLOWANCE_TERMS, BIG_TERMS, mulDiv } from "../Station";
 import { station } from "../proto/station";
 
 const STATION = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqe");
@@ -455,14 +455,14 @@ describe("escrow and pro-rata refunds (Carl, 7:47 PM)", () => {
     expect(s.get_escrow(new station.get_escrow_arguments(1)).purchase!.closed).toBe(true);
     inv(s, USDT);
   });
-  it("big upload: cancel refunds unused Mana pro rata with a 20% minimum charge; expiry settles the same way; earned released", () => {
+  it("big upload: cancel refunds unused Mana exactly pro rata (no minimum); expiry settles the same way; earned released", () => {
     const s = setup(); gS = s;
     signedBy([BUYER]); s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U1, 100 * M, USDT, 1000 * USD, false)); signedBy([]); // 500,000
-    tx(U1, 10 * M, [op(OTHER, EP_PLAY)]); expect(ok(s)).toBe(true);           // used 10 (< 20 minimum)
+    tx(U1, 10 * M + 50_000_000, [op(OTHER, EP_PLAY)]); expect(ok(s)).toBe(true); // used 10.5 Mana
     signedBy([U2]); MockVM.commitTransaction(); expect(() => { gS!.cancel_big_upload(new station.cancel_big_upload_arguments(U2, U1)); }).toThrow(); // not yours
-    signedBy([BUYER]); expect(s.cancel_big_upload(new station.cancel_big_upload_arguments(BUYER, U1)).refund).toBe(400_000); signedBy([]);
-    expect(testGetToken(USDT, OWNER)).toBe(100_000);                          // 20% minimum, released at settlement
-    expect(s.get_status(new station.get_status_arguments()).big_debt).toBe(10 * M);   // only the Mana actually used stays as debt
+    signedBy([BUYER]); expect(s.cancel_big_upload(new station.cancel_big_upload_arguments(BUYER, U1)).refund).toBe(447_500); signedBy([]); // 500,000 × 89.5 / 100
+    expect(testGetToken(USDT, OWNER)).toBe(52_500);                           // exactly the used 10.5 Mana, released at settlement
+    expect(s.get_status(new station.get_status_arguments()).big_debt).toBe(10 * M + 50_000_000); // only the Mana actually used stays as debt
     expect(s.get_ticket(new station.get_ticket_arguments(U1)).ticket).toBeNull();
     inv(s, USDT);
     at(NOW + DAYMS + 1000);
@@ -507,6 +507,38 @@ describe("escrow and pro-rata refunds (Carl, 7:47 PM)", () => {
     const exp = s.get_allowance(new station.get_allowance_arguments(r.id)).allowance!.expiry;
     expect(exp).toBe(T + DAYMS + (3 * DAYMS - HOUR));                         // rest of day 1 credited
     inv(s, USDT);
+  });
+});
+
+describe("big-upload tickets: no minimum charge (Carl, 7:59 PM)", () => {
+  it("cancel with 0 used = full refund; the same buyer then waits a cooldown (no fee); other buyers don't", () => {
+    const s = setup(); gS = s; const T = NOW;
+    signedBy([BUYER]); s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U1, 100 * M, USDT, 1000 * USD, false)); signedBy([]);
+    at(T + 20 * HOUR);
+    signedBy([BUYER]); expect(s.cancel_big_upload(new station.cancel_big_upload_arguments(BUYER, U1)).refund).toBe(500_000); signedBy([]);
+    expect(testGetToken(USDT, BUYER)).toBe(1000 * USD); expect(testGetToken(USDT, OWNER)).toBe(0);
+    expect(s.get_status(new station.get_status_arguments()).big_debt).toBe(0);
+    inv(s, USDT);
+    at(T + DAYMS + 1000);                                                      // station-wide cooldown over
+    signedBy([BUYER]);
+    MockVM.commitTransaction(); expect(() => { gS!.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U2, 100 * M, USDT, 1000 * USD, false)); }).toThrow(); // buyer cooldown until T+44 h
+    const B2 = user(77); testSetToken(USDT, B2, 10 * USD);
+    signedBy([B2]); s.buy_big_upload(new station.buy_big_upload_arguments(B2, U2, 100 * M, USDT, 1000 * USD, false));
+    at(T + 2 * DAYMS + 2000);
+    signedBy([BUYER]); expect(s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, user(79), 60 * M, USDT, 1000 * USD, false)).paid).toBe(300_000);
+    signedBy([]); inv(s, USDT);
+  });
+  it("expiry with no use refunds in full; owner refunds set no buyer cooldown; exact 128-bit pro rata", () => {
+    const s = setup(); const T = NOW;
+    signedBy([BUYER]); s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U1, 100 * M, USDT, 1000 * USD, false)); signedBy([]);
+    at(T + 3 * DAYMS);
+    const x = s.close_ticket(new station.close_ticket_arguments(U1));
+    expect(x.refund).toBe(500_000); expect(x.released).toBe(0);
+    inv(s, USDT);
+    expect(mulDiv(50_000_000_000, 600_000_000_000, 600_000_000_000)).toBe(50_000_000_000); // 500 vUSDT × 6,000 Mana: no overflow
+    expect(mulDiv(50_000_000_000, 599_999_999_999, 600_000_000_000)).toBe(49_999_999_999); // rounds down < 1 unit
+    expect(mulDiv(1_000_000_000_000_000_000, 1_000_000_000_000_000_000, 1_000_000_000_000_000_000)).toBe(1_000_000_000_000_000_000);
+    expect(mulDiv(7, 3, 2)).toBe(10);
   });
 });
 
