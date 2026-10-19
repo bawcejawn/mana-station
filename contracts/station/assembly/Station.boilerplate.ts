@@ -204,6 +204,88 @@ export class Station {
     // YOUR CODE HERE
 
     const res = new station.close_ticket_result();
+    // res.refund = ;
+    // res.released = ;
+
+    return res;
+  }
+
+  cancel_allowance(
+    args: station.cancel_allowance_arguments
+  ): station.cancel_allowance_result {
+    // const buyer = args.buyer;
+    // const id = args.id;
+
+    // YOUR CODE HERE
+
+    const res = new station.cancel_allowance_result();
+    // res.refund = ;
+    // res.expiry = ;
+
+    return res;
+  }
+
+  cancel_big_upload(
+    args: station.cancel_big_upload_arguments
+  ): station.cancel_big_upload_result {
+    // const buyer = args.buyer;
+    // const payee = args.payee;
+
+    // YOUR CODE HERE
+
+    const res = new station.cancel_big_upload_result();
+    // res.refund = ;
+
+    return res;
+  }
+
+  release(args: station.release_arguments): station.release_result {
+    // const purchase_id = args.purchase_id;
+
+    // YOUR CODE HERE
+
+    const res = new station.release_result();
+    // res.amount = ;
+
+    return res;
+  }
+
+  owner_refund(
+    args: station.owner_refund_arguments
+  ): station.owner_refund_result {
+    // const allowance_id = args.allowance_id;
+    // const ticket_payee = args.ticket_payee;
+
+    // YOUR CODE HERE
+
+    const res = new station.owner_refund_result();
+    // res.refund = ;
+
+    return res;
+  }
+
+  get_escrow(args: station.get_escrow_arguments): station.get_escrow_result {
+    // const purchase_id = args.purchase_id;
+
+    // YOUR CODE HERE
+
+    const res = new station.get_escrow_result();
+    // res.purchase = ;
+    // res.refundable_now = ;
+    // res.releasable = ;
+
+    return res;
+  }
+
+  get_escrow_totals(
+    args: station.get_escrow_totals_arguments
+  ): station.get_escrow_totals_result {
+    // const token = args.token;
+
+    // YOUR CODE HERE
+
+    const res = new station.get_escrow_totals_result();
+    // res.totals = ;
 
     return res;
   }
@@ -331,20 +413,6 @@ export class Station {
     // YOUR CODE HERE
 
     const res = new station.set_price_result();
-
-    return res;
-  }
-
-  withdraw_revenue(
-    args: station.withdraw_revenue_arguments
-  ): station.withdraw_revenue_result {
-    // const token = args.token;
-    // const to = args.to;
-    // const amount = args.amount;
-
-    // YOUR CODE HERE
-
-    const res = new station.withdraw_revenue_result();
 
     return res;
   }

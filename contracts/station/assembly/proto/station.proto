@@ -30,7 +30,8 @@ message config_object {
   uint64 big_ticket_ms = 20 [jstype = JS_STRING];   // a big-upload ticket expires after this
   uint32 max_allowances = 21;                       // sold allowances open at once (bounded loops)
   uint64 max_days = 22 [jstype = JS_STRING];        // longest prepaid period per buy / renew
-  // Where stablecoin payments land: the station itself (then withdraw_revenue to Carl) or Carl's wallet directly.
+  // Where ESCROW RELEASES go (Carl, 7:47 PM: payments are held in the station's escrow until the term ends).
+  // Empty = the owner wallet. Must not be the station itself. Owner-changeable.
   // Default (empty) = DIRECT TO THE OWNER WALLET (Carl, 5:18 PM). Owner may set another address, or the station's own id.
   bytes treasury = 23 [(koinos.btype) = ADDRESS];
   // Fee-exempt reserved apps may go this far above their daily allowance (2000 = 20%: 3,000 → 3,600). The extra comes
@@ -114,6 +115,7 @@ message allowance_object {
   uint64 paid = 11 [jstype = JS_STRING];             // paid for this term
   uint64 term_start = 12 [jstype = JS_STRING];
   uint64 total_paid = 13 [jstype = JS_STRING];       // all terms together
+  repeated uint32 purchase_ids = 14;                  // escrow purchases (terms) of this allowance
 }
 
 // A prepaid big upload for `payee`: up to `mana` in total, each tx up to `mana`, until expiry.
@@ -125,6 +127,7 @@ message ticket_object {
   bool allow_upload = 5;                             // may pay for uploading the payee's own contract
   bytes token = 6 [(koinos.btype) = CONTRACT_ID];    // price snapshot at purchase
   uint64 paid = 7 [jstype = JS_STRING];
+  uint32 purchase_id = 8;                            // escrow purchase
 }
 
 // Station-wide big-upload state. Debt is repaid at the sold slice's daily rate (the slice pauses while it repays),
@@ -136,6 +139,8 @@ message big_object {
   window_object week = 4;
   uint32 next_id = 5;                                // allowance ids
   bool low_alerted = 6;                              // reserve_low already emitted for this dip
+  uint32 next_purchase = 7;                          // escrow purchase ids
+  uint64 paused_at = 8 [jstype = JS_STRING];         // set while paused: the escrow clock stops here
 }
 
 // Payload of station.allowance_bought / station.allowance_renewed / station.big_upload_bought, with the purchase terms.
@@ -144,7 +149,7 @@ message purchase_event {
   ticket_object ticket = 2;
   bytes token = 3 [(koinos.btype) = CONTRACT_ID];
   uint64 paid = 4 [jstype = JS_STRING];
-  bool refundable = 5;                      // always false
+  bool refundable = 5;                      // true (escrow, pro-rata on cancel)
   bool auto_renew = 6;                      // always false
   string terms = 7;
 }
@@ -171,6 +176,43 @@ message reserve_alert_event {
 message registry_object {
   repeated uint32 app_ids = 1;
   repeated uint32 open_ids = 2;
+  repeated uint32 open_purchases = 3;                // escrow purchases not yet closed (bounded)
+}
+
+// One prepaid purchase held in the station's escrow (Carl, 7:47 PM). kind 1 = an allowance term, kind 2 = a big-upload
+// ticket. Invariant: amount = refunded + released + still held; closed means held = 0.
+message escrow_object {
+  uint32 id = 1;
+  uint32 kind = 2;
+  bytes buyer = 3 [(koinos.btype) = ADDRESS];
+  bytes token = 4 [(koinos.btype) = CONTRACT_ID];
+  uint64 amount = 5 [jstype = JS_STRING];
+  uint64 start = 6 [jstype = JS_STRING];
+  uint64 end = 7 [jstype = JS_STRING];               // releasable to Carl from here (moves with pause credit)
+  uint64 days = 8 [jstype = JS_STRING];              // allowance term length (whole days)
+  uint64 per_day = 9 [jstype = JS_STRING];           // amount / days, rounded down (informational)
+  uint32 allowance_id = 10;
+  bytes payee = 11 [(koinos.btype) = ADDRESS];       // ticket payee
+  uint64 mana = 12 [jstype = JS_STRING];             // ticket Mana
+  uint64 refunded = 13 [jstype = JS_STRING];
+  uint64 released = 14 [jstype = JS_STRING];
+  bool closed = 15;
+}
+
+// Per token: held = Σ (amount − refunded − released) over all purchases; must equal the station's token balance.
+message escrow_totals_object {
+  uint64 held = 1 [jstype = JS_STRING];
+  uint64 collected = 2 [jstype = JS_STRING];
+  uint64 refunded = 3 [jstype = JS_STRING];
+  uint64 released = 4 [jstype = JS_STRING];
+}
+
+// station.escrow_refunded / station.escrow_released
+message escrow_event {
+  escrow_object purchase = 1;
+  uint64 amount = 2 [jstype = JS_STRING];
+  bytes to = 3 [(koinos.btype) = ADDRESS];
+  string action = 4;                                 // "cancel", "owner_refund", "ticket_settle", "release"
 }
 
 message revenue_object {
@@ -244,7 +286,7 @@ message quote_allowance_arguments {
 
 message quote_allowance_result {
   // Shown by the UI before purchase (Carl, 7:32 PM): prepaid for future use, no refunds, no auto-renew.
-  bool refundable = 5;                     // always false
+  bool refundable = 5;                     // true: unused whole days (allowance) / unused Mana (ticket) on cancel
   bool auto_renew = 6;                     // always false
   string terms = 7;
   uint64 price = 1 [jstype = JS_STRING];   // token units (vUSDT / vUSDC: 8 decimals)
@@ -262,7 +304,7 @@ message quote_big_upload_arguments {
 
 message quote_big_upload_result {
   // Shown by the UI before purchase (Carl, 7:32 PM): prepaid for future use, no refunds, no auto-renew.
-  bool refundable = 5;                     // always false
+  bool refundable = 5;                     // true: unused whole days (allowance) / unused Mana (ticket) on cancel
   bool auto_renew = 6;                     // always false
   string terms = 7;
   uint64 price = 1 [jstype = JS_STRING];
@@ -351,7 +393,79 @@ message close_ticket_arguments {
   bytes payee = 1 [(koinos.btype) = ADDRESS];
 }
 
-message close_ticket_result {}
+message close_ticket_result {
+  uint64 refund = 1 [jstype = JS_STRING];
+  uint64 released = 2 [jstype = JS_STRING];
+}
+
+// @description Buyer cancels an allowance: unused WHOLE days of every term are refunded from escrow (the current day
+// counts as used: 1 day minimum). Service continues to the end of the paid current day.
+// @read-only false
+message cancel_allowance_arguments {
+  bytes buyer = 1 [(koinos.btype) = ADDRESS];
+  uint32 id = 2;
+}
+
+message cancel_allowance_result {
+  uint64 refund = 1 [jstype = JS_STRING];
+  uint64 expiry = 2 [jstype = JS_STRING];
+}
+
+// @description Buyer cancels a big-upload ticket: unused Mana refunded pro rata, minimum charge 20% of the ticket.
+// @read-only false
+message cancel_big_upload_arguments {
+  bytes buyer = 1 [(koinos.btype) = ADDRESS];
+  bytes payee = 2 [(koinos.btype) = ADDRESS];
+}
+
+message cancel_big_upload_result {
+  uint64 refund = 1 [jstype = JS_STRING];
+}
+
+// @description After a term ends (anyone may call): send the earned, unrefunded amount to Carl (treasury). Once.
+// @read-only false
+message release_arguments {
+  uint32 purchase_id = 1;
+}
+
+message release_result {
+  uint64 amount = 1 [jstype = JS_STRING];
+}
+
+// @description Owner refunds unused value: an allowance (unused whole days, current day used) or a big-upload ticket
+// (unused Mana, no minimum charge). For buyers suspended without fault, or by owner choice. Refused while the buyer is
+// suspended for sanctions (reason 2): reclassify a false match as reason 4 first.
+// @read-only false
+message owner_refund_arguments {
+  uint32 allowance_id = 1;
+  bytes ticket_payee = 2 [(koinos.btype) = ADDRESS];
+}
+
+message owner_refund_result {
+  uint64 refund = 1 [jstype = JS_STRING];
+}
+
+// @description One escrow purchase.
+// @read-only true
+message get_escrow_arguments {
+  uint32 purchase_id = 1;
+}
+
+message get_escrow_result {
+  escrow_object purchase = 1;
+  uint64 refundable_now = 2 [jstype = JS_STRING];    // what a buyer cancel would refund now
+  bool releasable = 3;
+}
+
+// @description Escrow totals for a token.
+// @read-only true
+message get_escrow_totals_arguments {
+  bytes token = 1 [(koinos.btype) = CONTRACT_ID];
+}
+
+message get_escrow_totals_result {
+  escrow_totals_object totals = 1;
+}
 
 // ════════ Admin (owner only) ════════
 
@@ -471,14 +585,6 @@ message set_price_arguments {
 
 message set_price_result {}
 
-// @description Send collected stablecoin revenue to `to` (owner).
-// @read-only false
-message withdraw_revenue_arguments {
-  bytes token = 1 [(koinos.btype) = CONTRACT_ID];
-  bytes to = 2 [(koinos.btype) = ADDRESS];
-  uint64 amount = 3 [jstype = JS_STRING];
-}
+// (withdraw_revenue removed: all payments are escrow; Carl gets funds only through release / ticket settlement.)
 
-message withdraw_revenue_result {}
-
-// (cancel_allowance removed, Carl 7:32 PM: no refunds; prepaid for future use. The kill switch `set_paused` stays.)
+// (7:47 PM: the 7:32 "no refunds" rule is superseded: buyer cancel with pro-rata refunds from escrow, see cancel_allowance.)

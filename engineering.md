@@ -367,7 +367,7 @@ Release wasm: 45,371 bytes. Test note: MockVM's event list breaks past about 9 e
 
 **7d. Carl's final decisions (7:32–7:33 PM). Applied locally.**
 - **Unreserved fee-exempt projects: decided by Carl, keep current behavior.** A fee-exempt project without a reservation (app 0) is served only from the unsold sellable slice, so it is refused while that slice is 0 (at 30k). Capacity opens when Carl adds KOIN or assigns it a reservation.
-- **No refunds: decided by Carl.** Buyers pay for future usage, and daily and weekly offers exist, so they shouldn't buy more than they need.
+- **No refunds: SUPERSEDED by Carl on Oct 19, 7:47 PM; see §7e (escrow with pro-rata refunds).** The 7:32 PM version, kept for history: Buyers pay for future usage, and daily and weekly offers exist, so they shouldn't buy more than they need.
   - `cancel_allowance` (owner cancel with an optional refund) is **removed**. The contract has no path that pays tokens to a buyer. `payOut` is only reachable from `withdraw_revenue`, and only when the treasury is the station.
   - Big-upload tickets never had a refund; unused Mana expires with the ticket.
   - The kill switch (`set_paused`) stays: pausing stops service and moves no money.
@@ -407,6 +407,71 @@ Release wasm: 45,371 bytes. Test note: MockVM's event list breaks past about 9 e
 
 Release wasm: 46,705 bytes; ABI 22 methods (`cancel_allowance` gone).
 
+**7e. Escrow and pro-rata refunds (decided by Carl, Oct 19, 7:47 PM; supersedes "no refunds"). Applied locally.**
+Carl's reasoning: "someone needs the mana for 4 days but bought for 7 … keep things legally fair and bug free. The payment funds need to be held in an escrow … until the agreement or contract period ends and then funds can clear."
+- **Escrow:**
+  - Every payment (vUSDT or vUSDC, pull pattern) goes into the station's own balance as a purchase record: token, amount, start, end, days, per-day rate, refunded, released, closed.
+  - A renewal is a separate purchase (term). Tickets are purchases too.
+  - Per token: `held = collected − refunded − released`, which must equal the station's token balance (checked after every escrow test).
+- **Buyer cancel (`cancel_allowance`):**
+  - Unused **whole** days are refunded; the current day counts as used, so 1 day is the minimum charge (stops buy-and-cancel gaming).
+  - Service continues to the end of the paid day.
+  - Renewed terms that haven't started are refunded in full.
+  - The term is shortened to what was used, so a second cancel or owner refund computes 0. This was found by the tests: an earlier draft could refund twice.
+- **Big-upload tickets (proposed rule):**
+  - On buyer cancel (`cancel_big_upload`) or after expiry (`close_ticket`, anyone), unused Mana is refunded pro rata with a **minimum charge of 20% of the ticket**. That covers the reserve capacity it blocked (the weekly cap and the outstanding limit).
+  - The earned part is released to Carl at that settlement; the ticket's term has ended.
+  - Only the Mana actually used stays as reserve debt.
+- **Release (`release(purchase_id)`):**
+  - Anyone may call it, only after the term ends, and it pays out once (`closed`).
+  - It goes to the treasury: Carl's owner wallet by default. The station itself is refused as treasury.
+  - **No early release and no owner withdrawal** (`withdraw_revenue` removed). Release-to-date of earned days is not built, because Carl said funds clear when the period ends.
+- **Rounding:** refund = floor(amount × unused / total), so it rounds down by less than 1 base unit (1e-8 token) in Carl's favour. Refund + release always equals the amount paid, so no value is created or lost.
+  - Example: 200,000 for 7 days, cancelled on day 1 → 171,428 refunded, 28,572 released.
+- **Pause (fair option: credit):**
+  - While paused, the escrow clock stops: cancels during a pause use the pause start.
+  - On unpause, every running or upcoming term, allowance and ticket is extended by the pause length.
+  - Pausing moves no money.
+  - `set_config` can no longer toggle `paused`; only `set_paused` can, so the clock can't be bypassed.
+- **Suspension:**
+  - A suspended buyer can't self-cancel; the owner decides.
+  - `owner_refund(allowance_id | ticket_payee)` refunds unused whole days, or unused Mana with no minimum charge, to the buyer only, never to the owner. It's for buyers not at fault (reason 4, or a false sanctions match after reclassifying it to 4), or by owner choice for abuse or AUP.
+  - Abuse with no refund: allowance terms release at their normal end; a suspended buyer's expired ticket can be settled only by the owner, with 0 refund.
+  - **Sanctions (reason 2): refund AND release are frozen in escrow** pending legal review. Paying a sanctioned party, or taking their funds as income, may both be prohibited; OFAC blocking/reporting rules ⚖.
+  - Suspended time is not extended.
+- **Reentrancy / double spend:** state (refunded / released / closed / totals) is written before every token transfer. The only tokens are the owner-priced vUSDT/vUSDC. A double-spend sequence (cancel → owner refund → cancel → release → release) never pays more than the amount paid. MockVM can't simulate a re-entering token; that's a testnet/audit item.
+- **Terms text** (quotes and purchase events, `refundable = true`, `auto_renew = false`):
+  - "Prepaid. Your payment is held in the station's escrow until the term ends, then released to the operator. Cancel any time: unused whole days are refunded (the current day counts as used, so 1 day is the minimum charge). If the operator pauses the station, paused time is credited … No auto-renew …"
+  - The ticket version adds "unused Mana is refunded pro rata, with a minimum charge of 20%".
+- **Found while testing: SDK buffer limit.** The koinos-sdk-as system-call buffer defaults to **1 KiB**. Reading a tx's operations in `authorize` would fail for any tx larger than that, including every big upload of a contract. `authorize` now sets 64 KiB, or 1 MiB for ticket holders. UNVERIFIED against the chain's real max tx size and the memory/Mana cost: testnet item.
+
+**Tests: 37/37 pass** (7 new escrow tests, plus 2 reworked treasury/pause tests). Mutation check, each change alone, every one caught:
+- term not shortened → 1 fail;
+- release before the end allowed → 3;
+- double release allowed → 4;
+- current day not counted → 7;
+- no pause credit → 1;
+- sanctions refund not frozen → 1.
+
+| Check | Result |
+|---|---|
+| Payment held in the station (not Carl); release refused before the end, even for the owner; anyone releases after; treasury can't be the station | PASS |
+| Day-0 cancel: 1 day charged, 171,428 of 200,000 refunded; served to the end of day 1; released once (28,572); second release refused; buyer + Carl = total | PASS |
+| Last-day cancel refunds 0; cancel after expiry refused; release once | PASS |
+| Future renewed term refunded in full; others can't cancel; suspended buyer can't self-cancel | PASS |
+| Double-spend sequence (cancel, owner refund, cancel, release, release): never more than paid; rounding 60,000 → 42,857 + 17,143 | PASS |
+| Ticket cancel with the 20% minimum (400,000 refunded); expiry settle (250,000 / 250,000); debt keeps only the used Mana | PASS |
+| Suspension: sanctions freeze refund and release; reclassified to 4 → owner refund 171,428 to the buyer; abuse → owner settles the ticket with 0 refund | PASS |
+| Pause: clock frozen, unpause extends allowance and escrow end by the pause; cancel during the pause uses the frozen clock | PASS |
+
+Release wasm: 58,724 bytes; ABI 30 methods.
+
+**Testnet (Oct 19, 7:50 PM): still blocked.**
+- `harbinger-api.koinos.io` and `harbinger-rest.koinos.io` resolve to the box egress proxy 198.18.0.1. The TLS handshake is cut: `curl: (35) TLS connect error: error:0A000126:SSL routines::unexpected eof while reading`.
+- Mainnet `api.koinos.io` through the same proxy answers HTTP 200, so the box allowlist blocks the Harbinger hosts specifically.
+- An outside fetch of harbinger-rest returns HTTP 500 (inconclusive).
+- No testnet transaction was attempted; `run_tests.mjs` still targets the v1 ABI.
+
 ## VERIFY answers (Designer list and design.md)
 1. **Ordinary wallet as a station?** Yes, by uploading the contract to that address. It then becomes a contract account for the overridden types only. The private key keeps every type that isn't overridden. Use a separate account (§2). Each provider needs their own station contract account (§5). VERIFIED (authority docs; Fogata and Knode patterns).
 2. **Paying for calls into other contracts?** YES. The payer filters operations in `authorize` (§1, §2). VERIFIED in source. Testnet confirmation still recommended.
@@ -435,7 +500,7 @@ Release wasm: 46,705 bytes; ABI 22 methods (`cancel_allowance` gone).
 2. v2 budget: 20% of `koin_amount` per rolling 24 h (6,000 at 30k), always refilled; 80% reserve; `admin_min` 100 is untouchable.
 3. Absolute reservations (Knode and Stories 3,000 each) for exempt Carl projects; only an owner boost exceeds them. The sellable slice = budget − reservations (0 at 30k). Per-user anti-spam is unchanged.
 4. The derived sellable slice backs prepaid vUSDT/vUSDC allowances (pull payment, auto expiry, renew), exempt overflow and big-upload debt repayment. It is 0 at 30k, so all three stay off until KOIN is added.
-5. 30/30 simulated-chain tests pass (incl. per-buyer suspend switch). Earlier: 28/28 (no refunds, vUSDT + vUSDC, approved big-upload limits). Earlier: 25/25 (payments go directly to Carl; exempt apps get a 20% buffer from the reserve with alerts; paid allowances hard-capped). Earlier: 23/23, with the introductory prices applied (1/7/30-day tiers, price snapshot, no auto-renew) (owner-only fee-exempt allowlist with events; fee-free, not limit-free). Testnet is parked. Knode `set_sponsor_limit(0)` waits until the station is fully launched.
+5. 37/37 simulated-chain tests pass (escrow, pro-rata refunds, release after the term, pause credit). Earlier: 30/30 (incl. per-buyer suspend switch). Earlier: 28/28 (no refunds, vUSDT + vUSDC, approved big-upload limits). Earlier: 25/25 (payments go directly to Carl; exempt apps get a 20% buffer from the reserve with alerts; paid allowances hard-capped). Earlier: 23/23, with the introductory prices applied (1/7/30-day tiers, price snapshot, no auto-renew) (owner-only fee-exempt allowlist with events; fee-free, not limit-free). Testnet is parked. Knode `set_sponsor_limit(0)` waits until the station is fully launched.
 
 **Decided (2026-10-19):** rolling windows; testnet OK (parked); Knode off only after launch; own Mana is the default payer; v2 budget model; vUSDT primary / vUSDC optional; Chainge USDT rejected.
 
@@ -445,11 +510,13 @@ Release wasm: 46,705 bytes; ABI 22 methods (`cancel_allowance` gone).
 
 **Decided (5:18 / 5:22 PM, Carl):** treasury = owner wallet (direct pull, owner-changeable); fee-exempt apps get a 20% buffer from the reserve, no debt or repayment, 6,100 floor untouchable, `buffer_used` / `reserve_low` (15k) events; paid allowances hard-capped.
 
-**Decided (7:32–7:33 PM, Carl):** no refunds (`cancel_allowance` removed; kill switch stays); big-upload limits 6,000 / 12,000 per 7 days / 6,000 outstanding, owner-adjustable; vUSDT (max 500) and vUSDC (max 100, lower for liquidity) both accepted; unreserved fee-exempt projects refused while the sellable slice is 0. **Decided (7:37 PM, Carl):** per-buyer suspend switch (owner only, no money movement, no refund, no extension).
+**Decided (7:32–7:33 PM, Carl):** no refunds (`cancel_allowance` removed; kill switch stays); big-upload limits 6,000 / 12,000 per 7 days / 6,000 outstanding, owner-adjustable; vUSDT (max 500) and vUSDC (max 100, lower for liquidity) both accepted; unreserved fee-exempt projects refused while the sellable slice is 0. **Decided (7:37 PM, Carl):** per-buyer suspend switch (owner only, no extension).
+
+**Decided (Oct 19, 7:47 PM, Carl):** escrow with pro-rata refunds of unused whole days (current day = used), release after the term ends to the owner wallet, ticket refunds with a 20% minimum charge (proposed), pause credit, owner refunds for buyers not at fault, sanctions freeze. Supersedes "no refunds".
 
 **Still for Carl (flags, not open design decisions):**
-1. Legal fit of "no refunds" against monetization_legal.md: failure-to-deliver refunds or credits (the per-buyer cut-off is now built: decided by Carl 7:37 PM). See §7d.
+1. Confirm the proposed ticket rule (20% minimum charge) and the sanctions freeze (lawyer: what to do with blocked funds). See §7e.
 2. When to add KOIN: at 30k there is nothing to sell and no big uploads (e.g. +10k → 2,000/day).
-3. Testnet is still parked (the box can't reach Harbinger). Verify `authorize` events, cost and the Kondor "Optimize mana" margin there before mainnet.
+3. Testnet: still blocked by the box's egress allowlist (TLS cut for harbinger-api / harbinger-rest; mainnet passes). The host allowlist must add both. Verify `authorize` events, cost and the Kondor "Optimize mana" margin there before mainnet.
 
 Sources for this section: Koinos payer/authorize, Mana and disk-delta facts as cited in §1 and §7. The 4:37 PM rules come from Carl's answers. Station.ts and Station.spec.ts are local code, not deployed.

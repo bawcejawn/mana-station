@@ -148,6 +148,75 @@ export function main(): i32 {
       break;
     }
 
+    case 0xc7643cce: {
+      const args = Protobuf.decode<ProtoNamespace.cancel_allowance_arguments>(
+        contractArgs.args,
+        ProtoNamespace.cancel_allowance_arguments.decode
+      );
+      const res = c.cancel_allowance(args);
+      retbuf = Protobuf.encode(
+        res,
+        ProtoNamespace.cancel_allowance_result.encode
+      );
+      break;
+    }
+
+    case 0xc2985745: {
+      const args = Protobuf.decode<ProtoNamespace.cancel_big_upload_arguments>(
+        contractArgs.args,
+        ProtoNamespace.cancel_big_upload_arguments.decode
+      );
+      const res = c.cancel_big_upload(args);
+      retbuf = Protobuf.encode(
+        res,
+        ProtoNamespace.cancel_big_upload_result.encode
+      );
+      break;
+    }
+
+    case 0xa4d451ec: {
+      const args = Protobuf.decode<ProtoNamespace.release_arguments>(
+        contractArgs.args,
+        ProtoNamespace.release_arguments.decode
+      );
+      const res = c.release(args);
+      retbuf = Protobuf.encode(res, ProtoNamespace.release_result.encode);
+      break;
+    }
+
+    case 0x15c837ec: {
+      const args = Protobuf.decode<ProtoNamespace.owner_refund_arguments>(
+        contractArgs.args,
+        ProtoNamespace.owner_refund_arguments.decode
+      );
+      const res = c.owner_refund(args);
+      retbuf = Protobuf.encode(res, ProtoNamespace.owner_refund_result.encode);
+      break;
+    }
+
+    case 0xaeeb717a: {
+      const args = Protobuf.decode<ProtoNamespace.get_escrow_arguments>(
+        contractArgs.args,
+        ProtoNamespace.get_escrow_arguments.decode
+      );
+      const res = c.get_escrow(args);
+      retbuf = Protobuf.encode(res, ProtoNamespace.get_escrow_result.encode);
+      break;
+    }
+
+    case 0x7e8412a4: {
+      const args = Protobuf.decode<ProtoNamespace.get_escrow_totals_arguments>(
+        contractArgs.args,
+        ProtoNamespace.get_escrow_totals_arguments.decode
+      );
+      const res = c.get_escrow_totals(args);
+      retbuf = Protobuf.encode(
+        res,
+        ProtoNamespace.get_escrow_totals_result.encode
+      );
+      break;
+    }
+
     case 0xbb54068a: {
       const args = Protobuf.decode<ProtoNamespace.init_arguments>(
         contractArgs.args,
@@ -265,19 +334,6 @@ export function main(): i32 {
       );
       const res = c.set_price(args);
       retbuf = Protobuf.encode(res, ProtoNamespace.set_price_result.encode);
-      break;
-    }
-
-    case 0xeeec00ea: {
-      const args = Protobuf.decode<ProtoNamespace.withdraw_revenue_arguments>(
-        contractArgs.args,
-        ProtoNamespace.withdraw_revenue_arguments.decode
-      );
-      const res = c.withdraw_revenue(args);
-      retbuf = Protobuf.encode(
-        res,
-        ProtoNamespace.withdraw_revenue_result.encode
-      );
       break;
     }
 

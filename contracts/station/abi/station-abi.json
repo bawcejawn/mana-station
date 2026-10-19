@@ -91,6 +91,48 @@
             "entryPoint": 4273893948,
             "readOnly": false
         },
+        "cancel_allowance": {
+            "input": "station.cancel_allowance_arguments",
+            "output": "station.cancel_allowance_result",
+            "description": "Buyer cancels an allowance: unused WHOLE days of every term are refunded from escrow (the current day",
+            "entryPoint": 3345235150,
+            "readOnly": false
+        },
+        "cancel_big_upload": {
+            "input": "station.cancel_big_upload_arguments",
+            "output": "station.cancel_big_upload_result",
+            "description": "Buyer cancels a big-upload ticket: unused Mana refunded pro rata, minimum charge 20% of the ticket.",
+            "entryPoint": 3264763717,
+            "readOnly": false
+        },
+        "release": {
+            "input": "station.release_arguments",
+            "output": "station.release_result",
+            "description": "After a term ends (anyone may call): send the earned, unrefunded amount to Carl (treasury). Once.",
+            "entryPoint": 2765378028,
+            "readOnly": false
+        },
+        "owner_refund": {
+            "input": "station.owner_refund_arguments",
+            "output": "station.owner_refund_result",
+            "description": "Owner refunds unused value: an allowance (unused whole days, current day used) or a big-upload ticket",
+            "entryPoint": 365443052,
+            "readOnly": false
+        },
+        "get_escrow": {
+            "input": "station.get_escrow_arguments",
+            "output": "station.get_escrow_result",
+            "description": "One escrow purchase.",
+            "entryPoint": 2934665594,
+            "readOnly": true
+        },
+        "get_escrow_totals": {
+            "input": "station.get_escrow_totals_arguments",
+            "output": "station.get_escrow_totals_result",
+            "description": "Escrow totals for a token.",
+            "entryPoint": 2122584740,
+            "readOnly": true
+        },
         "init": {
             "input": "station.init_arguments",
             "output": "station.init_result",
@@ -166,13 +208,6 @@
             "output": "station.set_price_result",
             "description": "Set the price for a stablecoin (owner).",
             "entryPoint": 769612638,
-            "readOnly": false
-        },
-        "withdraw_revenue": {
-            "input": "station.withdraw_revenue_arguments",
-            "output": "station.withdraw_revenue_result",
-            "description": "Send collected stablecoin revenue to `to` (owner).",
-            "entryPoint": 4008444138,
             "readOnly": false
         }
     },
@@ -629,6 +664,11 @@
                                 "options": {
                                     "jstype": "JS_STRING"
                                 }
+                            },
+                            "purchaseIds": {
+                                "rule": "repeated",
+                                "type": "uint32",
+                                "id": 14
                             }
                         }
                     },
@@ -679,6 +719,10 @@
                                 "options": {
                                     "jstype": "JS_STRING"
                                 }
+                            },
+                            "purchaseId": {
+                                "type": "uint32",
+                                "id": 8
                             }
                         }
                     },
@@ -716,6 +760,17 @@
                             "lowAlerted": {
                                 "type": "bool",
                                 "id": 6
+                            },
+                            "nextPurchase": {
+                                "type": "uint32",
+                                "id": 7
+                            },
+                            "pausedAt": {
+                                "type": "uint64",
+                                "id": 8,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
                             }
                         }
                     },
@@ -843,6 +898,166 @@
                                 "rule": "repeated",
                                 "type": "uint32",
                                 "id": 2
+                            },
+                            "openPurchases": {
+                                "rule": "repeated",
+                                "type": "uint32",
+                                "id": 3
+                            }
+                        }
+                    },
+                    "escrow_object": {
+                        "fields": {
+                            "id": {
+                                "type": "uint32",
+                                "id": 1
+                            },
+                            "kind": {
+                                "type": "uint32",
+                                "id": 2
+                            },
+                            "buyer": {
+                                "type": "bytes",
+                                "id": 3,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "token": {
+                                "type": "bytes",
+                                "id": 4,
+                                "options": {
+                                    "(koinos.btype)": "CONTRACT_ID"
+                                }
+                            },
+                            "amount": {
+                                "type": "uint64",
+                                "id": 5,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "start": {
+                                "type": "uint64",
+                                "id": 6,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "end": {
+                                "type": "uint64",
+                                "id": 7,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "days": {
+                                "type": "uint64",
+                                "id": 8,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "perDay": {
+                                "type": "uint64",
+                                "id": 9,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "allowanceId": {
+                                "type": "uint32",
+                                "id": 10
+                            },
+                            "payee": {
+                                "type": "bytes",
+                                "id": 11,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "mana": {
+                                "type": "uint64",
+                                "id": 12,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "refunded": {
+                                "type": "uint64",
+                                "id": 13,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "released": {
+                                "type": "uint64",
+                                "id": 14,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "closed": {
+                                "type": "bool",
+                                "id": 15
+                            }
+                        }
+                    },
+                    "escrow_totals_object": {
+                        "fields": {
+                            "held": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "collected": {
+                                "type": "uint64",
+                                "id": 2,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "refunded": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "released": {
+                                "type": "uint64",
+                                "id": 4,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "escrow_event": {
+                        "fields": {
+                            "purchase": {
+                                "type": "escrow_object",
+                                "id": 1
+                            },
+                            "amount": {
+                                "type": "uint64",
+                                "id": 2,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "to": {
+                                "type": "bytes",
+                                "id": 3,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "action": {
+                                "type": "string",
+                                "id": 4
                             }
                         }
                     },
@@ -1402,7 +1617,175 @@
                         }
                     },
                     "close_ticket_result": {
-                        "fields": {}
+                        "fields": {
+                            "refund": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "released": {
+                                "type": "uint64",
+                                "id": 2,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "cancel_allowance_arguments": {
+                        "fields": {
+                            "buyer": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "id": {
+                                "type": "uint32",
+                                "id": 2
+                            }
+                        }
+                    },
+                    "cancel_allowance_result": {
+                        "fields": {
+                            "refund": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "expiry": {
+                                "type": "uint64",
+                                "id": 2,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "cancel_big_upload_arguments": {
+                        "fields": {
+                            "buyer": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "payee": {
+                                "type": "bytes",
+                                "id": 2,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            }
+                        }
+                    },
+                    "cancel_big_upload_result": {
+                        "fields": {
+                            "refund": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "release_arguments": {
+                        "fields": {
+                            "purchaseId": {
+                                "type": "uint32",
+                                "id": 1
+                            }
+                        }
+                    },
+                    "release_result": {
+                        "fields": {
+                            "amount": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "owner_refund_arguments": {
+                        "fields": {
+                            "allowanceId": {
+                                "type": "uint32",
+                                "id": 1
+                            },
+                            "ticketPayee": {
+                                "type": "bytes",
+                                "id": 2,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            }
+                        }
+                    },
+                    "owner_refund_result": {
+                        "fields": {
+                            "refund": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "get_escrow_arguments": {
+                        "fields": {
+                            "purchaseId": {
+                                "type": "uint32",
+                                "id": 1
+                            }
+                        }
+                    },
+                    "get_escrow_result": {
+                        "fields": {
+                            "purchase": {
+                                "type": "escrow_object",
+                                "id": 1
+                            },
+                            "refundableNow": {
+                                "type": "uint64",
+                                "id": 2,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "releasable": {
+                                "type": "bool",
+                                "id": 3
+                            }
+                        }
+                    },
+                    "get_escrow_totals_arguments": {
+                        "fields": {
+                            "token": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "CONTRACT_ID"
+                                }
+                            }
+                        }
+                    },
+                    "get_escrow_totals_result": {
+                        "fields": {
+                            "totals": {
+                                "type": "escrow_totals_object",
+                                "id": 1
+                            }
+                        }
                     },
                     "init_arguments": {
                         "fields": {
@@ -1631,34 +2014,6 @@
                         }
                     },
                     "set_price_result": {
-                        "fields": {}
-                    },
-                    "withdraw_revenue_arguments": {
-                        "fields": {
-                            "token": {
-                                "type": "bytes",
-                                "id": 1,
-                                "options": {
-                                    "(koinos.btype)": "CONTRACT_ID"
-                                }
-                            },
-                            "to": {
-                                "type": "bytes",
-                                "id": 2,
-                                "options": {
-                                    "(koinos.btype)": "ADDRESS"
-                                }
-                            },
-                            "amount": {
-                                "type": "uint64",
-                                "id": 3,
-                                "options": {
-                                    "jstype": "JS_STRING"
-                                }
-                            }
-                        }
-                    },
-                    "withdraw_revenue_result": {
                         "fields": {}
                     }
                 }

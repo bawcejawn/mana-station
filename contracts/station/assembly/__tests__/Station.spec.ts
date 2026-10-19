@@ -42,7 +42,7 @@ function cfg(): station.config_object {
   return c;
 }
 function setup(): Station {
-  MockVM.reset();
+  MockVM.reset(); System.setSystemBufferSize(256 * 1024);   // the 1 KiB default can't hold larger event lists
   MockVM.setContractId(STATION); MockVM.setContractArguments(STATION); MockVM.setEntryPoint(0);
   MockVM.setCaller(new chain.caller_data(new Uint8Array(0), chain.privilege.user_mode));
   MockVM.setContractMetadata(new chain.contract_metadata_object(new Uint8Array(0), false, false, false, true));
@@ -78,6 +78,14 @@ function buyAccount(s: Station, target: Uint8Array, manaPerDay: u64, days: u64):
   signedBy([BUYER]);
   const r = s.buy_allowance(new station.buy_allowance_arguments(BUYER, 2, target, manaPerDay, days, USDT, 1000 * USD));
   signedBy([]); return r;
+}
+function inv(s: Station, token: Uint8Array): void {     // escrow invariants
+  const t = s.get_escrow_totals(new station.get_escrow_totals_arguments(token)).totals!;
+  expect(testGetToken(token, STATION)).toBe(t.held);
+  expect(t.collected).toBe(t.held + t.refunded + t.released);
+}
+function cancelBy(s: Station, who: Uint8Array, id: u32): station.cancel_allowance_result {
+  signedBy([who]); const r = s.cancel_allowance(new station.cancel_allowance_arguments(who, id)); signedBy([]); return r;
 }
 let gS: Station | null = null;
 /** Carl's approved introductory prices (8 decimals): per 1,000 Mana/day 1 d 3,000,000 / 7 d 20,000,000 / 30 d 75,000,000;
@@ -221,8 +229,8 @@ describe("sold allowances (prepaid in vUSDT)", () => {
     const s = setup();
     const r = buyAccount(s, U2, 10 * M, 7);
     expect(r.paid).toBe(200_000);                                             // 10/1,000 × 0.20 vUSDT
-    expect(testGetToken(USDT, OWNER)).toBe(r.paid);                           // default treasury = Carl's owner wallet (direct)
-    expect(testGetToken(USDT, STATION)).toBe(0);
+    expect(testGetToken(USDT, STATION)).toBe(r.paid);                         // held in the station's escrow
+    expect(testGetToken(USDT, OWNER)).toBe(0);
     let n = 0;
     for (let i = 0; i < 8; i++) { at(NOW + 70_000); tx(U2, 2 * M, [op(OTHER, EP_PLAY)]); if (ok(s)) n++; }
     expect(n).toBe(5);                                                        // 10 Mana/day
@@ -378,6 +386,130 @@ describe("per-buyer suspend switch (Carl, 7:37 PM)", () => {
   });
 });
 
+describe("escrow and pro-rata refunds (Carl, 7:47 PM)", () => {
+  it("cancel on day 0: 1 day charged, 6 refunded (rounded down < 1 unit); served to the end of day 1; released once after", () => {
+    const s = setup(); gS = s; const T = NOW;
+    const r = buyAccount(s, U2, 10 * M, 7);                                    // 200,000 held
+    at(T + HOUR);
+    const c = cancelBy(s, BUYER, r.id);
+    expect(c.refund).toBe(171_428);                                            // floor(200,000 × 6 / 7)
+    expect(c.expiry).toBe(T + DAYMS);
+    expect(testGetToken(USDT, BUYER)).toBe(1000 * USD - 200_000 + 171_428);
+    inv(s, USDT); expect(testGetToken(USDT, STATION)).toBe(28_572);
+    at(T + DAYMS - 1000); tx(U2, 2 * M, [op(OTHER, EP_PLAY)]); expect(ok(s)).toBe(true);   // paid day still served
+    at(T + DAYMS); tx(U2, 2 * M, [op(OTHER, EP_PLAY)]); expect(ok(s)).toBe(false);
+    signedBy([BUYER]); MockVM.commitTransaction(); expect(() => { gS!.cancel_allowance(new station.cancel_allowance_arguments(BUYER, 1)); }).toThrow(); signedBy([]); // already ended
+    expect(s.release(new station.release_arguments(1)).amount).toBe(28_572);
+    expect(testGetToken(USDT, OWNER)).toBe(28_572);
+    MockVM.commitTransaction(); expect(() => { gS!.release(new station.release_arguments(1)); }).toThrow();  // never twice
+    expect(testGetToken(USDT, BUYER) + testGetToken(USDT, OWNER)).toBe(1000 * USD);           // no value created or lost
+    inv(s, USDT);
+  });
+  it("last day refunds 0; after expiry nothing to cancel; release before the end refused even for the owner", () => {
+    const s = setup(); gS = s; const T = NOW;
+    const r = buyAccount(s, U2, 10 * M, 7);
+    signedBy([OWNER]); MockVM.commitTransaction(); expect(() => { gS!.release(new station.release_arguments(1)); }).toThrow(); signedBy([]);
+    at(T + 6 * DAYMS + HOUR);
+    const c = cancelBy(s, BUYER, r.id);
+    expect(c.refund).toBe(0); expect(c.expiry).toBe(T + 7 * DAYMS);
+    at(T + 7 * DAYMS);
+    signedBy([BUYER]); MockVM.commitTransaction(); expect(() => { gS!.cancel_allowance(new station.cancel_allowance_arguments(BUYER, 1)); }).toThrow(); signedBy([]);
+    expect(s.release(new station.release_arguments(1)).amount).toBe(200_000);
+    MockVM.commitTransaction(); expect(() => { gS!.release(new station.release_arguments(1)); }).toThrow();
+    inv(s, USDT); expect(testGetToken(USDT, STATION)).toBe(0);
+  });
+  it("renewed future term is refunded in full; only the buyer can cancel; a suspended buyer can't self-cancel", () => {
+    const s = setup(); gS = s; const T = NOW;
+    const r = buyAccount(s, U2, 10 * M, 1);                                    // 30,000
+    signedBy([BUYER]); s.renew(new station.renew_arguments(BUYER, r.id, 7, USDT, 1000 * USD)); signedBy([]); // 200,000 from T+1d
+    signedBy([U1]); MockVM.commitTransaction(); expect(() => { gS!.cancel_allowance(new station.cancel_allowance_arguments(U1, 1)); }).toThrow(); // not yours
+    signedBy([U1]); MockVM.commitTransaction(); expect(() => { gS!.cancel_allowance(new station.cancel_allowance_arguments(BUYER, 1)); }).toThrow(); // must sign
+    at(T + 2 * HOUR);
+    const c = cancelBy(s, BUYER, r.id);
+    expect(c.refund).toBe(200_000); expect(c.expiry).toBe(T + DAYMS);
+    inv(s, USDT);
+    at(T + DAYMS);
+    expect(s.release(new station.release_arguments(1)).amount).toBe(30_000);
+    expect(s.release(new station.release_arguments(2)).amount).toBe(0);      // fully refunded term just closes
+    MockVM.commitTransaction(); expect(() => { gS!.release(new station.release_arguments(2)); }).toThrow();
+    expect(testGetToken(USDT, OWNER)).toBe(30_000); inv(s, USDT);
+    const r2 = buyAccount(s, U1, 10 * M, 7);
+    signedBy([OWNER]); s.suspend_allowance(new station.suspend_allowance_arguments(BUYER, 1)); signedBy([]);
+    signedBy([BUYER]); MockVM.commitTransaction(); expect(() => { gS!.cancel_allowance(new station.cancel_allowance_arguments(BUYER, 2)); }).toThrow(); signedBy([]);
+    expect(r2.id).toBe(2);
+  });
+  it("double-spend style sequence: cancel, owner refund, cancel again, release, release again never pays more than paid", () => {
+    const s = setup(); gS = s; const T = NOW;
+    const r = buyAccount(s, U2, 3 * M, 7);                                     // ceil(3 × 20,000,000 / 1,000) = 60,000
+    expect(r.paid).toBe(60_000);
+    at(T + DAYMS + HOUR);                                                      // day 2
+    expect(cancelBy(s, BUYER, r.id).refund).toBe(42_857);                      // floor(60,000 × 5 / 7)
+    signedBy([OWNER]); expect(s.owner_refund(new station.owner_refund_arguments(r.id, null)).refund).toBe(0); signedBy([]);
+    expect(cancelBy(s, BUYER, r.id).refund).toBe(0);                          // second cancel: nothing left to refund
+    expect(testGetToken(USDT, STATION)).toBe(17_143); inv(s, USDT);
+    at(T + 2 * DAYMS);
+    expect(s.release(new station.release_arguments(1)).amount).toBe(17_143);
+    MockVM.commitTransaction(); expect(() => { gS!.release(new station.release_arguments(1)); }).toThrow();
+    signedBy([OWNER]); expect(s.owner_refund(new station.owner_refund_arguments(r.id, null)).refund).toBe(0); signedBy([]);
+    expect(testGetToken(USDT, BUYER) + testGetToken(USDT, OWNER)).toBe(1000 * USD);
+    expect(s.get_escrow(new station.get_escrow_arguments(1)).purchase!.closed).toBe(true);
+    inv(s, USDT);
+  });
+  it("big upload: cancel refunds unused Mana pro rata with a 20% minimum charge; expiry settles the same way; earned released", () => {
+    const s = setup(); gS = s;
+    signedBy([BUYER]); s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U1, 100 * M, USDT, 1000 * USD, false)); signedBy([]); // 500,000
+    tx(U1, 10 * M, [op(OTHER, EP_PLAY)]); expect(ok(s)).toBe(true);           // used 10 (< 20 minimum)
+    signedBy([U2]); MockVM.commitTransaction(); expect(() => { gS!.cancel_big_upload(new station.cancel_big_upload_arguments(U2, U1)); }).toThrow(); // not yours
+    signedBy([BUYER]); expect(s.cancel_big_upload(new station.cancel_big_upload_arguments(BUYER, U1)).refund).toBe(400_000); signedBy([]);
+    expect(testGetToken(USDT, OWNER)).toBe(100_000);                          // 20% minimum, released at settlement
+    expect(s.get_status(new station.get_status_arguments()).big_debt).toBe(10 * M);   // only the Mana actually used stays as debt
+    expect(s.get_ticket(new station.get_ticket_arguments(U1)).ticket).toBeNull();
+    inv(s, USDT);
+    at(NOW + DAYMS + 1000);
+    signedBy([BUYER]); s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U2, 100 * M, USDT, 1000 * USD, false)); signedBy([]);
+    tx(U2, 50 * M, [op(OTHER, EP_PLAY)]); expect(ok(s)).toBe(true);           // used 50
+    MockVM.commitTransaction(); expect(() => { gS!.close_ticket(new station.close_ticket_arguments(U2)); }).toThrow(); // still valid
+    at(NOW + 3 * DAYMS);
+    const x = s.close_ticket(new station.close_ticket_arguments(U2));          // anyone, after expiry
+    expect(x.refund).toBe(250_000); expect(x.released).toBe(250_000);
+    expect(testGetToken(USDT, BUYER) + testGetToken(USDT, OWNER)).toBe(1000 * USD);
+    inv(s, USDT);
+  });
+  it("suspension: reason 4 → owner refunds unused days; sanctions (2) freeze refund and release; abuse (1) owner may forfeit", () => {
+    const s = setup(); gS = s; const T = NOW;
+    const r = buyAccount(s, U2, 10 * M, 7);
+    signedBy([OWNER]); s.suspend_allowance(new station.suspend_allowance_arguments(BUYER, 2));
+    MockVM.commitTransaction(); expect(() => { gS!.owner_refund(new station.owner_refund_arguments(1, null)); }).toThrow(); signedBy([]);
+    at(T + 7 * DAYMS);
+    MockVM.commitTransaction(); expect(() => { gS!.release(new station.release_arguments(1)); }).toThrow();  // frozen
+    at(T + HOUR);                                                              // (clock back: test only) false match found
+    signedBy([OWNER]); s.suspend_allowance(new station.suspend_allowance_arguments(BUYER, 4));
+    expect(s.owner_refund(new station.owner_refund_arguments(r.id, null)).refund).toBe(171_428); signedBy([]);
+    expect(testGetToken(USDT, OWNER)).toBe(0);                                 // owner refund never pays the owner
+    inv(s, USDT);
+    // abuse: no refund chosen → the ticket is settled by the owner after expiry with 0 refund
+    const B2 = user(77); testSetToken(USDT, B2, 10 * USD);
+    signedBy([B2]); s.buy_big_upload(new station.buy_big_upload_arguments(B2, user(78), 100 * M, USDT, 1000 * USD, false)); signedBy([]);
+    signedBy([OWNER]); s.suspend_allowance(new station.suspend_allowance_arguments(B2, 1)); signedBy([]);
+    at(NOW + 3 * DAYMS + 1000);
+    signedBy([U1]); MockVM.commitTransaction(); expect(() => { gS!.close_ticket(new station.close_ticket_arguments(user(78))); }).toThrow();
+    signedBy([OWNER]); expect(s.close_ticket(new station.close_ticket_arguments(user(78))).refund).toBe(0); signedBy([]);
+    expect(testGetToken(USDT, OWNER)).toBe(500_000);
+    inv(s, USDT);
+  });
+  it("cancel during a pause uses the frozen clock; unpause credits the remaining paid day", () => {
+    const s = setup(); const T = NOW;
+    const r = buyAccount(s, U2, 10 * M, 7);
+    at(T + HOUR); signedBy([OWNER]); s.set_paused(new station.set_paused_arguments(true)); signedBy([]);
+    at(T + 3 * DAYMS);                                                         // 3 days later, still paused
+    expect(cancelBy(s, BUYER, r.id).refund).toBe(171_428);                    // still day 1
+    signedBy([OWNER]); s.set_paused(new station.set_paused_arguments(false)); signedBy([]);
+    const exp = s.get_allowance(new station.get_allowance_arguments(r.id)).allowance!.expiry;
+    expect(exp).toBe(T + DAYMS + (3 * DAYMS - HOUR));                         // rest of day 1 credited
+    inv(s, USDT);
+  });
+});
+
 describe("big uploads from the reserve", () => {
   it("approved limits at mainnet scale: 6,000 per request, 12,000 per 7 days, 6,000 outstanding; owner-adjustable", () => {
     const s = setup(); gS = s;
@@ -485,44 +617,49 @@ describe("fee-exempt allowlist (Carl's projects)", () => {
 });
 
 describe("treasury, revenue, refunds, admin", () => {
-  it("treasury defaults to Carl's owner wallet (pull, direct); on-chain withdraw is refused; owner can change it", () => {
+  it("payments go to the station's escrow, not to Carl; release after the term pays the treasury (owner wallet by default)", () => {
     const s = setup(); gS = s;
     expect(s.get_status(new station.get_status_arguments()).treasury!).toStrictEqual(OWNER);
     const r = buyAccount(s, U2, 10 * M, 1);
-    expect(testGetToken(USDT, OWNER)).toBe(r.paid);
+    expect(testGetToken(USDT, OWNER)).toBe(0); expect(testGetToken(USDT, STATION)).toBe(r.paid);
+    expect(s.get_escrow_totals(new station.get_escrow_totals_arguments(USDT)).totals!.held).toBe(r.paid);
     signedBy([OWNER]);
-    MockVM.commitTransaction(); expect(() => { gS!.withdraw_revenue(new station.withdraw_revenue_arguments(USDT, OWNER, 1)); }).toThrow();
-    signedBy([]);
+    MockVM.commitTransaction(); expect(() => { gS!.release(new station.release_arguments(1)); }).toThrow();   // term not ended: not even the owner
+    const c0 = cfg(); c0.treasury = STATION; gC = c0;
+    MockVM.commitTransaction(); expect(() => { gS!.set_config(new station.set_config_arguments(gC)); }).toThrow(); // treasury can't be the escrow
+    const c1 = cfg(); c1.treasury = OTHER; s.set_config(new station.set_config_arguments(c1)); signedBy([]);
+    at(r.expiry); expect(s.release(new station.release_arguments(1)).amount).toBe(r.paid);   // anyone may call
+    expect(testGetToken(USDT, OTHER)).toBe(r.paid); expect(testGetToken(USDT, STATION)).toBe(0);
   });
-  it("treasury = station (owner-set): owner withdraws to Carl; no refund path", () => {
+  it("pause credits paused time: the term and escrow end move forward by the pause; no money moves", () => {
     const s = setup(); gS = s;
-    signedBy([U1]); const c0 = cfg(); c0.treasury = STATION; gC = c0;
-    MockVM.commitTransaction(); expect(() => { gS!.set_config(new station.set_config_arguments(gC)); }).toThrow(); // owner only
-    signedBy([OWNER]); s.set_config(new station.set_config_arguments(c0)); signedBy([]);
-    const r = buyAccount(s, U2, 10 * M, 30);                                  // 750,000 = 0.0075 vUSDT
-    signedBy([U1]);
-    MockVM.commitTransaction(); expect(() => { gS!.withdraw_revenue(new station.withdraw_revenue_arguments(USDT, U1, 1)); }).toThrow();
-    signedBy([OWNER]);
-    s.withdraw_revenue(new station.withdraw_revenue_arguments(USDT, OWNER, 500_000));
-    expect(testGetToken(USDT, OWNER)).toBe(500_000);
-    s.set_paused(new station.set_paused_arguments(true));                     // kill switch: service stops, money stays
-    expect(testGetToken(USDT, BUYER)).toBe(1000 * USD - r.paid);
-    s.set_paused(new station.set_paused_arguments(false)); signedBy([]);
-    at(NOW + 3000); tx(U2, 2 * M, [op(OTHER, EP_PLAY)]); expect(ok(s)).toBe(true);  // term continues; nothing refunded
-    expect(testGetToken(USDT, BUYER)).toBe(1000 * USD - r.paid);
+    const r = buyAccount(s, U2, 10 * M, 7);
+    at(NOW + 2 * DAYMS + HOUR);                                                // into day 3
+    signedBy([OWNER]); s.set_paused(new station.set_paused_arguments(true)); signedBy([]);
+    expect(s.get_escrow(new station.get_escrow_arguments(1)).refundable_now).toBe(200_000 * 4 / 7); // clock frozen in day 3
+    at(NOW + 3 * DAYMS);                                                       // paused 3 days
+    expect(s.get_escrow(new station.get_escrow_arguments(1)).refundable_now).toBe(200_000 * 4 / 7); // still frozen
+    signedBy([OWNER]); s.set_paused(new station.set_paused_arguments(false)); signedBy([]);
+    expect(s.get_allowance(new station.get_allowance_arguments(r.id)).allowance!.expiry).toBe(r.expiry + 3 * DAYMS);
+    expect(s.get_escrow(new station.get_escrow_arguments(1)).purchase!.end).toBe(r.expiry + 3 * DAYMS);
+    expect(testGetToken(USDT, BUYER)).toBe(1000 * USD - r.paid); expect(testGetToken(USDT, STATION)).toBe(r.paid);
+    at(r.expiry + DAYMS); tx(U2, 2 * M, [op(OTHER, EP_PLAY)]); expect(ok(s)).toBe(true);  // credited time is served
+    gS = s; MockVM.commitTransaction(); expect(() => { gS!.release(new station.release_arguments(1)); }).toThrow(); // not yet
+    at(r.expiry + 3 * DAYMS); expect(s.release(new station.release_arguments(1)).amount).toBe(r.paid);
   });
-  it("no refunds, prepaid for future use: terms on quotes and purchase events", () => {
+  it("escrow terms on quotes and purchase events (refundable, no auto-renew)", () => {
     const s = setup();
     const q = s.quote_allowance(new station.quote_allowance_arguments(USDT, 10 * M, 7));
-    expect(q.refundable).toBe(false); expect(q.auto_renew).toBe(false); expect(q.terms!).toBe(ALLOWANCE_TERMS);
-    expect(ALLOWANCE_TERMS.includes("No refunds")).toBe(true); expect(ALLOWANCE_TERMS.includes("Prepaid for future use")).toBe(true);
+    expect(q.refundable).toBe(true); expect(q.auto_renew).toBe(false); expect(q.terms!).toBe(ALLOWANCE_TERMS);
+    expect(ALLOWANCE_TERMS.includes("unused whole days are refunded")).toBe(true); expect(ALLOWANCE_TERMS.includes("escrow")).toBe(true);
+    expect(ALLOWANCE_TERMS.includes("No auto-renew")).toBe(true);
     const bq = s.quote_big_upload(new station.quote_big_upload_arguments(USDT, 100 * M));
-    expect(bq.refundable).toBe(false); expect(bq.auto_renew).toBe(false); expect(bq.terms!).toBe(BIG_TERMS);
+    expect(bq.refundable).toBe(true); expect(bq.auto_renew).toBe(false); expect(bq.terms!).toBe(BIG_TERMS);
     MockVM.clearEvents(); const r = buyAccount(s, U2, 10 * M, 7);
     const ev = MockVM.getEvents(); const e = ev[ev.length - 1];
     expect(e.name).toBe("station.allowance_bought");
     const pe = Protobuf.decode<station.purchase_event>(e.data!, station.purchase_event.decode);
-    expect(pe.refundable).toBe(false); expect(pe.auto_renew).toBe(false); expect(pe.terms!).toBe(ALLOWANCE_TERMS);
+    expect(pe.refundable).toBe(true); expect(pe.auto_renew).toBe(false); expect(pe.terms!).toBe(ALLOWANCE_TERMS);
     expect(pe.paid).toBe(r.paid); expect(pe.allowance!.id).toBe(r.id);
     MockVM.clearEvents(); signedBy([BUYER]);
     s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U1, 100 * M, USDT, 1000 * USD, false)); signedBy([]);
@@ -542,7 +679,7 @@ describe("treasury, revenue, refunds, admin", () => {
     signedBy([BUYER]);
     const r = s.buy_allowance(new station.buy_allowance_arguments(BUYER, 2, U2, 10 * M, 30, USDC, 1000 * USD)); signedBy([]);
     expect(r.paid).toBe(750_000);
-    expect(testGetToken(USDC, OWNER)).toBe(750_000);                           // straight to Carl, in vUSDC
+    expect(testGetToken(USDC, STATION)).toBe(750_000);                         // held in escrow, in vUSDC
     expect(testGetToken(USDC, BUYER)).toBe(10 * USD - 750_000);
   });
   it("kill switch: pause stops sponsorship and buys; owner can unpause with station Mana", () => {

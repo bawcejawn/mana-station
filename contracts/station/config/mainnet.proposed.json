@@ -1,5 +1,5 @@
 {
-  "_note": "PROPOSED mainnet settings, v2 with Carl's 4:37 PM answers (option A) the 5:11 PM introductory prices, and the 5:18/5:22 PM treasury + buffer decisions. Not deployed. Units: KOIN/Mana in satoshis (1e8); stablecoins 8 decimals. OPEN = still Carl's decision.",
+  "_note": "PROPOSED mainnet settings, v2 with Carl's 4:37 PM answers (option A) the 5:11 PM introductory prices, and the 5:18/5:22 PM treasury + buffer decisions. Not deployed. Units: KOIN/Mana in satoshis (1e8); stablecoins 8 decimals. OPEN = still Carl's decision.; 7:47 PM escrow + pro-rata refunds",
   "config": {
     "owner": "<Carl's offline owner wallet>",
     "koin_amount": "3000000000000",
@@ -21,7 +21,7 @@
     "big_ticket_ms": "259200000",
     "max_allowances": 50,
     "max_days": "90",
-    "treasury": "empty = DECIDED (Carl 5:18 PM): payments go directly to the owner wallet (pull). Owner-changeable to another address or the station's id",
+    "treasury": "empty = release destination is the owner wallet (DECIDED by Carl 5:18 PM; since 7:47 PM payments are escrowed first). Owner-changeable to another external wallet; the station's own id is refused",
     "buffer_bp": 2000,
     "alert_mana": "1500000000000"
   },
@@ -99,11 +99,10 @@
     "no_reservation_projects": "exempt projects with app 0 still use only the unsold sellable slice (0 at 30k)"
   },
   "_terms": {
-    "status": "DECIDED by Carl (7:32 PM): no refunds",
-    "allowance": "Prepaid for future use. No refunds. No auto-renew: service stops at expiry unless you renew, at the price current then. Daily, 7-day and 30-day offers: buy only what you need. Non-transferable; not redeemable for crypto or cash. Introductory prices may increase for new purchases. Service may be paused (kill switch), and a buyer may be suspended for abuse, sanctions or AUP reasons: no refund, and paused or suspended time is not extended or credited.",
-    "big_upload": "Prepaid one-time big upload for future use. No refunds. Unused Mana expires with the ticket. No auto-renew. Non-transferable; not redeemable for crypto or cash. Service may be paused (kill switch), and a buyer may be suspended for abuse, sanctions or AUP reasons: no refund, and paused or suspended time is not extended or credited.",
-    "where": "returned by quote_allowance / quote_big_upload (terms, refundable=false, auto_renew=false) and in every purchase_event; constants ALLOWANCE_TERMS / BIG_TERMS in Station.ts",
-    "contract": "cancel_allowance removed; the station never pays tokens to buyers. Kill switch set_paused stays"
+    "status": "DECIDED by Carl (7:47 PM): escrow + pro-rata refunds (supersedes the 7:32 PM no-refund rule)",
+    "allowance": "Prepaid. Your payment is held in the station's escrow until the term ends, then released to the operator. Cancel any time: unused whole days are refunded (the current day counts as used, so 1 day is the minimum charge). If the operator pauses the station, paused time is credited: your term is extended by the pause. No auto-renew: service stops at expiry unless you renew, at the price current then. Daily, 7-day and 30-day offers: buy only what you need. Non-transferable; not redeemable for crypto or cash except these refunds. Introductory prices may increase for new purchases. A buyer may be suspended for abuse, sanctions or AUP reasons; suspended time is not extended, and the operator may refund unused days (never to a sanctioned party).",
+    "big_upload": "Prepaid one-time big upload, held in the station's escrow. Cancel any time, or let it expire: unused Mana is refunded pro rata, with a minimum charge of 20% of the ticket. Paused time extends the ticket. No auto-renew. Non-transferable; not redeemable for crypto or cash except these refunds. A buyer may be suspended for abuse, sanctions or AUP reasons; the operator may refund unused Mana (never to a sanctioned party).",
+    "where": "quote_allowance / quote_big_upload (terms, refundable=true, auto_renew=false) and every purchase_event"
   },
   "_suspend": {
     "status": "DECIDED by Carl (7:37 PM)",
@@ -116,5 +115,16 @@
     },
     "effect": "all allowances and big-upload tickets paid for by that buyer stop being sponsored; new buys/renewals by them refused; no money moves, no refund; suspended time is not extended or credited",
     "events": "station.buyer_suspended / station.buyer_unsuspended (suspend_event: buyer, reason, suspended, at)"
+  },
+  "_escrow": {
+    "status": "DECIDED by Carl (7:47 PM)",
+    "payments": "pulled into the station's own escrow (per purchase: token, amount, start, end, days, per-day rate)",
+    "buyer_cancel": "cancel_allowance: unused WHOLE days refunded; the current day counts as used (1-day minimum); service runs to the end of the paid day. Future renewed terms refunded in full",
+    "tickets": "cancel_big_upload or expiry (close_ticket, anyone): unused Mana refunded pro rata with a 20% minimum charge (BIG_MIN_CHARGE_BP); earned part released at settlement",
+    "release": "release(purchase_id): anyone, only after the term ends, exactly once, to the treasury (owner wallet by default; the station itself is refused). No early release, no owner withdrawal of escrow",
+    "rounding": "refund = floor(amount × unused / total): rounds down by < 1 base unit (1e-8 token) in Carl's favour; refund + release always equals the amount paid",
+    "pause": "paused time is credited: the escrow clock stops while paused and every running/upcoming term, allowance and ticket is extended by the pause on unpause",
+    "suspension": "owner_refund refunds unused days/Mana (no minimum charge) for buyers not at fault (reason 4) or by owner choice for abuse/AUP; sanctions (reason 2): refund AND release frozen until legal review (reclassify a false match to reason 4)",
+    "invariant": "per token: station balance == held == collected − refunded − released"
   }
 }

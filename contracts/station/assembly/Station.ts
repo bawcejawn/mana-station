@@ -12,7 +12,7 @@ import { System, Storage, Protobuf, Arrays, Token, Base58, authority, value, pro
 import { station } from "./proto/station";
 
 const S_CONFIG: u32 = 0, S_APPS: u32 = 1, S_ENTRIES: u32 = 2, S_USERS: u32 = 3, S_APPWIN: u32 = 4,
-  S_PRICES: u32 = 5, S_ALLOW: u32 = 6, S_TARGET: u32 = 7, S_TICKETS: u32 = 8, S_BIG: u32 = 9, S_REVENUE: u32 = 10, S_EXEMPT: u32 = 11, S_REGISTRY: u32 = 12, S_GLOBALWIN: u32 = 13, S_OVERFLOWWIN: u32 = 14, S_BUFFERWIN: u32 = 15, S_SUSPEND: u32 = 16,
+  S_PRICES: u32 = 5, S_ALLOW: u32 = 6, S_TARGET: u32 = 7, S_TICKETS: u32 = 8, S_BIG: u32 = 9, S_REVENUE: u32 = 10, S_EXEMPT: u32 = 11, S_REGISTRY: u32 = 12, S_GLOBALWIN: u32 = 13, S_OVERFLOWWIN: u32 = 14, S_BUFFERWIN: u32 = 15, S_SUSPEND: u32 = 16, S_ESCROW: u32 = 17, S_ESCROWTOT: u32 = 18,
   S_TESTLEDGER: u32 = 90;
 const DAY: u64 = 86_400_000;
 const MANA: u64 = 100_000_000;
@@ -42,8 +42,13 @@ function u32Key(n: u32): Uint8Array { const k = new Uint8Array(4); k[0] = u8(n >
 function entryKey(contract: Uint8Array, ep: u32): Uint8Array { const k = new Uint8Array(contract.length + 4); k.set(contract, 0); k.set(u32Key(ep), contract.length); return k; }
 function pct(amount: u64, bp: u32): u64 { return amount / 10_000 * u64(bp); }
 function wholeManaUp(m: u64): u64 { return (m + MANA - 1) / MANA; }
-export const ALLOWANCE_TERMS = "Prepaid for future use. No refunds. No auto-renew: service stops at expiry unless you renew, at the price current then. Daily, 7-day and 30-day offers: buy only what you need. Non-transferable; not redeemable for crypto or cash. Introductory prices may increase for new purchases. Service may be paused (kill switch), and a buyer may be suspended for abuse, sanctions or AUP reasons: no refund, and paused or suspended time is not extended or credited.";
-export const BIG_TERMS = "Prepaid one-time big upload for future use. No refunds. Unused Mana expires with the ticket. No auto-renew. Non-transferable; not redeemable for crypto or cash. Service may be paused (kill switch), and a buyer may be suspended for abuse, sanctions or AUP reasons: no refund, and paused or suspended time is not extended or credited.";
+export const ALLOWANCE_TERMS = "Prepaid. Your payment is held in the station's escrow until the term ends, then released to the operator. Cancel any time: unused whole days are refunded (the current day counts as used, so 1 day is the minimum charge). If the operator pauses the station, paused time is credited: your term is extended by the pause. No auto-renew: service stops at expiry unless you renew, at the price current then. Daily, 7-day and 30-day offers: buy only what you need. Non-transferable; not redeemable for crypto or cash except these refunds. Introductory prices may increase for new purchases. A buyer may be suspended for abuse, sanctions or AUP reasons; suspended time is not extended, and the operator may refund unused days (never to a sanctioned party).";
+export const BIG_TERMS = "Prepaid one-time big upload, held in the station's escrow. Cancel any time, or let it expire: unused Mana is refunded pro rata, with a minimum charge of 20% of the ticket. Paused time extends the ticket. No auto-renew. Non-transferable; not redeemable for crypto or cash except these refunds. A buyer may be suspended for abuse, sanctions or AUP reasons; the operator may refund unused Mana (never to a sanctioned party).";
+const BIG_MIN_CHARGE_BP: u32 = 2000;                 // ticket minimum charge (20%) on buyer cancel / expiry
+const MAX_OPEN_PURCHASES: i32 = 128;                 // bounded loops (pause credit)
+const MAX_TERMS: i32 = 8;
+const TX_BUFFER: u32 = 64 * 1024;                   // normal sponsored txs
+const BIG_TX_BUFFER: u32 = 1024 * 1024;             // big-upload ticket txs (contract bytecode)                            // open escrow terms per allowance
 const DEFAULT_ALERT_MANA: u64 = 15_000 * MANA;     // Carl: alert below 15k by default
 const MAX_WHOLE_MANA: u64 = 100_000_000;            // quote bound (no u64 overflow with prices <= MAX_UNIT_PRICE)
 const MAX_UNIT_PRICE: u64 = 10_000_000_000;         // 100 tokens per 1,000 Mana(/day)
@@ -99,7 +104,8 @@ export class Station {
   targets: Storage.Map<Uint8Array, station.revenue_object> = new Storage.Map(System.getContractId(), S_TARGET, station.revenue_object.decode, station.revenue_object.encode, null);
   tickets: Storage.Map<Uint8Array, station.ticket_object> = new Storage.Map(System.getContractId(), S_TICKETS, station.ticket_object.decode, station.ticket_object.encode, null);
   big: Storage.Obj<station.big_object> = new Storage.Obj(System.getContractId(), S_BIG, station.big_object.decode, station.big_object.encode, () => new station.big_object());
-  revenue: Storage.Map<Uint8Array, station.revenue_object> = new Storage.Map(System.getContractId(), S_REVENUE, station.revenue_object.decode, station.revenue_object.encode, () => new station.revenue_object());
+  escrow: Storage.Map<Uint8Array, station.escrow_object> = new Storage.Map(System.getContractId(), S_ESCROW, station.escrow_object.decode, station.escrow_object.encode, null);
+  escrowTot: Storage.Map<Uint8Array, station.escrow_totals_object> = new Storage.Map(System.getContractId(), S_ESCROWTOT, station.escrow_totals_object.decode, station.escrow_totals_object.encode, () => new station.escrow_totals_object());
   exempt: Storage.Map<Uint8Array, station.exempt_object> = new Storage.Map(System.getContractId(), S_EXEMPT, station.exempt_object.decode, station.exempt_object.encode, null);
   registry: Storage.Obj<station.registry_object> = new Storage.Obj(System.getContractId(), S_REGISTRY, station.registry_object.decode, station.registry_object.encode, () => new station.registry_object());
   globalWin: Storage.Obj<station.window_object> = new Storage.Obj(System.getContractId(), S_GLOBALWIN, station.window_object.decode, station.window_object.encode, () => new station.window_object());
@@ -114,20 +120,82 @@ export class Station {
   now(): u64 { return System.getBlockField("header.timestamp")!.uint64_value; }
   height(): u64 { return System.getBlockField("header.height")!.uint64_value; }
   /** Payment, pattern A from stablecoins.md §5.1: the buyer approves the station for exactly `amount` (same tx,
-   *  earlier operation) and the station PULLS with KCS-4 transfer(from = buyer, to = treasury). The pull spends the
-   *  allowance; if anything is short the whole buy reverts, so access and payment are atomic. */
-  collect(c: station.config_object, token: Uint8Array, from: Uint8Array, amount: u64): void {
-    const to = this.treasury(c);
+   *  earlier operation) and the station PULLS with KCS-4 transfer(from = buyer, to = the station's own escrow). */
+  collect(token: Uint8Array, from: Uint8Array, amount: u64): void {
+    const tot = this.escrowTot.get(token)!; tot.held += amount; tot.collected += amount; this.escrowTot.put(token, tot);
     if (BUILD_FOR_TESTING) {
       const f = testGetToken(token, from); System.require(f >= amount, "insufficient token balance");
-      testSetToken(token, from, f - amount); testSetToken(token, to, testGetToken(token, to) + amount);
+      testSetToken(token, from, f - amount); testSetToken(token, this.contractId, testGetToken(token, this.contractId) + amount);
     } else {
-      System.require(new Token(token).transfer(from, to, amount), "payment failed (approve the station for the price first)");
+      System.require(new Token(token).transfer(from, this.contractId, amount), "payment failed (approve the station for the price first)");
     }
-    const r = this.revenue.get(token)!; r.total += amount; this.revenue.put(token, r); // collected total (accounting)
   }
-  /** Default = Carl's owner wallet (direct, pull pattern). Owner-changeable: any address, or the station's own id. */
+  /** Escrow payout (refund to the buyer or release to Carl). State is updated BEFORE the token call. */
+  send(token: Uint8Array, to: Uint8Array, amount: u64): void {
+    if (amount == 0) return;
+    if (BUILD_FOR_TESTING) {
+      const f = testGetToken(token, this.contractId); System.require(f >= amount, "escrow short");
+      testSetToken(token, this.contractId, f - amount); testSetToken(token, to, testGetToken(token, to) + amount);
+    } else {
+      System.require(new Token(token).transfer(this.contractId, to, amount), "escrow payout failed");
+    }
+  }
+  /** Where releases go: the treasury if set (never the station), else Carl's owner wallet. */
   treasury(c: station.config_object): Uint8Array { return isAddress(c.treasury) ? c.treasury! : c.owner!; }
+  /** The escrow clock: frozen at paused_at while the station is paused. */
+  clock(c: station.config_object, now: u64): u64 { const b = this.big.get()!; return c.paused && b.paused_at > 0 ? b.paused_at : now; }
+  newPurchase(kind: u32, buyer: Uint8Array, token: Uint8Array, amount: u64, start: u64, end: u64): station.escrow_object {
+    const reg = this.registry.get()!;
+    System.require(reg.open_purchases.length < MAX_OPEN_PURCHASES, "too many open purchases");
+    const b = this.big.get()!; b.next_purchase += 1; this.big.put(b);
+    const e = new station.escrow_object(); e.id = b.next_purchase; e.kind = kind; e.buyer = buyer; e.token = token;
+    e.amount = amount; e.start = start; e.end = end;
+    reg.open_purchases.push(e.id); this.registry.put(reg);
+    return e;
+  }
+  held(e: station.escrow_object): u64 { return e.amount - e.refunded - e.released; }
+  /** Unused whole days of an allowance term at time t: the current (started) day counts as used. */
+  unusedDays(e: station.escrow_object, t: u64): u64 {
+    if (e.closed || t >= e.end) return 0;
+    if (t < e.start) return e.days;                                   // future (renewed) term: all unused
+    const used = (t - e.start) / DAY + 1;
+    return used >= e.days ? 0 : e.days - used;
+  }
+  /** Refund = floor(amount × unused / days): rounds down by < 1 base unit (in Carl's favour); never creates value. */
+  termRefund(e: station.escrow_object, t: u64): u64 {
+    const u = this.unusedDays(e, t); if (u == 0) return 0;
+    const r = e.amount * u / e.days; const h = this.held(e); return r > h ? h : r;
+  }
+  /** Ticket refund = floor(paid × unused whole Mana / total whole Mana), unused after a minimum charge (if any). */
+  ticketRefund(e: station.escrow_object, t: station.ticket_object, minCharge: bool): u64 {
+    let used = t.mana - t.remaining;
+    if (minCharge) { const m = pct(t.mana, BIG_MIN_CHARGE_BP); if (used < m) used = m; }
+    if (used >= t.mana) return 0;
+    const unusedW = (t.mana - used) / MANA; const totalW = wholeManaUp(t.mana);
+    const r = e.amount * unusedW / totalW; const h = this.held(e); return r > h ? h : r;
+  }
+  doRefund(e: station.escrow_object, amount: u64, action: string): void {
+    if (amount == 0) return;
+    System.require(amount <= this.held(e), "refund above held");
+    e.refunded += amount; this.escrow.put(u32Key(e.id), e);
+    const tot = this.escrowTot.get(e.token!)!; tot.held -= amount; tot.refunded += amount; this.escrowTot.put(e.token!, tot);
+    System.event("station.escrow_refunded", Protobuf.encode(new station.escrow_event(e, amount, e.buyer, action), station.escrow_event.encode), [e.buyer!]);
+    this.send(e.token!, e.buyer!, amount);
+  }
+  /** Close a purchase: whatever is still held is released to Carl. Exactly once. */
+  doRelease(c: station.config_object, e: station.escrow_object, action: string): u64 {
+    System.require(!e.closed, "already closed");
+    const amount = this.held(e);
+    e.released += amount; e.closed = true; this.escrow.put(u32Key(e.id), e);
+    const tot = this.escrowTot.get(e.token!)!; tot.held -= amount; tot.released += amount; this.escrowTot.put(e.token!, tot);
+    const reg = this.registry.get()!; const keep = new Array<u32>();
+    for (let i = 0; i < reg.open_purchases.length; i++) if (reg.open_purchases[i] != e.id) keep.push(reg.open_purchases[i]);
+    reg.open_purchases = keep; this.registry.put(reg);
+    const to = this.treasury(c);
+    System.event("station.escrow_released", Protobuf.encode(new station.escrow_event(e, amount, to, action), station.escrow_event.encode), [to]);
+    this.send(e.token!, to, amount);
+    return amount;
+  }
   alertLevel(c: station.config_object): u64 { return c.alert_mana > 0 ? c.alert_mana : DEFAULT_ALERT_MANA; }
   /** One station.reserve_low event per dip below the alert level; re-armed once Mana is back at or above it. */
   watchReserve(c: station.config_object, after: u64): void {
@@ -137,17 +205,7 @@ export class Station {
       System.event("station.reserve_low", Protobuf.encode(new station.reserve_alert_event(after, lvl, this.bigFloor(c)), station.reserve_alert_event.encode), [c.owner!]);
     } else if (after >= lvl && b.low_alerted) { b.low_alerted = false; this.big.put(b); }
   }
-  /** Only when the treasury is the station itself; with Carl's wallet as treasury the money is already with Carl. */
-  payOut(c: station.config_object, token: Uint8Array, to: Uint8Array, amount: u64): void {
-    System.require(Arrays.equal(this.treasury(c), this.contractId), "treasury is an external wallet: pay from there");
-    const r = this.revenue.get(token)!; System.require(r.total >= amount, "more than collected revenue");
-    r.total -= amount; this.revenue.put(token, r);
-    if (BUILD_FOR_TESTING) {
-      testSetToken(token, this.contractId, testGetToken(token, this.contractId) - amount); testSetToken(token, to, testGetToken(token, to) + amount);
-    } else {
-      System.require(new Token(token).transfer(this.contractId, to, amount), "payout failed");
-    }
-  }
+
 
   // ───── derived budgets ─────
   dailyBudget(c: station.config_object): u64 { return pct(c.koin_amount, c.refill_bp); }
@@ -244,6 +302,10 @@ export class Station {
     if (payee.length == 0 || Arrays.equal(payee, this.contractId)) {
       return System.checkAuthority(authority.authorization_type.contract_call, this.contractId); // station key only
     }
+    // The SDK's system-call buffer is 1 KiB by default: reading the operations of a bigger tx (a contract upload, long
+    // args) would fail. Enlarge it; a big-upload ticket holder may send a whole contract (UNVERIFIED max tx size:
+    // measure on testnet).
+    System.setSystemBufferSize(this.tickets.has(payee) ? BIG_TX_BUFFER : TX_BUFFER);
     const ops = txOps();
     if (ops.length < 1 || ops.length > i32(c.max_ops)) return false;
     let allSelf = true, hasUpload = false, allCalls = true;
@@ -391,7 +453,7 @@ export class Station {
     const r = new station.get_entry_result(); r.entry = this.entries.get(entryKey(args.contract_id!, args.entry_point)); return r;
   }
   allowanceQuote(c: station.config_object, token: Uint8Array, manaPerDay: u64, days: u64, now: u64, ignoreId: u32): station.quote_allowance_result {
-    const r = new station.quote_allowance_result(); r.terms = ALLOWANCE_TERMS;
+    const r = new station.quote_allowance_result(); r.terms = ALLOWANCE_TERMS; r.refundable = true;
     const p = this.prices.get(token);
     if (p == null || !p.active) { r.reason = "token not accepted"; return r; }
     const unit = tierPrice(p, days);
@@ -411,7 +473,7 @@ export class Station {
     return this.allowanceQuote(this.config.get()!, args.token!, args.mana_per_day, args.days, this.now(), 0);
   }
   bigQuote(c: station.config_object, token: Uint8Array, mana: u64, now: u64): station.quote_allowance_result {
-    const r = new station.quote_allowance_result(); r.terms = BIG_TERMS; const p = this.prices.get(token);
+    const r = new station.quote_allowance_result(); r.terms = BIG_TERMS; r.refundable = true; const p = this.prices.get(token);
     if (p == null || !p.active) { r.reason = "token not accepted"; return r; }
     const b = this.big.get()!;
     if (p.big_per_1000 == 0) { r.reason = "big uploads not priced for this token"; return r; }
@@ -430,7 +492,7 @@ export class Station {
   }
   quote_big_upload(args: station.quote_big_upload_arguments): station.quote_big_upload_result {
     const q = this.bigQuote(this.config.get()!, args.token!, args.mana, this.now());
-    const r = new station.quote_big_upload_result(); r.price = q.price; r.available = q.available; r.reason = q.reason; r.unit_price = q.unit_price; r.terms = q.terms;
+    const r = new station.quote_big_upload_result(); r.price = q.price; r.available = q.available; r.reason = q.reason; r.unit_price = q.unit_price; r.terms = q.terms; r.refundable = q.refundable;
     return r;
   }
   get_allowance(args: station.get_allowance_arguments): station.get_allowance_result {
@@ -457,14 +519,17 @@ export class Station {
     const q = this.allowanceQuote(c, args.token!, args.mana_per_day, args.days, now, 0);
     System.require(q.available, q.reason != null ? q.reason! : "unavailable");
     System.require(q.price <= args.max_price, "price above the accepted quote");
-    this.collect(c, args.token!, args.buyer!, q.price);
     const b = this.big.get()!; b.next_id += 1; this.big.put(b);
     const a = new station.allowance_object(b.next_id, args.buyer, args.kind, args.target, args.mana_per_day, now + args.days * DAY, new station.window_object());
     a.token = args.token; a.term_days = args.days; a.unit_price = q.unit_price; a.paid = q.price; a.term_start = now; a.total_paid = q.price;
+    const e = this.newPurchase(1, args.buyer!, args.token!, q.price, now, a.expiry);
+    e.days = args.days; e.per_day = q.price / args.days; e.allowance_id = a.id; this.escrow.put(u32Key(e.id), e);
+    a.purchase_ids.push(e.id);
     this.allowances.put(u32Key(a.id), a);
     const reg = this.registry.get()!; reg.open_ids.push(a.id); this.registry.put(reg);
     this.targets.put(args.target!, new station.revenue_object(u64(a.id)));
-    System.event("station.allowance_bought", Protobuf.encode(new station.purchase_event(a, null, args.token, q.price, false, false, ALLOWANCE_TERMS), station.purchase_event.encode), [args.buyer!, args.target!]);
+    System.event("station.allowance_bought", Protobuf.encode(new station.purchase_event(a, null, args.token, q.price, true, false, ALLOWANCE_TERMS), station.purchase_event.encode), [args.buyer!, args.target!]);
+    this.collect(args.token!, args.buyer!, q.price);                    // into escrow (last: effects before interaction)
     return new station.buy_allowance_result(a.id, a.expiry, q.price);
   }
   renew(args: station.renew_arguments): station.renew_result {
@@ -480,13 +545,19 @@ export class Station {
     const start = a!.expiry > now ? a!.expiry : now;
     System.require(start + args.days * DAY <= now + c.max_days * DAY, "prepaid period too long");
     System.require(q.price <= args.max_price, "price above the accepted quote");
-    this.collect(c, args.token!, args.payer!, q.price);
     // The running term keeps what it paid; the new term is priced at the CURRENT price and starts when the old one ends.
     a!.expiry = start + args.days * DAY;
     a!.token = args.token; a!.term_days = args.days; a!.unit_price = q.unit_price; a!.paid = q.price; a!.term_start = start;
     a!.total_paid += q.price;
+    const keep = new Array<u32>();                                     // prune closed terms
+    for (let i = 0; i < a!.purchase_ids.length; i++) { const x = this.escrow.get(u32Key(a!.purchase_ids[i])); if (x != null && !x.closed) keep.push(x.id); }
+    System.require(keep.length < MAX_TERMS, "too many open terms on this allowance");
+    const e = this.newPurchase(1, args.payer!, args.token!, q.price, start, a!.expiry);
+    e.days = args.days; e.per_day = q.price / args.days; e.allowance_id = a!.id; this.escrow.put(u32Key(e.id), e);
+    keep.push(e.id); a!.purchase_ids = keep;
     this.allowances.put(u32Key(a!.id), a!);
-    System.event("station.allowance_renewed", Protobuf.encode(new station.purchase_event(a!, null, args.token, q.price, false, false, ALLOWANCE_TERMS), station.purchase_event.encode), [args.payer!, a!.target!]);
+    System.event("station.allowance_renewed", Protobuf.encode(new station.purchase_event(a!, null, args.token, q.price, true, false, ALLOWANCE_TERMS), station.purchase_event.encode), [args.payer!, a!.target!]);
+    this.collect(args.token!, args.payer!, q.price);
     return new station.renew_result(a!.expiry, q.price, q.unit_price);
   }
   buy_big_upload(args: station.buy_big_upload_arguments): station.buy_big_upload_result {
@@ -499,25 +570,18 @@ export class Station {
     const q = this.bigQuote(c, args.token!, args.mana, now);
     System.require(q.available, q.reason != null ? q.reason! : "unavailable");
     System.require(q.price <= args.max_price, "price above the accepted quote");
-    this.collect(c, args.token!, args.buyer!, q.price);
     const b = this.big.get()!;
     b.debt = this.debtNow(c, b, now) + args.mana; b.debt_ts = now; b.last_buy = now;
     if (b.week == null) b.week = new station.window_object();
     roll(b.week!, now / DAY, WEEK_N, false); add(b.week!, now / DAY, WEEK_N, args.mana, false);
     this.big.put(b);
     const t = new station.ticket_object(args.buyer, args.mana, args.mana, now + c.big_ticket_ms, args.allow_upload, args.token, q.price);
+    const e = this.newPurchase(2, args.buyer!, args.token!, q.price, now, t.expiry);
+    e.payee = args.payee; e.mana = args.mana; this.escrow.put(u32Key(e.id), e); t.purchase_id = e.id;
     this.tickets.put(args.payee!, t);
-    System.event("station.big_upload_bought", Protobuf.encode(new station.purchase_event(null, t, args.token, q.price, false, false, BIG_TERMS), station.purchase_event.encode), [args.buyer!, args.payee!]);
+    System.event("station.big_upload_bought", Protobuf.encode(new station.purchase_event(null, t, args.token, q.price, true, false, BIG_TERMS), station.purchase_event.encode), [args.buyer!, args.payee!]);
+    this.collect(args.token!, args.buyer!, q.price);
     return new station.buy_big_upload_result(t.expiry, q.price);
-  }
-  close_ticket(args: station.close_ticket_arguments): station.close_ticket_result {
-    const c = this.config.get()!; const now = this.now();
-    const t = this.tickets.get(args.payee!); System.require(t != null, "no ticket");
-    System.require(now >= t!.expiry || t!.remaining == 0, "ticket still valid");
-    const b = this.big.get()!; const d = this.debtNow(c, b, now);
-    b.debt = t!.remaining >= d ? 0 : d - t!.remaining; b.debt_ts = now; this.big.put(b);
-    this.tickets.remove(args.payee!);
-    return new station.close_ticket_result();
   }
 
   // ═══════ admin ═══════
@@ -531,6 +595,7 @@ export class Station {
     System.require(isAddress(c.owner), "owner required");
     System.require(c.refill_bp <= 2000, "daily budget above one day's refill (20%)");
     System.require(c.buffer_bp <= 5000, "buffer above 50%");
+    System.require(!isAddress(c.treasury) || !Arrays.equal(c.treasury!, this.contractId), "treasury must be an external wallet (escrow lives in the station)");
     System.require(c.koin_amount <= this.koinBalance(), "koin_amount above the station's KOIN balance");
     this.validateReservations(c, 0, null);
   }
@@ -544,11 +609,31 @@ export class Station {
   }
   set_config(args: station.set_config_arguments): station.set_config_result {
     this.requireOwner(); System.require(args.config != null, "config required");
+    args.config!.paused = this.config.get()!.paused;                     // pause only via set_paused (escrow clock)
     this.checkConfig(args.config!); this.config.put(args.config!);
     return new station.set_config_result();
   }
   set_paused(args: station.set_paused_arguments): station.set_paused_result {
-    const c = this.requireOwner(); c.paused = args.paused; this.config.put(c);
+    const c = this.requireOwner(); const now = this.now(); const b = this.big.get()!;
+    if (args.paused && !c.paused) { b.paused_at = now; this.big.put(b); }
+    else if (!args.paused && c.paused) {
+      // Fair option (Carl, 7:47 PM): paused time is CREDITED. Every open purchase, allowance and ticket that was
+      // running or still ahead at the pause moves forward by the pause length (the escrow clock was stopped).
+      const pa = b.paused_at; const P = now > pa ? now - pa : 0;
+      const reg = this.registry.get()!;
+      for (let i = 0; i < reg.open_purchases.length; i++) {
+        const e = this.escrow.get(u32Key(reg.open_purchases[i]));
+        if (e == null || e.closed || e.end <= pa) continue;
+        e.start += P; e.end += P; this.escrow.put(u32Key(e.id), e);
+        if (e.kind == 2) { const t = this.tickets.get(e.payee!); if (t != null && t.expiry > pa) { t.expiry += P; this.tickets.put(e.payee!, t); } }
+      }
+      for (let i = 0; i < reg.open_ids.length; i++) {
+        const a = this.allowances.get(u32Key(reg.open_ids[i]));
+        if (a != null && a.expiry > pa) { a.expiry += P; this.allowances.put(u32Key(a.id), a); }
+      }
+      b.paused_at = 0; this.big.put(b);
+    }
+    c.paused = args.paused; this.config.put(c);
     System.event("station.paused", Protobuf.encode(args, station.set_paused_arguments.encode), []);
     return new station.set_paused_result();
   }
@@ -609,11 +694,121 @@ export class Station {
     this.prices.put(args.token!, args.value!);
     return new station.set_price_result();
   }
-  withdraw_revenue(args: station.withdraw_revenue_arguments): station.withdraw_revenue_result {
-    const c = this.requireOwner(); System.require(isAddress(args.to), "to required");
-    this.payOut(c, args.token!, args.to!, args.amount);
-    return new station.withdraw_revenue_result();
+  // ═══════ escrow: cancel, settle, release, owner refund (Carl, 7:47 PM) ═══════
+  /** End an allowance's terms at time t: refund unused whole days; return the new expiry (end of the paid current day). */
+  endTerms(a: station.allowance_object, t: u64, action: string): u64[] {
+    let refund: u64 = 0; let newExpiry: u64 = t;
+    for (let i = 0; i < a.purchase_ids.length; i++) {
+      const e = this.escrow.get(u32Key(a.purchase_ids[i]));
+      if (e == null || e.closed || t >= e.end) continue;                // finished terms: releasable as they are
+      const r = this.termRefund(e!, t);
+      // Shorten the term to what was used, so nothing can be refunded twice (later refunds compute 0 unused days).
+      const used = e!.days - this.unusedDays(e!, t);
+      if (t < e!.start) e!.end = e!.start;                               // future term: nothing used
+      else e!.end = e!.start + used * DAY;                               // paid through the current day
+      e!.days = t < e!.start ? 0 : used;
+      this.escrow.put(u32Key(e!.id), e!);
+      this.doRefund(e!, r, action);
+      if (e!.end > newExpiry) newExpiry = e!.end;
+    }
+    a.expiry = newExpiry; this.allowances.put(u32Key(a.id), a);
+    return [refund, newExpiry];
   }
-  // No cancel/refund path (Carl, 7:32 PM): sales are prepaid for future use and non-refundable. The station never
-  // pays tokens to buyers; payOut is only used by withdraw_revenue (treasury = station). Kill switch: set_paused.
+  refundSum(a: station.allowance_object, t: u64): u64 {
+    let r: u64 = 0;
+    for (let i = 0; i < a.purchase_ids.length; i++) { const e = this.escrow.get(u32Key(a.purchase_ids[i])); if (e != null && !e.closed) r += this.termRefund(e, t); }
+    return r;
+  }
+  cancel_allowance(args: station.cancel_allowance_arguments): station.cancel_allowance_result {
+    const c = this.config.get()!; const t = this.clock(c, this.now());
+    System.require(isAddress(args.buyer) && System.checkAuthority(authority.authorization_type.contract_call, args.buyer!), "buyer must sign");
+    const a = this.allowances.get(u32Key(args.id)); System.require(a != null, "no such allowance");
+    System.require(Arrays.equal(a!.buyer!, args.buyer!), "not your allowance");
+    System.require(!this.suspended.has(args.buyer!), "buyer suspended: the owner decides on refunds");
+    System.require(a!.expiry > t, "already ended");
+    const r = this.refundSum(a!, t);
+    const x = this.endTerms(a!, t, "cancel");
+    System.event("station.allowance_cancelled", Protobuf.encode(a!, station.allowance_object.encode), [args.buyer!]);
+    return new station.cancel_allowance_result(r, x[1]);
+  }
+  /** Settle a ticket: refund unused Mana, release the rest to Carl, free its debt. */
+  settleTicket(c: station.config_object, payee: Uint8Array, t: station.ticket_object, minCharge: bool, action: string, now: u64, noRefund: bool = false): u64[] {
+    const e = this.escrow.get(u32Key(t.purchase_id));
+    let r: u64 = 0, rel: u64 = 0;
+    const b = this.big.get()!; const d = this.debtNow(c, b, now);
+    b.debt = t.remaining >= d ? 0 : d - t.remaining; b.debt_ts = now; this.big.put(b);
+    this.tickets.remove(payee);
+    if (e != null && !e.closed) {
+      r = noRefund ? 0 : this.ticketRefund(e!, t, minCharge);
+      e!.end = now; this.escrow.put(u32Key(e!.id), e!);
+      this.doRefund(e!, r, action);
+      rel = this.doRelease(c, this.escrow.get(u32Key(e!.id))!, "ticket_settle");
+    }
+    return [r, rel];
+  }
+  close_ticket(args: station.close_ticket_arguments): station.close_ticket_result {
+    const c = this.config.get()!; const now = this.now(); const t0 = this.clock(c, now);
+    const t = this.tickets.get(args.payee!); System.require(t != null, "no ticket");
+    System.require(t0 >= t!.expiry || t!.remaining == 0, "ticket still valid");
+    // Suspended buyer: only the owner settles, and this path refunds nothing (forfeit, never early: the ticket has
+    // ended). To refund a buyer who wasn't at fault the owner uses owner_refund instead.
+    const sus = this.suspended.get(t!.buyer!);
+    if (sus != null) {
+      System.require(System.checkAuthority(authority.authorization_type.contract_call, c.owner!), "buyer suspended: owner only");
+      System.require(sus.reason != 2, "sanctions: funds frozen in escrow pending legal review");
+    }
+    const x = this.settleTicket(c, args.payee!, t!, sus == null, "ticket_settle", now, sus != null);
+    return new station.close_ticket_result(x[0], x[1]);
+  }
+  cancel_big_upload(args: station.cancel_big_upload_arguments): station.cancel_big_upload_result {
+    const c = this.config.get()!; const now = this.now();
+    System.require(isAddress(args.buyer) && System.checkAuthority(authority.authorization_type.contract_call, args.buyer!), "buyer must sign");
+    const t = this.tickets.get(args.payee!); System.require(t != null, "no ticket");
+    System.require(Arrays.equal(t!.buyer!, args.buyer!), "not your ticket");
+    System.require(!this.suspended.has(args.buyer!), "buyer suspended: the owner decides on refunds");
+    const x = this.settleTicket(c, args.payee!, t!, true, "cancel", now);
+    return new station.cancel_big_upload_result(x[0]);
+  }
+  /** Anyone, after a term ends (default: funds clear at the end of the period). Never twice. */
+  release(args: station.release_arguments): station.release_result {
+    const c = this.config.get()!; const t = this.clock(c, this.now());
+    const e = this.escrow.get(u32Key(args.purchase_id)); System.require(e != null, "no such purchase");
+    System.require(e!.kind == 1, "tickets settle with close_ticket / cancel_big_upload");
+    System.require(!e!.closed, "already released");
+    System.require(t >= e!.end, "term not ended: funds stay in escrow");
+    const sus = this.suspended.get(e!.buyer!);
+    System.require(sus == null || sus.reason != 2, "sanctions: funds frozen in escrow pending legal review");
+    return new station.release_result(this.doRelease(c, e!, "release"));
+  }
+  owner_refund(args: station.owner_refund_arguments): station.owner_refund_result {
+    const c = this.requireOwner(); const now = this.now(); const t = this.clock(c, now);
+    if (args.allowance_id > 0) {
+      const a = this.allowances.get(u32Key(args.allowance_id)); System.require(a != null, "no such allowance");
+      this.noSanctionedRefund(a!.buyer!);
+      const r = this.refundSum(a!, t);
+      this.endTerms(a!, t, "owner_refund");
+      return new station.owner_refund_result(r);
+    }
+    System.require(isAddress(args.ticket_payee), "allowance_id or ticket_payee");
+    const tk = this.tickets.get(args.ticket_payee!); System.require(tk != null, "no ticket");
+    this.noSanctionedRefund(tk!.buyer!);
+    const x = this.settleTicket(c, args.ticket_payee!, tk!, false, "owner_refund", now);
+    return new station.owner_refund_result(x[0]);
+  }
+  noSanctionedRefund(buyer: Uint8Array): void {
+    const s = this.suspended.get(buyer);
+    System.require(s == null || s.reason != 2, "buyer suspended for sanctions: no refund (reclassify a false match as reason 4)");
+  }
+  get_escrow(args: station.get_escrow_arguments): station.get_escrow_result {
+    const r = new station.get_escrow_result(); const e = this.escrow.get(u32Key(args.purchase_id));
+    if (e == null) return r;
+    const c = this.config.get()!; const t = this.clock(c, this.now());
+    r.purchase = e;
+    if (e.kind == 1) { r.refundable_now = this.termRefund(e, t); r.releasable = !e.closed && t >= e.end; }
+    else { const tk = this.tickets.get(e.payee!); if (tk != null) r.refundable_now = this.ticketRefund(e, tk, true); }
+    return r;
+  }
+  get_escrow_totals(args: station.get_escrow_totals_arguments): station.get_escrow_totals_result {
+    const r = new station.get_escrow_totals_result(); r.totals = this.escrowTot.get(args.token!); return r;
+  }
 }

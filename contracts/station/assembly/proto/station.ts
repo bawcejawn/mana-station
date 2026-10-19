@@ -924,6 +924,14 @@ export namespace station {
         writer.uint32(104);
         writer.uint64(message.total_paid);
       }
+
+      const unique_name_purchase_ids = message.purchase_ids;
+      if (unique_name_purchase_ids.length !== 0) {
+        for (let i = 0; i < unique_name_purchase_ids.length; ++i) {
+          writer.uint32(112);
+          writer.uint32(unique_name_purchase_ids[i]);
+        }
+      }
     }
 
     static decode(reader: Reader, length: i32): allowance_object {
@@ -985,6 +993,10 @@ export namespace station {
             message.total_paid = reader.uint64();
             break;
 
+          case 14:
+            message.purchase_ids.push(reader.uint32());
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -1007,6 +1019,7 @@ export namespace station {
     paid: u64;
     term_start: u64;
     total_paid: u64;
+    purchase_ids: Array<u32>;
 
     constructor(
       id: u32 = 0,
@@ -1021,7 +1034,8 @@ export namespace station {
       unit_price: u64 = 0,
       paid: u64 = 0,
       term_start: u64 = 0,
-      total_paid: u64 = 0
+      total_paid: u64 = 0,
+      purchase_ids: Array<u32> = []
     ) {
       this.id = id;
       this.buyer = buyer;
@@ -1036,6 +1050,7 @@ export namespace station {
       this.paid = paid;
       this.term_start = term_start;
       this.total_paid = total_paid;
+      this.purchase_ids = purchase_ids;
     }
   }
 
@@ -1077,6 +1092,11 @@ export namespace station {
         writer.uint32(56);
         writer.uint64(message.paid);
       }
+
+      if (message.purchase_id != 0) {
+        writer.uint32(64);
+        writer.uint32(message.purchase_id);
+      }
     }
 
     static decode(reader: Reader, length: i32): ticket_object {
@@ -1114,6 +1134,10 @@ export namespace station {
             message.paid = reader.uint64();
             break;
 
+          case 8:
+            message.purchase_id = reader.uint32();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -1130,6 +1154,7 @@ export namespace station {
     allow_upload: bool;
     token: Uint8Array | null;
     paid: u64;
+    purchase_id: u32;
 
     constructor(
       buyer: Uint8Array | null = null,
@@ -1138,7 +1163,8 @@ export namespace station {
       expiry: u64 = 0,
       allow_upload: bool = false,
       token: Uint8Array | null = null,
-      paid: u64 = 0
+      paid: u64 = 0,
+      purchase_id: u32 = 0
     ) {
       this.buyer = buyer;
       this.mana = mana;
@@ -1147,6 +1173,7 @@ export namespace station {
       this.allow_upload = allow_upload;
       this.token = token;
       this.paid = paid;
+      this.purchase_id = purchase_id;
     }
   }
 
@@ -1184,6 +1211,16 @@ export namespace station {
         writer.uint32(48);
         writer.bool(message.low_alerted);
       }
+
+      if (message.next_purchase != 0) {
+        writer.uint32(56);
+        writer.uint32(message.next_purchase);
+      }
+
+      if (message.paused_at != 0) {
+        writer.uint32(64);
+        writer.uint64(message.paused_at);
+      }
     }
 
     static decode(reader: Reader, length: i32): big_object {
@@ -1217,6 +1254,14 @@ export namespace station {
             message.low_alerted = reader.bool();
             break;
 
+          case 7:
+            message.next_purchase = reader.uint32();
+            break;
+
+          case 8:
+            message.paused_at = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -1232,6 +1277,8 @@ export namespace station {
     week: window_object | null;
     next_id: u32;
     low_alerted: bool;
+    next_purchase: u32;
+    paused_at: u64;
 
     constructor(
       debt: u64 = 0,
@@ -1239,7 +1286,9 @@ export namespace station {
       last_buy: u64 = 0,
       week: window_object | null = null,
       next_id: u32 = 0,
-      low_alerted: bool = false
+      low_alerted: bool = false,
+      next_purchase: u32 = 0,
+      paused_at: u64 = 0
     ) {
       this.debt = debt;
       this.debt_ts = debt_ts;
@@ -1247,6 +1296,8 @@ export namespace station {
       this.week = week;
       this.next_id = next_id;
       this.low_alerted = low_alerted;
+      this.next_purchase = next_purchase;
+      this.paused_at = paused_at;
     }
   }
 
@@ -1559,6 +1610,14 @@ export namespace station {
           writer.uint32(unique_name_open_ids[i]);
         }
       }
+
+      const unique_name_open_purchases = message.open_purchases;
+      if (unique_name_open_purchases.length !== 0) {
+        for (let i = 0; i < unique_name_open_purchases.length; ++i) {
+          writer.uint32(24);
+          writer.uint32(unique_name_open_purchases[i]);
+        }
+      }
     }
 
     static decode(reader: Reader, length: i32): registry_object {
@@ -1576,6 +1635,10 @@ export namespace station {
             message.open_ids.push(reader.uint32());
             break;
 
+          case 3:
+            message.open_purchases.push(reader.uint32());
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -1587,10 +1650,376 @@ export namespace station {
 
     app_ids: Array<u32>;
     open_ids: Array<u32>;
+    open_purchases: Array<u32>;
 
-    constructor(app_ids: Array<u32> = [], open_ids: Array<u32> = []) {
+    constructor(
+      app_ids: Array<u32> = [],
+      open_ids: Array<u32> = [],
+      open_purchases: Array<u32> = []
+    ) {
       this.app_ids = app_ids;
       this.open_ids = open_ids;
+      this.open_purchases = open_purchases;
+    }
+  }
+
+  export class escrow_object {
+    static encode(message: escrow_object, writer: Writer): void {
+      if (message.id != 0) {
+        writer.uint32(8);
+        writer.uint32(message.id);
+      }
+
+      if (message.kind != 0) {
+        writer.uint32(16);
+        writer.uint32(message.kind);
+      }
+
+      const unique_name_buyer = message.buyer;
+      if (unique_name_buyer !== null) {
+        writer.uint32(26);
+        writer.bytes(unique_name_buyer);
+      }
+
+      const unique_name_token = message.token;
+      if (unique_name_token !== null) {
+        writer.uint32(34);
+        writer.bytes(unique_name_token);
+      }
+
+      if (message.amount != 0) {
+        writer.uint32(40);
+        writer.uint64(message.amount);
+      }
+
+      if (message.start != 0) {
+        writer.uint32(48);
+        writer.uint64(message.start);
+      }
+
+      if (message.end != 0) {
+        writer.uint32(56);
+        writer.uint64(message.end);
+      }
+
+      if (message.days != 0) {
+        writer.uint32(64);
+        writer.uint64(message.days);
+      }
+
+      if (message.per_day != 0) {
+        writer.uint32(72);
+        writer.uint64(message.per_day);
+      }
+
+      if (message.allowance_id != 0) {
+        writer.uint32(80);
+        writer.uint32(message.allowance_id);
+      }
+
+      const unique_name_payee = message.payee;
+      if (unique_name_payee !== null) {
+        writer.uint32(90);
+        writer.bytes(unique_name_payee);
+      }
+
+      if (message.mana != 0) {
+        writer.uint32(96);
+        writer.uint64(message.mana);
+      }
+
+      if (message.refunded != 0) {
+        writer.uint32(104);
+        writer.uint64(message.refunded);
+      }
+
+      if (message.released != 0) {
+        writer.uint32(112);
+        writer.uint64(message.released);
+      }
+
+      if (message.closed != false) {
+        writer.uint32(120);
+        writer.bool(message.closed);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): escrow_object {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new escrow_object();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.id = reader.uint32();
+            break;
+
+          case 2:
+            message.kind = reader.uint32();
+            break;
+
+          case 3:
+            message.buyer = reader.bytes();
+            break;
+
+          case 4:
+            message.token = reader.bytes();
+            break;
+
+          case 5:
+            message.amount = reader.uint64();
+            break;
+
+          case 6:
+            message.start = reader.uint64();
+            break;
+
+          case 7:
+            message.end = reader.uint64();
+            break;
+
+          case 8:
+            message.days = reader.uint64();
+            break;
+
+          case 9:
+            message.per_day = reader.uint64();
+            break;
+
+          case 10:
+            message.allowance_id = reader.uint32();
+            break;
+
+          case 11:
+            message.payee = reader.bytes();
+            break;
+
+          case 12:
+            message.mana = reader.uint64();
+            break;
+
+          case 13:
+            message.refunded = reader.uint64();
+            break;
+
+          case 14:
+            message.released = reader.uint64();
+            break;
+
+          case 15:
+            message.closed = reader.bool();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    id: u32;
+    kind: u32;
+    buyer: Uint8Array | null;
+    token: Uint8Array | null;
+    amount: u64;
+    start: u64;
+    end: u64;
+    days: u64;
+    per_day: u64;
+    allowance_id: u32;
+    payee: Uint8Array | null;
+    mana: u64;
+    refunded: u64;
+    released: u64;
+    closed: bool;
+
+    constructor(
+      id: u32 = 0,
+      kind: u32 = 0,
+      buyer: Uint8Array | null = null,
+      token: Uint8Array | null = null,
+      amount: u64 = 0,
+      start: u64 = 0,
+      end: u64 = 0,
+      days: u64 = 0,
+      per_day: u64 = 0,
+      allowance_id: u32 = 0,
+      payee: Uint8Array | null = null,
+      mana: u64 = 0,
+      refunded: u64 = 0,
+      released: u64 = 0,
+      closed: bool = false
+    ) {
+      this.id = id;
+      this.kind = kind;
+      this.buyer = buyer;
+      this.token = token;
+      this.amount = amount;
+      this.start = start;
+      this.end = end;
+      this.days = days;
+      this.per_day = per_day;
+      this.allowance_id = allowance_id;
+      this.payee = payee;
+      this.mana = mana;
+      this.refunded = refunded;
+      this.released = released;
+      this.closed = closed;
+    }
+  }
+
+  @unmanaged
+  export class escrow_totals_object {
+    static encode(message: escrow_totals_object, writer: Writer): void {
+      if (message.held != 0) {
+        writer.uint32(8);
+        writer.uint64(message.held);
+      }
+
+      if (message.collected != 0) {
+        writer.uint32(16);
+        writer.uint64(message.collected);
+      }
+
+      if (message.refunded != 0) {
+        writer.uint32(24);
+        writer.uint64(message.refunded);
+      }
+
+      if (message.released != 0) {
+        writer.uint32(32);
+        writer.uint64(message.released);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): escrow_totals_object {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new escrow_totals_object();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.held = reader.uint64();
+            break;
+
+          case 2:
+            message.collected = reader.uint64();
+            break;
+
+          case 3:
+            message.refunded = reader.uint64();
+            break;
+
+          case 4:
+            message.released = reader.uint64();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    held: u64;
+    collected: u64;
+    refunded: u64;
+    released: u64;
+
+    constructor(
+      held: u64 = 0,
+      collected: u64 = 0,
+      refunded: u64 = 0,
+      released: u64 = 0
+    ) {
+      this.held = held;
+      this.collected = collected;
+      this.refunded = refunded;
+      this.released = released;
+    }
+  }
+
+  export class escrow_event {
+    static encode(message: escrow_event, writer: Writer): void {
+      const unique_name_purchase = message.purchase;
+      if (unique_name_purchase !== null) {
+        writer.uint32(10);
+        writer.fork();
+        escrow_object.encode(unique_name_purchase, writer);
+        writer.ldelim();
+      }
+
+      if (message.amount != 0) {
+        writer.uint32(16);
+        writer.uint64(message.amount);
+      }
+
+      const unique_name_to = message.to;
+      if (unique_name_to !== null) {
+        writer.uint32(26);
+        writer.bytes(unique_name_to);
+      }
+
+      const unique_name_action = message.action;
+      if (unique_name_action !== null) {
+        writer.uint32(34);
+        writer.string(unique_name_action);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): escrow_event {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new escrow_event();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.purchase = escrow_object.decode(reader, reader.uint32());
+            break;
+
+          case 2:
+            message.amount = reader.uint64();
+            break;
+
+          case 3:
+            message.to = reader.bytes();
+            break;
+
+          case 4:
+            message.action = reader.string();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    purchase: escrow_object | null;
+    amount: u64;
+    to: Uint8Array | null;
+    action: string | null;
+
+    constructor(
+      purchase: escrow_object | null = null,
+      amount: u64 = 0,
+      to: Uint8Array | null = null,
+      action: string | null = null
+    ) {
+      this.purchase = purchase;
+      this.amount = amount;
+      this.to = to;
+      this.action = action;
     }
   }
 
@@ -3118,7 +3547,17 @@ export namespace station {
 
   @unmanaged
   export class close_ticket_result {
-    static encode(message: close_ticket_result, writer: Writer): void {}
+    static encode(message: close_ticket_result, writer: Writer): void {
+      if (message.refund != 0) {
+        writer.uint32(8);
+        writer.uint64(message.refund);
+      }
+
+      if (message.released != 0) {
+        writer.uint32(16);
+        writer.uint64(message.released);
+      }
+    }
 
     static decode(reader: Reader, length: i32): close_ticket_result {
       const end: usize = length < 0 ? reader.end : reader.ptr + length;
@@ -3127,6 +3566,14 @@ export namespace station {
       while (reader.ptr < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
+          case 1:
+            message.refund = reader.uint64();
+            break;
+
+          case 2:
+            message.released = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -3136,7 +3583,527 @@ export namespace station {
       return message;
     }
 
-    constructor() {}
+    refund: u64;
+    released: u64;
+
+    constructor(refund: u64 = 0, released: u64 = 0) {
+      this.refund = refund;
+      this.released = released;
+    }
+  }
+
+  export class cancel_allowance_arguments {
+    static encode(message: cancel_allowance_arguments, writer: Writer): void {
+      const unique_name_buyer = message.buyer;
+      if (unique_name_buyer !== null) {
+        writer.uint32(10);
+        writer.bytes(unique_name_buyer);
+      }
+
+      if (message.id != 0) {
+        writer.uint32(16);
+        writer.uint32(message.id);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): cancel_allowance_arguments {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new cancel_allowance_arguments();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.buyer = reader.bytes();
+            break;
+
+          case 2:
+            message.id = reader.uint32();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    buyer: Uint8Array | null;
+    id: u32;
+
+    constructor(buyer: Uint8Array | null = null, id: u32 = 0) {
+      this.buyer = buyer;
+      this.id = id;
+    }
+  }
+
+  @unmanaged
+  export class cancel_allowance_result {
+    static encode(message: cancel_allowance_result, writer: Writer): void {
+      if (message.refund != 0) {
+        writer.uint32(8);
+        writer.uint64(message.refund);
+      }
+
+      if (message.expiry != 0) {
+        writer.uint32(16);
+        writer.uint64(message.expiry);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): cancel_allowance_result {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new cancel_allowance_result();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.refund = reader.uint64();
+            break;
+
+          case 2:
+            message.expiry = reader.uint64();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    refund: u64;
+    expiry: u64;
+
+    constructor(refund: u64 = 0, expiry: u64 = 0) {
+      this.refund = refund;
+      this.expiry = expiry;
+    }
+  }
+
+  export class cancel_big_upload_arguments {
+    static encode(message: cancel_big_upload_arguments, writer: Writer): void {
+      const unique_name_buyer = message.buyer;
+      if (unique_name_buyer !== null) {
+        writer.uint32(10);
+        writer.bytes(unique_name_buyer);
+      }
+
+      const unique_name_payee = message.payee;
+      if (unique_name_payee !== null) {
+        writer.uint32(18);
+        writer.bytes(unique_name_payee);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): cancel_big_upload_arguments {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new cancel_big_upload_arguments();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.buyer = reader.bytes();
+            break;
+
+          case 2:
+            message.payee = reader.bytes();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    buyer: Uint8Array | null;
+    payee: Uint8Array | null;
+
+    constructor(
+      buyer: Uint8Array | null = null,
+      payee: Uint8Array | null = null
+    ) {
+      this.buyer = buyer;
+      this.payee = payee;
+    }
+  }
+
+  @unmanaged
+  export class cancel_big_upload_result {
+    static encode(message: cancel_big_upload_result, writer: Writer): void {
+      if (message.refund != 0) {
+        writer.uint32(8);
+        writer.uint64(message.refund);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): cancel_big_upload_result {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new cancel_big_upload_result();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.refund = reader.uint64();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    refund: u64;
+
+    constructor(refund: u64 = 0) {
+      this.refund = refund;
+    }
+  }
+
+  @unmanaged
+  export class release_arguments {
+    static encode(message: release_arguments, writer: Writer): void {
+      if (message.purchase_id != 0) {
+        writer.uint32(8);
+        writer.uint32(message.purchase_id);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): release_arguments {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new release_arguments();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.purchase_id = reader.uint32();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    purchase_id: u32;
+
+    constructor(purchase_id: u32 = 0) {
+      this.purchase_id = purchase_id;
+    }
+  }
+
+  @unmanaged
+  export class release_result {
+    static encode(message: release_result, writer: Writer): void {
+      if (message.amount != 0) {
+        writer.uint32(8);
+        writer.uint64(message.amount);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): release_result {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new release_result();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.amount = reader.uint64();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    amount: u64;
+
+    constructor(amount: u64 = 0) {
+      this.amount = amount;
+    }
+  }
+
+  export class owner_refund_arguments {
+    static encode(message: owner_refund_arguments, writer: Writer): void {
+      if (message.allowance_id != 0) {
+        writer.uint32(8);
+        writer.uint32(message.allowance_id);
+      }
+
+      const unique_name_ticket_payee = message.ticket_payee;
+      if (unique_name_ticket_payee !== null) {
+        writer.uint32(18);
+        writer.bytes(unique_name_ticket_payee);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): owner_refund_arguments {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new owner_refund_arguments();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.allowance_id = reader.uint32();
+            break;
+
+          case 2:
+            message.ticket_payee = reader.bytes();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    allowance_id: u32;
+    ticket_payee: Uint8Array | null;
+
+    constructor(allowance_id: u32 = 0, ticket_payee: Uint8Array | null = null) {
+      this.allowance_id = allowance_id;
+      this.ticket_payee = ticket_payee;
+    }
+  }
+
+  @unmanaged
+  export class owner_refund_result {
+    static encode(message: owner_refund_result, writer: Writer): void {
+      if (message.refund != 0) {
+        writer.uint32(8);
+        writer.uint64(message.refund);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): owner_refund_result {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new owner_refund_result();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.refund = reader.uint64();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    refund: u64;
+
+    constructor(refund: u64 = 0) {
+      this.refund = refund;
+    }
+  }
+
+  @unmanaged
+  export class get_escrow_arguments {
+    static encode(message: get_escrow_arguments, writer: Writer): void {
+      if (message.purchase_id != 0) {
+        writer.uint32(8);
+        writer.uint32(message.purchase_id);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): get_escrow_arguments {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new get_escrow_arguments();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.purchase_id = reader.uint32();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    purchase_id: u32;
+
+    constructor(purchase_id: u32 = 0) {
+      this.purchase_id = purchase_id;
+    }
+  }
+
+  export class get_escrow_result {
+    static encode(message: get_escrow_result, writer: Writer): void {
+      const unique_name_purchase = message.purchase;
+      if (unique_name_purchase !== null) {
+        writer.uint32(10);
+        writer.fork();
+        escrow_object.encode(unique_name_purchase, writer);
+        writer.ldelim();
+      }
+
+      if (message.refundable_now != 0) {
+        writer.uint32(16);
+        writer.uint64(message.refundable_now);
+      }
+
+      if (message.releasable != false) {
+        writer.uint32(24);
+        writer.bool(message.releasable);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): get_escrow_result {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new get_escrow_result();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.purchase = escrow_object.decode(reader, reader.uint32());
+            break;
+
+          case 2:
+            message.refundable_now = reader.uint64();
+            break;
+
+          case 3:
+            message.releasable = reader.bool();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    purchase: escrow_object | null;
+    refundable_now: u64;
+    releasable: bool;
+
+    constructor(
+      purchase: escrow_object | null = null,
+      refundable_now: u64 = 0,
+      releasable: bool = false
+    ) {
+      this.purchase = purchase;
+      this.refundable_now = refundable_now;
+      this.releasable = releasable;
+    }
+  }
+
+  export class get_escrow_totals_arguments {
+    static encode(message: get_escrow_totals_arguments, writer: Writer): void {
+      const unique_name_token = message.token;
+      if (unique_name_token !== null) {
+        writer.uint32(10);
+        writer.bytes(unique_name_token);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): get_escrow_totals_arguments {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new get_escrow_totals_arguments();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.token = reader.bytes();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    token: Uint8Array | null;
+
+    constructor(token: Uint8Array | null = null) {
+      this.token = token;
+    }
+  }
+
+  @unmanaged
+  export class get_escrow_totals_result {
+    static encode(message: get_escrow_totals_result, writer: Writer): void {
+      const unique_name_totals = message.totals;
+      if (unique_name_totals !== null) {
+        writer.uint32(10);
+        writer.fork();
+        escrow_totals_object.encode(unique_name_totals, writer);
+        writer.ldelim();
+      }
+    }
+
+    static decode(reader: Reader, length: i32): get_escrow_totals_result {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new get_escrow_totals_result();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.totals = escrow_totals_object.decode(
+              reader,
+              reader.uint32()
+            );
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    totals: escrow_totals_object | null;
+
+    constructor(totals: escrow_totals_object | null = null) {
+      this.totals = totals;
+    }
   }
 
   export class init_arguments {
@@ -4055,92 +5022,6 @@ export namespace station {
     static decode(reader: Reader, length: i32): set_price_result {
       const end: usize = length < 0 ? reader.end : reader.ptr + length;
       const message = new set_price_result();
-
-      while (reader.ptr < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          default:
-            reader.skipType(tag & 7);
-            break;
-        }
-      }
-
-      return message;
-    }
-
-    constructor() {}
-  }
-
-  export class withdraw_revenue_arguments {
-    static encode(message: withdraw_revenue_arguments, writer: Writer): void {
-      const unique_name_token = message.token;
-      if (unique_name_token !== null) {
-        writer.uint32(10);
-        writer.bytes(unique_name_token);
-      }
-
-      const unique_name_to = message.to;
-      if (unique_name_to !== null) {
-        writer.uint32(18);
-        writer.bytes(unique_name_to);
-      }
-
-      if (message.amount != 0) {
-        writer.uint32(24);
-        writer.uint64(message.amount);
-      }
-    }
-
-    static decode(reader: Reader, length: i32): withdraw_revenue_arguments {
-      const end: usize = length < 0 ? reader.end : reader.ptr + length;
-      const message = new withdraw_revenue_arguments();
-
-      while (reader.ptr < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1:
-            message.token = reader.bytes();
-            break;
-
-          case 2:
-            message.to = reader.bytes();
-            break;
-
-          case 3:
-            message.amount = reader.uint64();
-            break;
-
-          default:
-            reader.skipType(tag & 7);
-            break;
-        }
-      }
-
-      return message;
-    }
-
-    token: Uint8Array | null;
-    to: Uint8Array | null;
-    amount: u64;
-
-    constructor(
-      token: Uint8Array | null = null,
-      to: Uint8Array | null = null,
-      amount: u64 = 0
-    ) {
-      this.token = token;
-      this.to = to;
-      this.amount = amount;
-    }
-  }
-
-  @unmanaged
-  export class withdraw_revenue_result {
-    static encode(message: withdraw_revenue_result, writer: Writer): void {}
-
-    static decode(reader: Reader, length: i32): withdraw_revenue_result {
-      const end: usize = length < 0 ? reader.end : reader.ptr + length;
-      const message = new withdraw_revenue_result();
 
       while (reader.ptr < end) {
         const tag = reader.uint32();
