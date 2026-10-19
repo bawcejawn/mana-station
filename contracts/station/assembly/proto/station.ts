@@ -114,6 +114,16 @@ export namespace station {
         writer.uint32(186);
         writer.bytes(unique_name_treasury);
       }
+
+      if (message.buffer_bp != 0) {
+        writer.uint32(192);
+        writer.uint32(message.buffer_bp);
+      }
+
+      if (message.alert_mana != 0) {
+        writer.uint32(200);
+        writer.uint64(message.alert_mana);
+      }
     }
 
     static decode(reader: Reader, length: i32): config_object {
@@ -211,6 +221,14 @@ export namespace station {
             message.treasury = reader.bytes();
             break;
 
+          case 24:
+            message.buffer_bp = reader.uint32();
+            break;
+
+          case 25:
+            message.alert_mana = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -242,6 +260,8 @@ export namespace station {
     max_allowances: u32;
     max_days: u64;
     treasury: Uint8Array | null;
+    buffer_bp: u32;
+    alert_mana: u64;
 
     constructor(
       owner: Uint8Array | null = null,
@@ -265,7 +285,9 @@ export namespace station {
       big_ticket_ms: u64 = 0,
       max_allowances: u32 = 0,
       max_days: u64 = 0,
-      treasury: Uint8Array | null = null
+      treasury: Uint8Array | null = null,
+      buffer_bp: u32 = 0,
+      alert_mana: u64 = 0
     ) {
       this.owner = owner;
       this.paused = paused;
@@ -289,6 +311,8 @@ export namespace station {
       this.max_allowances = max_allowances;
       this.max_days = max_days;
       this.treasury = treasury;
+      this.buffer_bp = buffer_bp;
+      this.alert_mana = alert_mana;
     }
   }
 
@@ -1155,6 +1179,11 @@ export namespace station {
         writer.uint32(40);
         writer.uint32(message.next_id);
       }
+
+      if (message.low_alerted != false) {
+        writer.uint32(48);
+        writer.bool(message.low_alerted);
+      }
     }
 
     static decode(reader: Reader, length: i32): big_object {
@@ -1184,6 +1213,10 @@ export namespace station {
             message.next_id = reader.uint32();
             break;
 
+          case 6:
+            message.low_alerted = reader.bool();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -1198,19 +1231,194 @@ export namespace station {
     last_buy: u64;
     week: window_object | null;
     next_id: u32;
+    low_alerted: bool;
 
     constructor(
       debt: u64 = 0,
       debt_ts: u64 = 0,
       last_buy: u64 = 0,
       week: window_object | null = null,
-      next_id: u32 = 0
+      next_id: u32 = 0,
+      low_alerted: bool = false
     ) {
       this.debt = debt;
       this.debt_ts = debt_ts;
       this.last_buy = last_buy;
       this.week = week;
       this.next_id = next_id;
+      this.low_alerted = low_alerted;
+    }
+  }
+
+  export class buffer_event {
+    static encode(message: buffer_event, writer: Writer): void {
+      if (message.app != 0) {
+        writer.uint32(8);
+        writer.uint32(message.app);
+      }
+
+      const unique_name_payee = message.payee;
+      if (unique_name_payee !== null) {
+        writer.uint32(18);
+        writer.bytes(unique_name_payee);
+      }
+
+      if (message.rc != 0) {
+        writer.uint32(24);
+        writer.uint64(message.rc);
+      }
+
+      if (message.app_used_24h != 0) {
+        writer.uint32(32);
+        writer.uint64(message.app_used_24h);
+      }
+
+      if (message.allowance != 0) {
+        writer.uint32(40);
+        writer.uint64(message.allowance);
+      }
+
+      if (message.buffer_limit != 0) {
+        writer.uint32(48);
+        writer.uint64(message.buffer_limit);
+      }
+
+      if (message.mana_after != 0) {
+        writer.uint32(56);
+        writer.uint64(message.mana_after);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): buffer_event {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new buffer_event();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.app = reader.uint32();
+            break;
+
+          case 2:
+            message.payee = reader.bytes();
+            break;
+
+          case 3:
+            message.rc = reader.uint64();
+            break;
+
+          case 4:
+            message.app_used_24h = reader.uint64();
+            break;
+
+          case 5:
+            message.allowance = reader.uint64();
+            break;
+
+          case 6:
+            message.buffer_limit = reader.uint64();
+            break;
+
+          case 7:
+            message.mana_after = reader.uint64();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    app: u32;
+    payee: Uint8Array | null;
+    rc: u64;
+    app_used_24h: u64;
+    allowance: u64;
+    buffer_limit: u64;
+    mana_after: u64;
+
+    constructor(
+      app: u32 = 0,
+      payee: Uint8Array | null = null,
+      rc: u64 = 0,
+      app_used_24h: u64 = 0,
+      allowance: u64 = 0,
+      buffer_limit: u64 = 0,
+      mana_after: u64 = 0
+    ) {
+      this.app = app;
+      this.payee = payee;
+      this.rc = rc;
+      this.app_used_24h = app_used_24h;
+      this.allowance = allowance;
+      this.buffer_limit = buffer_limit;
+      this.mana_after = mana_after;
+    }
+  }
+
+  @unmanaged
+  export class reserve_alert_event {
+    static encode(message: reserve_alert_event, writer: Writer): void {
+      if (message.mana_after != 0) {
+        writer.uint32(8);
+        writer.uint64(message.mana_after);
+      }
+
+      if (message.alert_level != 0) {
+        writer.uint32(16);
+        writer.uint64(message.alert_level);
+      }
+
+      if (message.hard_floor != 0) {
+        writer.uint32(24);
+        writer.uint64(message.hard_floor);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): reserve_alert_event {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new reserve_alert_event();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.mana_after = reader.uint64();
+            break;
+
+          case 2:
+            message.alert_level = reader.uint64();
+            break;
+
+          case 3:
+            message.hard_floor = reader.uint64();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    mana_after: u64;
+    alert_level: u64;
+    hard_floor: u64;
+
+    constructor(
+      mana_after: u64 = 0,
+      alert_level: u64 = 0,
+      hard_floor: u64 = 0
+    ) {
+      this.mana_after = mana_after;
+      this.alert_level = alert_level;
+      this.hard_floor = hard_floor;
     }
   }
 
@@ -1374,6 +1582,22 @@ export namespace station {
         writer.uint32(72);
         writer.uint64(message.big_debt);
       }
+
+      if (message.buffer_used_24h != 0) {
+        writer.uint32(80);
+        writer.uint64(message.buffer_used_24h);
+      }
+
+      if (message.alert_level != 0) {
+        writer.uint32(88);
+        writer.uint64(message.alert_level);
+      }
+
+      const unique_name_treasury = message.treasury;
+      if (unique_name_treasury !== null) {
+        writer.uint32(98);
+        writer.bytes(unique_name_treasury);
+      }
     }
 
     static decode(reader: Reader, length: i32): get_status_result {
@@ -1419,6 +1643,18 @@ export namespace station {
             message.big_debt = reader.uint64();
             break;
 
+          case 10:
+            message.buffer_used_24h = reader.uint64();
+            break;
+
+          case 11:
+            message.alert_level = reader.uint64();
+            break;
+
+          case 12:
+            message.treasury = reader.bytes();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -1437,6 +1673,9 @@ export namespace station {
     sold_capacity: u64;
     sold_committed: u64;
     big_debt: u64;
+    buffer_used_24h: u64;
+    alert_level: u64;
+    treasury: Uint8Array | null;
 
     constructor(
       config: config_object | null = null,
@@ -1447,7 +1686,10 @@ export namespace station {
       used_24h: u64 = 0,
       sold_capacity: u64 = 0,
       sold_committed: u64 = 0,
-      big_debt: u64 = 0
+      big_debt: u64 = 0,
+      buffer_used_24h: u64 = 0,
+      alert_level: u64 = 0,
+      treasury: Uint8Array | null = null
     ) {
       this.config = config;
       this.mana = mana;
@@ -1458,6 +1700,9 @@ export namespace station {
       this.sold_capacity = sold_capacity;
       this.sold_committed = sold_committed;
       this.big_debt = big_debt;
+      this.buffer_used_24h = buffer_used_24h;
+      this.alert_level = alert_level;
+      this.treasury = treasury;
     }
   }
 

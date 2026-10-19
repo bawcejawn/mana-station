@@ -297,6 +297,17 @@
                 "options": {
                   "(koinos.btype)": "ADDRESS"
                 }
+              },
+              "buffer_bp": {
+                "type": "uint32",
+                "id": 24
+              },
+              "alert_mana": {
+                "type": "uint64",
+                "id": 25,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
               }
             },
             "reserved": [
@@ -687,6 +698,85 @@
               "next_id": {
                 "type": "uint32",
                 "id": 5
+              },
+              "low_alerted": {
+                "type": "bool",
+                "id": 6
+              }
+            }
+          },
+          "buffer_event": {
+            "fields": {
+              "app": {
+                "type": "uint32",
+                "id": 1
+              },
+              "payee": {
+                "type": "bytes",
+                "id": 2,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "rc": {
+                "type": "uint64",
+                "id": 3,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "app_used_24h": {
+                "type": "uint64",
+                "id": 4,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "allowance": {
+                "type": "uint64",
+                "id": 5,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "buffer_limit": {
+                "type": "uint64",
+                "id": 6,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "mana_after": {
+                "type": "uint64",
+                "id": 7,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              }
+            }
+          },
+          "reserve_alert_event": {
+            "fields": {
+              "mana_after": {
+                "type": "uint64",
+                "id": 1,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "alert_level": {
+                "type": "uint64",
+                "id": 2,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "hard_floor": {
+                "type": "uint64",
+                "id": 3,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
               }
             }
           },
@@ -778,6 +868,27 @@
                 "id": 9,
                 "options": {
                   "jstype": "JS_STRING"
+                }
+              },
+              "buffer_used_24h": {
+                "type": "uint64",
+                "id": 10,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "alert_level": {
+                "type": "uint64",
+                "id": 11,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "treasury": {
+                "type": "bytes",
+                "id": 12,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
                 }
               }
             }

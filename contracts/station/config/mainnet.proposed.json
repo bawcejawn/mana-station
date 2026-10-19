@@ -1,5 +1,5 @@
 {
-  "_note": "PROPOSED mainnet settings, v2 with Carl's 4:37 PM answers (option A) and the 5:11 PM introductory prices. Not deployed. Units: KOIN/Mana in satoshis (1e8); stablecoins 8 decimals. OPEN = still Carl's decision.",
+  "_note": "PROPOSED mainnet settings, v2 with Carl's 4:37 PM answers (option A) the 5:11 PM introductory prices, and the 5:18/5:22 PM treasury + buffer decisions. Not deployed. Units: KOIN/Mana in satoshis (1e8); stablecoins 8 decimals. OPEN = still Carl's decision.",
   "config": {
     "owner": "<Carl's offline owner wallet>",
     "koin_amount": "3000000000000",
@@ -21,7 +21,9 @@
     "big_ticket_ms": "259200000",
     "max_allowances": 50,
     "max_days": "90",
-    "treasury": "OPEN: empty = the station (withdraw_revenue to Carl) | Carl's wallet address"
+    "treasury": "empty = DECIDED (Carl 5:18 PM): payments go directly to the owner wallet (pull). Owner-changeable to another address or the station's id",
+    "buffer_bp": 2000,
+    "alert_mana": "1500000000000"
   },
   "_derived_at_30k": {
     "daily_budget": "6,000 Mana (20% of koin_amount)",
@@ -85,5 +87,13 @@
     "big_max_debt": "6,000 Mana outstanding",
     "scaling": "debt is repaid at the sellable slice's rate: 6,000 takes 6,000 / sellable days (e.g. 40k KOIN → 2,000/day → 3 days). Suggested rule: big_max_debt ≈ 3 × sellable/day, week cap ≈ 2 × big_max; re-set when koin_amount changes",
     "at_30k": "unavailable: sellable slice is 0 (quote reason 'no repayment capacity')"
+  },
+  "_buffer": {
+    "status": "DECIDED by Carl (5:22 PM)",
+    "rule": "fee-exempt reserved apps may use up to 20% above their daily allowance (3,000 → 3,600). The extra comes straight from the reserve: no debt, no repayment, no cut to the next day. Paid allowances stay hard-capped at what was bought (buy more to get more)",
+    "hard_floor": "6,100 Mana (admin_min 100 + daily budget 6,000) is never used by the buffer",
+    "worst_day": "3,600 + 3,600 = 7,200 vs 6,000 refill → the reserve dips by at most 1,200 that day",
+    "alerts": "station.buffer_used on each buffer tx; station.reserve_low once per dip below alert_mana (15,000) → add KOIN",
+    "no_reservation_projects": "exempt projects with app 0 still use only the unsold sellable slice (0 at 30k)"
   }
 }

@@ -27,6 +27,9 @@ export class Station {
     // res.sold_capacity = ;
     // res.sold_committed = ;
     // res.big_debt = ;
+    // res.buffer_used_24h = ;
+    // res.alert_level = ;
+    // res.treasury = ;
 
     return res;
   }

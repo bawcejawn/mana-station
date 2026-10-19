@@ -336,6 +336,35 @@ Release wasm: 42,566 bytes (about 30 Mana to upload, EST). Proposed settings: `c
 
 Release wasm: 44,024 bytes.
 
+**7c. Treasury and buffer (Carl, 5:18 PM; buffer source decided by Carl at 5:22 PM). Applied locally.**
+- **Treasury: decided, direct to Carl.** With `treasury` empty (the default), every payment is pulled `transfer(from = buyer, to = owner wallet)` in the same tx.
+  - The owner can change it to another address, or to the station's own id (then `withdraw_revenue` works).
+  - `get_status.treasury` shows where payments land now.
+- **Buffer: decided by Carl.** A fee-exempt reserved app may go `buffer_bp` (owner-configurable, default proposal 2000 = 20%, max 50%) above its daily allowance: 3,000 → up to 3,600, then refused.
+  - **Where it comes from:** straight from the reserve. Buffer Mana is outside the 20% daily cap, so it never takes room from paying customers.
+  - **No repayment:** no debt and no cut to the next day's slice. Carl: free projects won't do this every day, the reserve is a good buffer, and he'll add KOIN if it's consistently short.
+  - **Hard floor:** the 6,100 Mana floor (`admin_min` 100 + one day's budget 6,000) is never touched; a buffer tx that would cross it is refused.
+  - Worst case at 30k: 3,600 + 3,600 = 7,200 vs a 6,000 refill, so the reserve dips by at most 1,200 on such a day and refills when usage drops.
+  - **Paid allowances:** hard-capped at what was bought, with no buffer; buyers can buy more.
+  - Exempt projects without a reservation (app 0) keep the unsold-slice rule.
+  - The new-user pool is `new_pct` of the buffered limit.
+- **Alerts:**
+  - `station.buffer_used` on every buffer tx (app, payee, rc, app use incl. this tx, allowance, limit, Mana after).
+  - `station.reserve_low` once per dip when Mana falls below `alert_mana` (owner-configurable; 0 = default 15,000), re-armed once Mana is back above it. That's Carl's "add KOIN" signal; an off-chain watcher must forward it, because the contract can't message anyone.
+  - UNVERIFIED: that events emitted inside `authorize` (when the station is payer) land in the tx receipt on a real node. Testnet check, still parked.
+
+**Tests: 25/25 pass** (new: buffer, hard floor + configurable %, reserve alert; treasury tests reworked). A 4-rule mutation check (no hard floor, old station-default treasury, alert repeating, wider buffer) fails 4 tests.
+
+| New / changed check | Result |
+|---|---|
+| Buffer 80 → 96 from the reserve; `buffer_used` event per buffer tx; buffer outside `used_24h`; a fully sold paid allowance still gets exactly its 40/day (no buffer); no debt the next day | PASS |
+| Buffer refused 1 unit below the hard floor (admin_min + budget), allowed at it; `buffer_bp` 0 → hard stop at the allowance; > 50% refused; owner-only | PASS |
+| `reserve_low` once per dip, not repeated, re-armed after recovery; `alert_level` reported | PASS |
+| Default treasury = owner wallet (payment lands there, the station holds 0, withdraw refused); owner-only switch to the station, then withdraw and refund | PASS |
+| Option A / boost / two-app tests updated for the 20% buffer | PASS |
+
+Release wasm: 45,371 bytes. Test note: MockVM's event list breaks past about 9 events, so the buffer test counts and clears events per tx (a mock limitation, not the contract).
+
 ## VERIFY answers (Designer list and design.md)
 1. **Ordinary wallet as a station?** Yes, by uploading the contract to that address. It then becomes a contract account for the overridden types only. The private key keeps every type that isn't overridden. Use a separate account (§2). Each provider needs their own station contract account (§5). VERIFIED (authority docs; Fogata and Knode patterns).
 2. **Paying for calls into other contracts?** YES. The payer filters operations in `authorize` (§1, §2). VERIFIED in source. Testnet confirmation still recommended.
@@ -364,7 +393,7 @@ Release wasm: 44,024 bytes.
 2. v2 budget: 20% of `koin_amount` per rolling 24 h (6,000 at 30k), always refilled; 80% reserve; `admin_min` 100 is untouchable.
 3. Absolute reservations (Knode and Stories 3,000 each) for exempt Carl projects; only an owner boost exceeds them. The sellable slice = budget − reservations (0 at 30k). Per-user anti-spam is unchanged.
 4. The derived sellable slice backs prepaid vUSDT/vUSDC allowances (pull payment, auto expiry, renew), exempt overflow and big-upload debt repayment. It is 0 at 30k, so all three stay off until KOIN is added.
-5. 23/23 simulated-chain tests pass, with the introductory prices applied (1/7/30-day tiers, price snapshot, no auto-renew) (owner-only fee-exempt allowlist with events; fee-free, not limit-free). Testnet is parked. Knode `set_sponsor_limit(0)` waits until the station is fully launched.
+5. 25/25 simulated-chain tests pass (payments go directly to Carl; exempt apps get a 20% buffer from the reserve with alerts; paid allowances hard-capped). Earlier: 23/23, with the introductory prices applied (1/7/30-day tiers, price snapshot, no auto-renew) (owner-only fee-exempt allowlist with events; fee-free, not limit-free). Testnet is parked. Knode `set_sponsor_limit(0)` waits until the station is fully launched.
 
 **Decided (2026-10-19):** rolling windows; testnet OK (parked); Knode off only after launch; own Mana is the default payer; v2 budget model; vUSDT primary / vUSDC optional; Chainge USDT rejected.
 
@@ -372,9 +401,11 @@ Release wasm: 44,024 bytes.
 
 **Decided (17:11 UTC):** introductory prices from §8b; tiers 1/7/30 days only; price changes for new purchases only; renewals at the current price; no auto-renew.
 
+**Decided (5:18 / 5:22 PM, Carl):** treasury = owner wallet (direct pull, owner-changeable); fee-exempt apps get a 20% buffer from the reserve, no debt or repayment, 6,100 floor untouchable, `buffer_used` / `reserve_low` (15k) events; paid allowances hard-capped.
+
 **Decisions for Carl (open):**
-1. **Exempt overflow:** exempt usage beyond a reservation (and other Carl projects with no reservation) is taken only from the unsold sellable slice, and refused when there is none (always, at 30k). Alternatives: give each extra project its own reservation (which shrinks the sellable slice), or let exempt overflow take priority over sales.
-2. Treasury: the station (then `withdraw_revenue`) or Carl's wallet.
+1. (decided: reserved apps use the 20% reserve buffer.) Still open: exempt projects with no reservation (app 0) use only the unsold sellable slice, so they are refused at 30k. Keep that, or give them a small reservation?
+2. (decided: treasury = owner wallet)
 3. Refund/cancel policy: non-refundable once started / pro-rata on owner cancel / off-chain only.
 4. Big-upload limits: proposed 6,000 per request (above the 5,000 minimum), 12,000/week, 6,000 outstanding, 24 h cooldown, 72 h tickets, scaled to the sellable slice (§7b). They only matter once KOIN is added; at 30k big uploads are unavailable.
 5. vUSDC on or off; per-purchase max (proposed 500 vUSDT / 100 vUSDC).

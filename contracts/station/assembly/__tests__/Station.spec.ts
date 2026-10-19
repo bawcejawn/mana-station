@@ -38,7 +38,7 @@ function cfg(): station.config_object {
   c.per_min = 5; c.cooldown_ms = 600_000; c.day_actions = 25; c.day_mana = 60 * M;
   c.new_actions = 10; c.new_mana = 25 * M; c.new_pct = 100; c.max_ops = 2;
   c.big_max = 300 * M; c.big_cooldown_ms = DAYMS; c.big_week_cap = 500 * M; c.big_max_debt = 400 * M; c.big_ticket_ms = 3 * DAYMS;
-  c.max_allowances = 8; c.max_days = 90;
+  c.max_allowances = 8; c.max_days = 90; c.buffer_bp = 2000; c.alert_mana = 600 * M;
   return c;
 }
 function setup(): Station {
@@ -91,6 +91,7 @@ function setupA(): Station {
   signedBy([]); return s;
 }
 let gC: station.config_object | null = null;
+function countEv(name: string): i32 { let k = 0; const ev = MockVM.getEvents(); for (let i = 0; i < ev.length; i++) if (ev[i].name == name) k++; return k; }
 
 describe("v1 rules still hold", () => {
   it("approved call sponsored; transfers, unknown contracts/entry points, uploads, over-cap refused", () => {
@@ -127,30 +128,61 @@ describe("v1 rules still hold", () => {
 describe("budget: 20% of koin_amount per rolling 24 h; hard app allowances", () => {
   it("option A: Knode stops at its reservation; Stories unaffected; frees after 24 h", () => {
     const s = setupA(); let n = 0;
-    for (let i = 0; i < 60; i++) { at(NOW + 3000); if (play(s, user(i))) n++; }
-    expect(n).toBe(50);                                                     // 50 × 2 = 100 Mana, no overflow (sellable 0)
+    for (let i = 0; i < 70; i++) { at(NOW + 3000); if (play(s, user(i))) n++; }
+    expect(n).toBe(60);                                                     // 100 reserved + 20 buffer (20%) from the reserve
     expect(s.get_app(new station.get_app_arguments(1)).allowance).toBe(100 * M);
     expect(play(s, user(200), 2 * M, STORIES)).toBe(true);
     at(NOW + DAYMS + 2 * HOUR); expect(play(s, user(300))).toBe(true);
   });
-  it("beyond the reservation, exempt usage spills into the unsold sellable slice, then stops", () => {
+  it("buffer: a reserved exempt app may go 20% over (80 → 96) from the reserve, with an event; not in the 20% cap", () => {
     const s = setup(); let n = 0;
-    for (let i = 0; i < 70; i++) { at(NOW + 3000); if (play(s, user(i))) n++; }
-    expect(n).toBe(60);                                                     // 80 reserved + 40 sellable
-    buyAccount(s, U2, 10 * M, 7);                                            // a 7-day sale takes sellable capacity
-    at(NOW + DAYMS + 2 * HOUR); n = 0;
-    for (let i = 100; i < 170; i++) { at(NOW + 3000); if (play(s, user(i))) n++; }
-    expect(n).toBe(55);                                                     // 80 + (40 − 10 sold) = 110 Mana
+    let found = 0;                                                          // count + clear per tx (MockVM's event list breaks past ~9 events)
+    for (let i = 0; i < 60; i++) { at(NOW + 3000); MockVM.clearEvents(); if (play(s, user(i))) n++; found += countEv("station.buffer_used"); }
+    expect(n).toBe(48);                                                     // 80 + 16 = 96 Mana
+    expect(found).toBe(8);                                                  // one per buffer tx
+    const st = s.get_status(new station.get_status_arguments());
+    expect(st.used_24h).toBe(80 * M); expect(st.buffer_used_24h).toBe(16 * M);
+    const r = buyAccount(s, U2, 40 * M, 7);                                  // the whole sellable slice is sold
+    expect(r.id).toBe(1);
+    let m = 0;                                                              // the paid allowance is untouched by the buffer
+    for (let i = 0; i < 25; i++) { at(NOW + 70_000); tx(U2, 2 * M, [op(OTHER, EP_PLAY)]); if (ok(s)) m++; }
+    expect(m).toBe(20);                                                     // 40/day exactly: paid = hard cap, no buffer
+    at(NOW + DAYMS + 2 * HOUR); expect(play(s, user(300))).toBe(true);    // no debt: next day is a full allowance again
+    expect(s.get_status(new station.get_status_arguments()).sold_capacity).toBe(40 * M);
+  });
+  it("buffer never touches the hard floor (admin_min + budget); buffer % is owner-configurable", () => {
+    const s = setup(); gS = s;
+    for (let i = 0; i < 40; i++) { at(NOW + 3000); play(s, user(i)); }     // reservation full (80)
+    testSetMana(205 * M + 2 * M - 1);
+    at(NOW + 3000); expect(play(s, user(50))).toBe(false);                 // buffer would dip below 205
+    testSetMana(205 * M + 2 * M);
+    at(NOW + 3000); expect(play(s, user(51))).toBe(true);
+    testSetMana(1000 * M);
+    signedBy([OWNER]); const c = cfg(); c.buffer_bp = 0; s.set_config(new station.set_config_arguments(c));
+    const c2 = cfg(); c2.buffer_bp = 6000; gC = c2;
+    MockVM.commitTransaction(); expect(() => { gS!.set_config(new station.set_config_arguments(gC)); }).toThrow(); // > 50%
+    signedBy([U1]);
+    MockVM.commitTransaction(); expect(() => { gS!.set_config(new station.set_config_arguments(gC)); }).toThrow(); // owner only
+    signedBy([]);
+    at(NOW + 3000); expect(play(s, user(52))).toBe(false);                 // 0% buffer: stops at 82 > 80
+  });
+  it("reserve_low event once per dip below the alert level; re-armed after recovery", () => {
+    const s = setup();
+    expect(s.get_status(new station.get_status_arguments()).alert_level).toBe(600 * M);
+    testSetMana(601 * M); expect(play(s, U1)).toBe(true); expect(countEv("station.reserve_low")).toBe(1);
+    at(NOW + 3000); testSetMana(599 * M); expect(play(s, U2)).toBe(true); expect(countEv("station.reserve_low")).toBe(1);   // no repeat
+    at(NOW + 3000); testSetMana(900 * M); expect(play(s, user(1))).toBe(true);                       // recovered
+    at(NOW + 3000); testSetMana(600 * M); expect(play(s, user(2))).toBe(true); expect(countEv("station.reserve_low")).toBe(2);
   });
   it("only the owner can exceed it, with an explicit expiring boost", () => {
     const s = setupA();
-    for (let i = 0; i < 50; i++) { at(NOW + 3000); play(s, user(i)); }
+    for (let i = 0; i < 60; i++) { at(NOW + 3000); play(s, user(i)); }        // 100 + 20 buffer
     at(NOW + 3000); expect(play(s, user(99))).toBe(false);
     signedBy([U1]);
     gS = s; MockVM.commitTransaction(); expect(() => { gS!.set_app(new station.set_app_arguments(1, new station.app_object(100 * M, true, 20 * M, NOW + HOUR))); }).toThrow();
     signedBy([OWNER]); s.set_app(new station.set_app_arguments(1, new station.app_object(100 * M, true, 20 * M, NOW + HOUR))); signedBy([]);
     at(NOW + 3000); expect(play(s, user(99))).toBe(true);
-    at(NOW + 2 * HOUR); expect(play(s, user(98))).toBe(false);              // boost expired
+    at(NOW + 2 * HOUR); expect(play(s, user(98))).toBe(false);              // boost expired: 122 + 2 > 120
   });
   it("reservations can't exceed the 20% budget; adding KOIN creates a sellable slice, reservations unchanged", () => {
     const s = setup(); gS = s;
@@ -189,7 +221,8 @@ describe("sold allowances (prepaid in vUSDT)", () => {
     const s = setup();
     const r = buyAccount(s, U2, 10 * M, 7);
     expect(r.paid).toBe(200_000);                                             // 10/1,000 × 0.20 vUSDT
-    expect(testGetToken(USDT, STATION)).toBe(r.paid);                         // treasury = station by default
+    expect(testGetToken(USDT, OWNER)).toBe(r.paid);                           // default treasury = Carl's owner wallet (direct)
+    expect(testGetToken(USDT, STATION)).toBe(0);
     let n = 0;
     for (let i = 0; i < 8; i++) { at(NOW + 70_000); tx(U2, 2 * M, [op(OTHER, EP_PLAY)]); if (ok(s)) n++; }
     expect(n).toBe(5);                                                        // 10 Mana/day
@@ -276,11 +309,11 @@ describe("introductory prices: tiers, snapshots, no auto-renew", () => {
   it("no auto-renew: expiry just ends service, nothing is charged, only the payer can renew", () => {
     const s = setup(); gS = s;
     const r = buyAccount(s, U2, 10 * M, 1);
-    const bal = testGetToken(USDT, BUYER); const rev = testGetToken(USDT, STATION);
+    const bal = testGetToken(USDT, BUYER); const rev = testGetToken(USDT, OWNER);
     at(r.expiry + 40 * DAYMS);
     tx(U2, 2 * M, [op(OTHER, EP_PLAY)]); expect(ok(s)).toBe(false);
     expect(s.get_allowance(new station.get_allowance_arguments(r.id)).allowance!.expiry).toBe(r.expiry);
-    expect(testGetToken(USDT, BUYER)).toBe(bal); expect(testGetToken(USDT, STATION)).toBe(rev);
+    expect(testGetToken(USDT, BUYER)).toBe(bal); expect(testGetToken(USDT, OWNER)).toBe(rev);
     signedBy([U1]);                                                              // someone else can't renew on the buyer's tokens
     MockVM.commitTransaction(); expect(() => { gS!.renew(new station.renew_arguments(BUYER, 1, 1, USDT, 1000 * USD)); }).toThrow();
     signedBy([OWNER]);                                                           // nor the owner
@@ -365,30 +398,34 @@ describe("fee-exempt allowlist (Carl's projects)", () => {
     tx(U1, 2 * M, [op(OTHER, EP_NOPE)]); expect(ok(s)).toBe(false);
     expect(play(s, U1)).toBe(true);                                                // reserved Knode still works
   });
-  it("exempt usage counts toward the 20% station-wide cap", () => {
+  it("in-allowance exempt usage counts toward the 20% station-wide cap; buffers sit outside it", () => {
     const s = setup();
     signedBy([OWNER]); s.set_exempt(new station.set_exempt_arguments(OTHER, new station.exempt_object(1, false), false)); signedBy([]);
     let n = 0;                                                                     // OTHER shares Knode's reservation
     for (let i = 0; i < 40; i++) { at(NOW + 3000); if (play(s, user(i))) n++; }
     for (let i = 40; i < 80; i++) { at(NOW + 3000); tx(user(i), 2 * M, [op(OTHER, EP_NOPE)]); if (ok(s)) n++; }
-    for (let i = 80; i < 130; i++) { at(NOW + 3000); if (play(s, user(i), 2 * M, STORIES)) n++; }
-    expect(n).toBe(100);                                                           // 80 + 40 + 80 = 200 = 20% of 1,000
-    expect(s.get_status(new station.get_status_arguments()).used_24h).toBe(200 * M);
+    for (let i = 80; i < 140; i++) { at(NOW + 3000); if (play(s, user(i), 2 * M, STORIES)) n++; }
+    expect(n).toBe(96);                                                            // (80 + 16) + (80 + 16)
+    expect(s.get_status(new station.get_status_arguments()).used_24h).toBe(160 * M);
+    expect(s.get_status(new station.get_status_arguments()).buffer_used_24h).toBe(32 * M);
   });
 });
 
 describe("treasury, revenue, refunds, admin", () => {
-  it("treasury = Carl's wallet: payment lands there; on-chain withdraw is refused", () => {
+  it("treasury defaults to Carl's owner wallet (pull, direct); on-chain withdraw is refused; owner can change it", () => {
     const s = setup(); gS = s;
-    signedBy([OWNER]); const c = cfg(); c.treasury = OWNER; s.set_config(new station.set_config_arguments(c)); signedBy([]);
+    expect(s.get_status(new station.get_status_arguments()).treasury!).toStrictEqual(OWNER);
     const r = buyAccount(s, U2, 10 * M, 1);
     expect(testGetToken(USDT, OWNER)).toBe(r.paid);
     signedBy([OWNER]);
     MockVM.commitTransaction(); expect(() => { gS!.withdraw_revenue(new station.withdraw_revenue_arguments(USDT, OWNER, 1)); }).toThrow();
     signedBy([]);
   });
-  it("treasury = station: owner withdraws to Carl; owner cancel with optional refund", () => {
+  it("treasury = station (owner-set): owner withdraws to Carl; owner cancel with optional refund", () => {
     const s = setup(); gS = s;
+    signedBy([U1]); const c0 = cfg(); c0.treasury = STATION; gC = c0;
+    MockVM.commitTransaction(); expect(() => { gS!.set_config(new station.set_config_arguments(gC)); }).toThrow(); // owner only
+    signedBy([OWNER]); s.set_config(new station.set_config_arguments(c0)); signedBy([]);
     const r = buyAccount(s, U2, 10 * M, 30);                                  // 750,000 = 0.0075 vUSDT
     signedBy([U1]);
     MockVM.commitTransaction(); expect(() => { gS!.withdraw_revenue(new station.withdraw_revenue_arguments(USDT, U1, 1)); }).toThrow();

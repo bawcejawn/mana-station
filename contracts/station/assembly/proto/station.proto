@@ -31,7 +31,12 @@ message config_object {
   uint32 max_allowances = 21;                       // sold allowances open at once (bounded loops)
   uint64 max_days = 22 [jstype = JS_STRING];        // longest prepaid period per buy / renew
   // Where stablecoin payments land: the station itself (then withdraw_revenue to Carl) or Carl's wallet directly.
+  // Default (empty) = DIRECT TO THE OWNER WALLET (Carl, 5:18 PM). Owner may set another address, or the station's own id.
   bytes treasury = 23 [(koinos.btype) = ADDRESS];
+  // Fee-exempt reserved apps may go this far above their daily allowance (2000 = 20%: 3,000 → 3,600). The extra comes
+  // straight from the reserve (Carl, 5:22 PM): no debt, no repayment, never below the hard floor (admin_min + budget).
+  uint32 buffer_bp = 24;
+  uint64 alert_mana = 25 [jstype = JS_STRING];      // emit station.reserve_low below this Mana (0 = default 15,000)
 }
 
 // Carl's reserved app: a fixed RESERVATION of Mana per rolling 24 h (absolute, so adding KOIN never changes it;
@@ -130,6 +135,25 @@ message big_object {
   uint64 last_buy = 3 [jstype = JS_STRING];
   window_object week = 4;
   uint32 next_id = 5;                                // allowance ids
+  bool low_alerted = 6;                              // reserve_low already emitted for this dip
+}
+
+// Emitted when a fee-exempt reserved app uses its buffer (Mana above its daily allowance, from the reserve).
+message buffer_event {
+  uint32 app = 1;
+  bytes payee = 2 [(koinos.btype) = ADDRESS];
+  uint64 rc = 3 [jstype = JS_STRING];
+  uint64 app_used_24h = 4 [jstype = JS_STRING];      // including this tx
+  uint64 allowance = 5 [jstype = JS_STRING];
+  uint64 buffer_limit = 6 [jstype = JS_STRING];
+  uint64 mana_after = 7 [jstype = JS_STRING];
+}
+
+// Emitted once each time the station's Mana falls below the alert level: Carl should add KOIN.
+message reserve_alert_event {
+  uint64 mana_after = 1 [jstype = JS_STRING];
+  uint64 alert_level = 2 [jstype = JS_STRING];
+  uint64 hard_floor = 3 [jstype = JS_STRING];
 }
 
 // Explicit indexes (no open-ended storage scans): Carl's app ids and open sold-allowance ids.
@@ -158,6 +182,9 @@ message get_status_result {
   uint64 sold_capacity = 7 [jstype = JS_STRING];      // derived: daily budget − reservations
   uint64 sold_committed = 8 [jstype = JS_STRING];
   uint64 big_debt = 9 [jstype = JS_STRING];
+  uint64 buffer_used_24h = 10 [jstype = JS_STRING];   // reserve Mana used by app buffers (not in used_24h)
+  uint64 alert_level = 11 [jstype = JS_STRING];
+  bytes treasury = 12 [(koinos.btype) = ADDRESS];     // where payments land now
 }
 
 // @description One user's counters.

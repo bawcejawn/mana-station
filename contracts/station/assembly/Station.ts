@@ -12,7 +12,7 @@ import { System, Storage, Protobuf, Arrays, Token, Base58, authority, value, pro
 import { station } from "./proto/station";
 
 const S_CONFIG: u32 = 0, S_APPS: u32 = 1, S_ENTRIES: u32 = 2, S_USERS: u32 = 3, S_APPWIN: u32 = 4,
-  S_PRICES: u32 = 5, S_ALLOW: u32 = 6, S_TARGET: u32 = 7, S_TICKETS: u32 = 8, S_BIG: u32 = 9, S_REVENUE: u32 = 10, S_EXEMPT: u32 = 11, S_REGISTRY: u32 = 12, S_GLOBALWIN: u32 = 13, S_OVERFLOWWIN: u32 = 14,
+  S_PRICES: u32 = 5, S_ALLOW: u32 = 6, S_TARGET: u32 = 7, S_TICKETS: u32 = 8, S_BIG: u32 = 9, S_REVENUE: u32 = 10, S_EXEMPT: u32 = 11, S_REGISTRY: u32 = 12, S_GLOBALWIN: u32 = 13, S_OVERFLOWWIN: u32 = 14, S_BUFFERWIN: u32 = 15,
   S_TESTLEDGER: u32 = 90;
 const DAY: u64 = 86_400_000;
 const MANA: u64 = 100_000_000;
@@ -42,6 +42,7 @@ function u32Key(n: u32): Uint8Array { const k = new Uint8Array(4); k[0] = u8(n >
 function entryKey(contract: Uint8Array, ep: u32): Uint8Array { const k = new Uint8Array(contract.length + 4); k.set(contract, 0); k.set(u32Key(ep), contract.length); return k; }
 function pct(amount: u64, bp: u32): u64 { return amount / 10_000 * u64(bp); }
 function wholeManaUp(m: u64): u64 { return (m + MANA - 1) / MANA; }
+const DEFAULT_ALERT_MANA: u64 = 15_000 * MANA;     // Carl: alert below 15k by default
 const MAX_WHOLE_MANA: u64 = 100_000_000;            // quote bound (no u64 overflow with prices <= MAX_UNIT_PRICE)
 const MAX_UNIT_PRICE: u64 = 10_000_000_000;         // 100 tokens per 1,000 Mana(/day)
 /** Tier price per 1,000 Mana/day for a whole term; 0 = this duration is not offered. Only 1, 7 and 30 days exist. */
@@ -100,6 +101,7 @@ export class Station {
   exempt: Storage.Map<Uint8Array, station.exempt_object> = new Storage.Map(System.getContractId(), S_EXEMPT, station.exempt_object.decode, station.exempt_object.encode, null);
   registry: Storage.Obj<station.registry_object> = new Storage.Obj(System.getContractId(), S_REGISTRY, station.registry_object.decode, station.registry_object.encode, () => new station.registry_object());
   globalWin: Storage.Obj<station.window_object> = new Storage.Obj(System.getContractId(), S_GLOBALWIN, station.window_object.decode, station.window_object.encode, () => new station.window_object());
+  bufferWin: Storage.Obj<station.window_object> = new Storage.Obj(System.getContractId(), S_BUFFERWIN, station.window_object.decode, station.window_object.encode, () => new station.window_object());
   overflowWin: Storage.Obj<station.window_object> = new Storage.Obj(System.getContractId(), S_OVERFLOWWIN, station.window_object.decode, station.window_object.encode, () => new station.window_object());
   lastNew: bool = false;
 
@@ -121,7 +123,17 @@ export class Station {
     }
     const r = this.revenue.get(token)!; r.total += amount; this.revenue.put(token, r); // collected total (accounting)
   }
-  treasury(c: station.config_object): Uint8Array { return isAddress(c.treasury) ? c.treasury! : this.contractId; }
+  /** Default = Carl's owner wallet (direct, pull pattern). Owner-changeable: any address, or the station's own id. */
+  treasury(c: station.config_object): Uint8Array { return isAddress(c.treasury) ? c.treasury! : c.owner!; }
+  alertLevel(c: station.config_object): u64 { return c.alert_mana > 0 ? c.alert_mana : DEFAULT_ALERT_MANA; }
+  /** One station.reserve_low event per dip below the alert level; re-armed once Mana is back at or above it. */
+  watchReserve(c: station.config_object, after: u64): void {
+    const lvl = this.alertLevel(c); const b = this.big.get()!;
+    if (after < lvl && !b.low_alerted) {
+      b.low_alerted = true; this.big.put(b);
+      System.event("station.reserve_low", Protobuf.encode(new station.reserve_alert_event(after, lvl, this.bigFloor(c)), station.reserve_alert_event.encode), [c.owner!]);
+    } else if (after >= lvl && b.low_alerted) { b.low_alerted = false; this.big.put(b); }
+  }
   /** Only when the treasury is the station itself; with Carl's wallet as treasury the money is already with Carl. */
   payOut(c: station.config_object, token: Uint8Array, to: Uint8Array, amount: u64): void {
     System.require(Arrays.equal(this.treasury(c), this.contractId), "treasury is an external wallet: pay from there");
@@ -247,10 +259,10 @@ export class Station {
     if (t != null && (rc > c.hard_max || hasUpload)) return this.bigOk(c, t, ops, rc, mana, now, payee);
     if (!allCalls || rc > c.hard_max) return false;
     if (mana - rc < c.admin_min) return false;
-    // Station-wide rolling 24 h cap: 20% of koin_amount (+ explicit owner boosts).
+    // Station-wide rolling 24 h cap: 20% of koin_amount (+ explicit owner boosts). App buffers are outside it (below).
     const gw = this.globalWin.get()!;
     roll(gw, now / APP_SLOT, APP_N, false);
-    if (sumMana(gw) + rc > this.globalLimit(c, now)) return false;
+    const globalRoom = sumMana(gw) + rc <= this.globalLimit(c, now);
     // Route A: fee-exempt contracts (Carl's projects). Fee-free, not limit-free.
     const target0 = ops[0].call_contract!.contract_id;
     let oneTarget = true;
@@ -268,21 +280,30 @@ export class Station {
       if (rc > cap) return false;
       const u = this.userCheck(c, payee, now, h, rc); if (u == null) return false;
       const isNew = this.lastNew;
-      let fromReservation = false;
-      let aw: station.window_object | null = null;
       if (ex.app > 0) {
+        // Reserved app: its allowance, then up to buffer_bp more straight from the reserve (Carl, 5:22 PM).
         const a = this.apps.get(u32Key(ex.app));
-        if (a != null && a.active) {
-          const allow = this.appAllowance(c, a, now);
-          aw = this.appWin.get(u32Key(ex.app))!;
-          roll(aw!, now / APP_SLOT, APP_N, true);
-          fromReservation = sumMana(aw!) + rc <= allow && (!isNew || sumNew(aw!) + rc <= allow / 100 * u64(c.new_pct));
+        if (a == null || !a.active) return false;
+        const allow = this.appAllowance(c, a, now);
+        const aw = this.appWin.get(u32Key(ex.app))!;
+        roll(aw, now / APP_SLOT, APP_N, true);
+        const limit = allow + pct(allow, c.buffer_bp);
+        if (isNew && sumNew(aw) + rc > limit / 100 * u64(c.new_pct)) return false;  // new-user pool: new_pct of the buffered limit
+        const used = sumMana(aw) + rc;
+        if (used <= allow) {
+          if (!globalRoom) return false;
+          add(gw, now / APP_SLOT, APP_N, rc, false); this.globalWin.put(gw);
+        } else {
+          if (used > limit) return false;
+          if (mana - rc < this.bigFloor(c)) return false;              // hard floor (admin_min + budget) untouchable
+          const bw = this.bufferWin.get()!; roll(bw, now / APP_SLOT, APP_N, false);
+          add(bw, now / APP_SLOT, APP_N, rc, false); this.bufferWin.put(bw);
+          System.event("station.buffer_used", Protobuf.encode(new station.buffer_event(ex.app, payee, rc, used, allow, limit, mana - rc), station.buffer_event.encode), [payee]);
         }
-      }
-      if (fromReservation) {
-        add(aw!, now / APP_SLOT, APP_N, rc, isNew); this.appWin.put(u32Key(ex.app), aw!);
+        add(aw, now / APP_SLOT, APP_N, rc, isNew); this.appWin.put(u32Key(ex.app), aw);
       } else {
-        // Beyond the reservation (or a non-reserved project): only from the unsold part of the sellable slice.
+        // Exempt project without a reservation: only the unsold part of the sellable slice (unchanged rule).
+        if (!globalRoom) return false;
         if (this.debtNow(c, this.big.get()!, now) > 0) return false;
         const sell = this.soldCap(c); const com = this.committed(c, now, false)[0];
         const free = sell > com ? sell - com : 0;
@@ -290,9 +311,10 @@ export class Station {
         roll(ow, now / APP_SLOT, APP_N, false);
         if (sumMana(ow) + rc > free) return false;
         add(ow, now / APP_SLOT, APP_N, rc, false); this.overflowWin.put(ow);
+        add(gw, now / APP_SLOT, APP_N, rc, false); this.globalWin.put(gw);
       }
-      add(gw, now / APP_SLOT, APP_N, rc, false);
-      this.users.put(payee, u); this.globalWin.put(gw);
+      this.users.put(payee, u);
+      this.watchReserve(c, mana - rc);
       return true;
     }
     // Routes B / C: sold allowances (account = payee, or app = the one contract every op calls).
@@ -304,6 +326,7 @@ export class Station {
     if (id == null) return false;
     const s = this.allowances.get(u32Key(u32(id.total)));
     if (s == null || s.kind != kind || s.expiry <= now) return false;    // expired: cut off automatically
+    if (!globalRoom) return false;                                     // paid: hard cap, no buffer
     if (this.debtNow(c, this.big.get()!, now) > 0) return false;        // sold slice is repaying big uploads
     if (s.day == null) s.day = new station.window_object();
     roll(s.day!, now / USER_SLOT, USER_N, false);
@@ -313,6 +336,7 @@ export class Station {
     add(s.day!, now / USER_SLOT, USER_N, rc, false); add(gw, now / APP_SLOT, APP_N, rc, false);
     this.allowances.put(u32Key(s.id), s); this.globalWin.put(gw);
     if (u != null) this.users.put(payee, u);
+    this.watchReserve(c, mana - rc);
     return true;
   }
 
@@ -327,6 +351,7 @@ export class Station {
     }
     t.remaining -= rc;
     this.tickets.put(payee, t);
+    this.watchReserve(c, mana - rc);
     return true;
   }
 
@@ -340,6 +365,8 @@ export class Station {
     r.reserve_floor = c.koin_amount - r.daily_budget; r.big_floor = this.bigFloor(c);
     r.used_24h = sumMana(gw); r.sold_capacity = this.soldCap(c); r.sold_committed = cm[0];
     r.big_debt = this.debtNow(c, this.big.get()!, now);
+    const bw = this.bufferWin.get()!; roll(bw, now / APP_SLOT, APP_N, false);
+    r.buffer_used_24h = sumMana(bw); r.alert_level = this.alertLevel(c); r.treasury = this.treasury(c);
     return r;
   }
   get_user(args: station.get_user_arguments): station.get_user_result {
@@ -494,6 +521,7 @@ export class Station {
   checkConfig(c: station.config_object): void {
     System.require(isAddress(c.owner), "owner required");
     System.require(c.refill_bp <= 2000, "daily budget above one day's refill (20%)");
+    System.require(c.buffer_bp <= 5000, "buffer above 50%");
     System.require(c.koin_amount <= this.koinBalance(), "koin_amount above the station's KOIN balance");
     this.validateReservations(c, 0, null);
   }
