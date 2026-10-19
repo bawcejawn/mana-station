@@ -1,6 +1,6 @@
 /** Mana Station v2 on a simulated chain (MockVM). Mana, KOIN balance and stablecoins are test values. Run: npm test */
 import { Base58, MockVM, authority, chain, System, protocol, Protobuf } from "@koinos/sdk-as";
-import { Station, testSetMana, testSetBalance, testSetToken, testGetToken, VUSDT, VUSDC } from "../Station";
+import { Station, testSetMana, testSetBalance, testSetToken, testGetToken, VUSDT, VUSDC, ALLOWANCE_TERMS, BIG_TERMS } from "../Station";
 import { station } from "../proto/station";
 
 const STATION = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqe");
@@ -274,6 +274,7 @@ describe("introductory prices: tiers, snapshots, no auto-renew", () => {
     expect(buyAccount(s, U1, 10 * M, 7).paid).toBe(400_000);                    // new purchase: new price
     signedBy([BUYER]);
     MockVM.commitTransaction(); expect(() => { gS!.renew(new station.renew_arguments(BUYER, 1, 7, USDT, 200_000)); }).toThrow(); // old price not honoured for a renewal
+    MockVM.clearEvents();                                                       // MockVM event list breaks past ~9 events
     const rr = s.renew(new station.renew_arguments(BUYER, r.id, 7, USDT, 1000 * USD)); signedBy([]);
     expect(rr.paid).toBe(400_000); expect(rr.unit_price).toBe(40_000_000); expect(rr.expiry).toBe(exp + 7 * DAYMS);
     a = s.get_allowance(new station.get_allowance_arguments(r.id)).allowance!;
@@ -324,6 +325,24 @@ describe("introductory prices: tiers, snapshots, no auto-renew", () => {
 });
 
 describe("big uploads from the reserve", () => {
+  it("approved limits at mainnet scale: 6,000 per request, 12,000 per 7 days, 6,000 outstanding; owner-adjustable", () => {
+    const s = setup(); gS = s;
+    testSetBalance(40_000 * M); testSetMana(40_000 * M);
+    const c = cfg(); c.koin_amount = 40_000 * M; c.big_max = 6000 * M; c.big_week_cap = 12_000 * M; c.big_max_debt = 6000 * M; c.big_cooldown_ms = 0;
+    signedBy([OWNER]); s.set_config(new station.set_config_arguments(c)); signedBy([]);
+    expect(s.quote_big_upload(new station.quote_big_upload_arguments(USDT, 6001 * M)).reason!).toBe("above the per-request maximum");
+    expect(s.quote_big_upload(new station.quote_big_upload_arguments(USDT, 6000 * M)).available).toBe(true);
+    signedBy([BUYER]);
+    expect(s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U1, 6000 * M, USDT, 1000 * USD, false)).paid).toBe(30_000_000);
+    expect(s.quote_big_upload(new station.quote_big_upload_arguments(USDT, 50 * M)).reason!).toBe("reserve still repaying"); // 6,000 outstanding
+    at(NOW + DAYMS + 1000);                                                       // repaid at the sellable rate (7,840/day)
+    s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U2, 6000 * M, USDT, 1000 * USD, false));
+    at(NOW + DAYMS + 1000);
+    expect(s.quote_big_upload(new station.quote_big_upload_arguments(USDT, 50 * M)).reason!).toBe("weekly big-upload cap reached"); // 12,000
+    signedBy([OWNER]); const c2 = cfg(); c2.koin_amount = 40_000 * M; c2.big_max = 7000 * M; c2.big_week_cap = 20_000 * M; c2.big_max_debt = 7000 * M; c2.big_cooldown_ms = 0;
+    s.set_config(new station.set_config_arguments(c2)); signedBy([]);
+    expect(s.quote_big_upload(new station.quote_big_upload_arguments(USDT, 6001 * M)).available).toBe(true); // owner raised them
+  });
   it("prepaid ticket ignores the daily limit, bounded by floor, per-request max, cooldown, weekly cap and debt", () => {
     const s = setup(); gS = s;
     signedBy([BUYER]);
@@ -421,7 +440,7 @@ describe("treasury, revenue, refunds, admin", () => {
     MockVM.commitTransaction(); expect(() => { gS!.withdraw_revenue(new station.withdraw_revenue_arguments(USDT, OWNER, 1)); }).toThrow();
     signedBy([]);
   });
-  it("treasury = station (owner-set): owner withdraws to Carl; owner cancel with optional refund", () => {
+  it("treasury = station (owner-set): owner withdraws to Carl; no refund path", () => {
     const s = setup(); gS = s;
     signedBy([U1]); const c0 = cfg(); c0.treasury = STATION; gC = c0;
     MockVM.commitTransaction(); expect(() => { gS!.set_config(new station.set_config_arguments(gC)); }).toThrow(); // owner only
@@ -432,10 +451,45 @@ describe("treasury, revenue, refunds, admin", () => {
     signedBy([OWNER]);
     s.withdraw_revenue(new station.withdraw_revenue_arguments(USDT, OWNER, 500_000));
     expect(testGetToken(USDT, OWNER)).toBe(500_000);
-    s.cancel_allowance(new station.cancel_allowance_arguments(r.id, USDT, 200_000));
-    expect(testGetToken(USDT, BUYER)).toBe(1000 * USD - r.paid + 200_000);
+    s.set_paused(new station.set_paused_arguments(true));                     // kill switch: service stops, money stays
+    expect(testGetToken(USDT, BUYER)).toBe(1000 * USD - r.paid);
+    s.set_paused(new station.set_paused_arguments(false)); signedBy([]);
+    at(NOW + 3000); tx(U2, 2 * M, [op(OTHER, EP_PLAY)]); expect(ok(s)).toBe(true);  // term continues; nothing refunded
+    expect(testGetToken(USDT, BUYER)).toBe(1000 * USD - r.paid);
+  });
+  it("no refunds, prepaid for future use: terms on quotes and purchase events", () => {
+    const s = setup();
+    const q = s.quote_allowance(new station.quote_allowance_arguments(USDT, 10 * M, 7));
+    expect(q.refundable).toBe(false); expect(q.auto_renew).toBe(false); expect(q.terms!).toBe(ALLOWANCE_TERMS);
+    expect(ALLOWANCE_TERMS.includes("No refunds")).toBe(true); expect(ALLOWANCE_TERMS.includes("Prepaid for future use")).toBe(true);
+    const bq = s.quote_big_upload(new station.quote_big_upload_arguments(USDT, 100 * M));
+    expect(bq.refundable).toBe(false); expect(bq.auto_renew).toBe(false); expect(bq.terms!).toBe(BIG_TERMS);
+    MockVM.clearEvents(); const r = buyAccount(s, U2, 10 * M, 7);
+    const ev = MockVM.getEvents(); const e = ev[ev.length - 1];
+    expect(e.name).toBe("station.allowance_bought");
+    const pe = Protobuf.decode<station.purchase_event>(e.data!, station.purchase_event.decode);
+    expect(pe.refundable).toBe(false); expect(pe.auto_renew).toBe(false); expect(pe.terms!).toBe(ALLOWANCE_TERMS);
+    expect(pe.paid).toBe(r.paid); expect(pe.allowance!.id).toBe(r.id);
+    MockVM.clearEvents(); signedBy([BUYER]);
+    s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U1, 100 * M, USDT, 1000 * USD, false)); signedBy([]);
+    const ev2 = MockVM.getEvents(); const pb = Protobuf.decode<station.purchase_event>(ev2[ev2.length - 1].data!, station.purchase_event.decode);
+    expect(pb.terms!).toBe(BIG_TERMS); expect(pb.ticket!.paid).toBe(500_000);
+  });
+  it("vUSDT and vUSDC both accepted; vUSDC has the lower per-purchase maximum (liquidity)", () => {
+    const s = setup();
+    signedBy([OWNER]);
+    s.set_price(new station.set_price_arguments(USDT, new station.price_object(true, 500 * USD, 3_000_000, 20_000_000, 75_000_000, 5_000_000, 50 * M)));
+    s.set_price(new station.set_price_arguments(USDC, new station.price_object(true, 100 * USD, 3_000_000, 20_000_000, 75_000_000, 5_000_000, 50 * M)));
     signedBy([]);
-    at(NOW + 3000); tx(U2, 2 * M, [op(OTHER, EP_PLAY)]); expect(ok(s)).toBe(false); // cancelled
+    // 140,000 Mana/day for 30 days = 105 tokens: above vUSDC's 100 max, within vUSDT's 500 (then capacity decides)
+    expect(s.quote_allowance(new station.quote_allowance_arguments(USDC, 140_000 * M, 30)).reason!).toBe("above the per-purchase maximum");
+    expect(s.quote_allowance(new station.quote_allowance_arguments(USDT, 140_000 * M, 30)).reason!).toBe("sold capacity full");
+    testSetToken(USDC, BUYER, 10 * USD);
+    signedBy([BUYER]);
+    const r = s.buy_allowance(new station.buy_allowance_arguments(BUYER, 2, U2, 10 * M, 30, USDC, 1000 * USD)); signedBy([]);
+    expect(r.paid).toBe(750_000);
+    expect(testGetToken(USDC, OWNER)).toBe(750_000);                           // straight to Carl, in vUSDC
+    expect(testGetToken(USDC, BUYER)).toBe(10 * USD - 750_000);
   });
   it("kill switch: pause stops sponsorship and buys; owner can unpause with station Mana", () => {
     const s = setup(); gS = s;

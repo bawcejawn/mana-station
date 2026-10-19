@@ -153,13 +153,6 @@
       "return": "station.withdraw_revenue_result",
       "read_only": false,
       "description": "Send collected stablecoin revenue to `to` (owner)."
-    },
-    "cancel_allowance": {
-      "entry_point": 3345235150,
-      "argument": "station.cancel_allowance_arguments",
-      "return": "station.cancel_allowance_result",
-      "read_only": false,
-      "description": "End a sold allowance early and optionally refund from revenue (owner; policy is an open decision)."
     }
   },
   "koilib_types": {
@@ -705,6 +698,44 @@
               }
             }
           },
+          "purchase_event": {
+            "fields": {
+              "allowance": {
+                "type": "allowance_object",
+                "id": 1
+              },
+              "ticket": {
+                "type": "ticket_object",
+                "id": 2
+              },
+              "token": {
+                "type": "bytes",
+                "id": 3,
+                "options": {
+                  "(koinos.btype)": "CONTRACT_ID"
+                }
+              },
+              "paid": {
+                "type": "uint64",
+                "id": 4,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "refundable": {
+                "type": "bool",
+                "id": 5
+              },
+              "auto_renew": {
+                "type": "bool",
+                "id": 6
+              },
+              "terms": {
+                "type": "string",
+                "id": 7
+              }
+            }
+          },
           "buffer_event": {
             "fields": {
               "app": {
@@ -1010,6 +1041,18 @@
           },
           "quote_allowance_result": {
             "fields": {
+              "refundable": {
+                "type": "bool",
+                "id": 5
+              },
+              "auto_renew": {
+                "type": "bool",
+                "id": 6
+              },
+              "terms": {
+                "type": "string",
+                "id": 7
+              },
               "price": {
                 "type": "uint64",
                 "id": 1,
@@ -1054,6 +1097,18 @@
           },
           "quote_big_upload_result": {
             "fields": {
+              "refundable": {
+                "type": "bool",
+                "id": 5
+              },
+              "auto_renew": {
+                "type": "bool",
+                "id": 6
+              },
+              "terms": {
+                "type": "string",
+                "id": 7
+              },
               "price": {
                 "type": "uint64",
                 "id": 1,
@@ -1487,31 +1542,6 @@
             }
           },
           "withdraw_revenue_result": {
-            "fields": {}
-          },
-          "cancel_allowance_arguments": {
-            "fields": {
-              "id": {
-                "type": "uint32",
-                "id": 1
-              },
-              "token": {
-                "type": "bytes",
-                "id": 2,
-                "options": {
-                  "(koinos.btype)": "CONTRACT_ID"
-                }
-              },
-              "refund": {
-                "type": "uint64",
-                "id": 3,
-                "options": {
-                  "jstype": "JS_STRING"
-                }
-              }
-            }
-          },
-          "cancel_allowance_result": {
             "fields": {}
           }
         }

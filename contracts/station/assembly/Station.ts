@@ -42,6 +42,8 @@ function u32Key(n: u32): Uint8Array { const k = new Uint8Array(4); k[0] = u8(n >
 function entryKey(contract: Uint8Array, ep: u32): Uint8Array { const k = new Uint8Array(contract.length + 4); k.set(contract, 0); k.set(u32Key(ep), contract.length); return k; }
 function pct(amount: u64, bp: u32): u64 { return amount / 10_000 * u64(bp); }
 function wholeManaUp(m: u64): u64 { return (m + MANA - 1) / MANA; }
+export const ALLOWANCE_TERMS = "Prepaid for future use. No refunds. No auto-renew: service stops at expiry unless you renew, at the price current then. Daily, 7-day and 30-day offers: buy only what you need. Non-transferable; not redeemable for crypto or cash. Introductory prices may increase for new purchases. Service may be paused (kill switch).";
+export const BIG_TERMS = "Prepaid one-time big upload for future use. No refunds. Unused Mana expires with the ticket. No auto-renew. Non-transferable; not redeemable for crypto or cash. Service may be paused (kill switch).";
 const DEFAULT_ALERT_MANA: u64 = 15_000 * MANA;     // Carl: alert below 15k by default
 const MAX_WHOLE_MANA: u64 = 100_000_000;            // quote bound (no u64 overflow with prices <= MAX_UNIT_PRICE)
 const MAX_UNIT_PRICE: u64 = 10_000_000_000;         // 100 tokens per 1,000 Mana(/day)
@@ -386,7 +388,7 @@ export class Station {
     const r = new station.get_entry_result(); r.entry = this.entries.get(entryKey(args.contract_id!, args.entry_point)); return r;
   }
   allowanceQuote(c: station.config_object, token: Uint8Array, manaPerDay: u64, days: u64, now: u64, ignoreId: u32): station.quote_allowance_result {
-    const r = new station.quote_allowance_result();
+    const r = new station.quote_allowance_result(); r.terms = ALLOWANCE_TERMS;
     const p = this.prices.get(token);
     if (p == null || !p.active) { r.reason = "token not accepted"; return r; }
     const unit = tierPrice(p, days);
@@ -406,7 +408,7 @@ export class Station {
     return this.allowanceQuote(this.config.get()!, args.token!, args.mana_per_day, args.days, this.now(), 0);
   }
   bigQuote(c: station.config_object, token: Uint8Array, mana: u64, now: u64): station.quote_allowance_result {
-    const r = new station.quote_allowance_result(); const p = this.prices.get(token);
+    const r = new station.quote_allowance_result(); r.terms = BIG_TERMS; const p = this.prices.get(token);
     if (p == null || !p.active) { r.reason = "token not accepted"; return r; }
     const b = this.big.get()!;
     if (p.big_per_1000 == 0) { r.reason = "big uploads not priced for this token"; return r; }
@@ -425,7 +427,8 @@ export class Station {
   }
   quote_big_upload(args: station.quote_big_upload_arguments): station.quote_big_upload_result {
     const q = this.bigQuote(this.config.get()!, args.token!, args.mana, this.now());
-    return new station.quote_big_upload_result(q.price, q.available, q.reason, q.unit_price);
+    const r = new station.quote_big_upload_result(); r.price = q.price; r.available = q.available; r.reason = q.reason; r.unit_price = q.unit_price; r.terms = q.terms;
+    return r;
   }
   get_allowance(args: station.get_allowance_arguments): station.get_allowance_result {
     const r = new station.get_allowance_result(); const a = this.allowances.get(u32Key(args.id));
@@ -457,7 +460,7 @@ export class Station {
     this.allowances.put(u32Key(a.id), a);
     const reg = this.registry.get()!; reg.open_ids.push(a.id); this.registry.put(reg);
     this.targets.put(args.target!, new station.revenue_object(u64(a.id)));
-    System.event("station.allowance_bought", Protobuf.encode(a, station.allowance_object.encode), [args.buyer!, args.target!]);
+    System.event("station.allowance_bought", Protobuf.encode(new station.purchase_event(a, null, args.token, q.price, false, false, ALLOWANCE_TERMS), station.purchase_event.encode), [args.buyer!, args.target!]);
     return new station.buy_allowance_result(a.id, a.expiry, q.price);
   }
   renew(args: station.renew_arguments): station.renew_result {
@@ -478,7 +481,7 @@ export class Station {
     a!.token = args.token; a!.term_days = args.days; a!.unit_price = q.unit_price; a!.paid = q.price; a!.term_start = start;
     a!.total_paid += q.price;
     this.allowances.put(u32Key(a!.id), a!);
-    System.event("station.allowance_renewed", Protobuf.encode(a!, station.allowance_object.encode), [args.payer!, a!.target!]);
+    System.event("station.allowance_renewed", Protobuf.encode(new station.purchase_event(a!, null, args.token, q.price, false, false, ALLOWANCE_TERMS), station.purchase_event.encode), [args.payer!, a!.target!]);
     return new station.renew_result(a!.expiry, q.price, q.unit_price);
   }
   buy_big_upload(args: station.buy_big_upload_arguments): station.buy_big_upload_result {
@@ -498,7 +501,7 @@ export class Station {
     this.big.put(b);
     const t = new station.ticket_object(args.buyer, args.mana, args.mana, now + c.big_ticket_ms, args.allow_upload, args.token, q.price);
     this.tickets.put(args.payee!, t);
-    System.event("station.big_upload_bought", Protobuf.encode(t, station.ticket_object.encode), [args.buyer!, args.payee!]);
+    System.event("station.big_upload_bought", Protobuf.encode(new station.purchase_event(null, t, args.token, q.price, false, false, BIG_TERMS), station.purchase_event.encode), [args.buyer!, args.payee!]);
     return new station.buy_big_upload_result(t.expiry, q.price);
   }
   close_ticket(args: station.close_ticket_arguments): station.close_ticket_result {
@@ -585,11 +588,6 @@ export class Station {
     this.payOut(c, args.token!, args.to!, args.amount);
     return new station.withdraw_revenue_result();
   }
-  cancel_allowance(args: station.cancel_allowance_arguments): station.cancel_allowance_result {
-    const c = this.requireOwner(); const now = this.now();
-    const a = this.allowances.get(u32Key(args.id)); System.require(a != null, "no such allowance");
-    a!.expiry = now; this.allowances.put(u32Key(a!.id), a!);
-    if (args.refund > 0) this.payOut(c, args.token!, a!.buyer!, args.refund);
-    return new station.cancel_allowance_result();
-  }
+  // No cancel/refund path (Carl, 7:32 PM): sales are prepaid for future use and non-refundable. The station never
+  // pays tokens to buyers; payOut is only used by withdraw_revenue (treasury = station). Kill switch: set_paused.
 }

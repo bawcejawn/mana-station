@@ -53,7 +53,7 @@
       "app": 2,
       "strict": true
     },
-    "_other_carl_projects": "app 0: fee-free but only from the unsold sellable slice (refused while it is 0)"
+    "_other_carl_projects": "app 0: fee-free but only from the unsold sellable slice; refused while it is 0 (DECIDED by Carl 7:33 PM). Capacity opens when KOIN is added or a reservation is assigned"
   },
   "entries": "per-action caps for the strict exempt contracts: set after the testnet measurement (3 Mana each until then)",
   "prices": {
@@ -64,16 +64,18 @@
       "price_30d": "75000000",
       "big_per_1000": "5000000",
       "big_min_mana": "500000000000",
-      "max_per_purchase": "OPEN (proposed 50000000000 = 500 vUSDT)"
+      "max_per_purchase": "50000000000",
+      "_max": "500 vUSDT (DECIDED by Carl 7:32 PM)"
     },
     "vUSDC 1N8iYrYEJdCVK1rhbqv3qZUzHcpoeKmFnj": {
-      "active": "OPEN",
+      "active": true,
       "price_1d": "3000000",
       "price_7d": "20000000",
       "price_30d": "75000000",
       "big_per_1000": "5000000",
       "big_min_mana": "500000000000",
-      "max_per_purchase": "OPEN (proposed 10000000000 = 100 vUSDC)"
+      "max_per_purchase": "10000000000",
+      "_max": "100 vUSDC: lower on purpose because vUSDC liquidity on Koinos is thinner (stablecoins.md); DECIDED by Carl 7:32 PM"
     },
     "_units": "token base units, 8 decimals. Allowance prices are per 1,000 Mana/day for the whole term ($0.03 / $0.20 / $0.75); big upload $0.05 per 1,000 Mana, minimum 5,000 Mana = 25,000,000 ($0.25). Price = ceil(whole Mana × tier / 1,000)",
     "_source": "Carl approved via Orchestrator 2026-10-19 17:11 UTC; monetization_legal.md §8b (introductory; may increase for new purchases)",
@@ -81,7 +83,7 @@
     "rejected": "Chainge USDT 19WrWze3XAoMa3Mwqys4rJMP6emZX2wfpH (set_price refuses it)"
   },
   "_big_upload_limits": {
-    "status": "CARL DECISION (proposed; replaces 2,000 / 6,000 / 6,000, which conflicted with the 5,000 minimum)",
+    "status": "DECIDED by Carl (7:32 PM): approved as proposed; all owner-adjustable via set_config",
     "big_max": "6,000 Mana per request (must be >= the 5,000 minimum)",
     "big_week_cap": "12,000 Mana per rolling 7 days",
     "big_max_debt": "6,000 Mana outstanding",
@@ -95,5 +97,12 @@
     "worst_day": "3,600 + 3,600 = 7,200 vs 6,000 refill → the reserve dips by at most 1,200 that day",
     "alerts": "station.buffer_used on each buffer tx; station.reserve_low once per dip below alert_mana (15,000) → add KOIN",
     "no_reservation_projects": "exempt projects with app 0 still use only the unsold sellable slice (0 at 30k)"
+  },
+  "_terms": {
+    "status": "DECIDED by Carl (7:32 PM): no refunds",
+    "allowance": "Prepaid for future use. No refunds. No auto-renew: service stops at expiry unless you renew, at the price current then. Daily, 7-day and 30-day offers: buy only what you need. Non-transferable; not redeemable for crypto or cash. Introductory prices may increase for new purchases. Service may be paused (kill switch).",
+    "big_upload": "Prepaid one-time big upload for future use. No refunds. Unused Mana expires with the ticket. No auto-renew. Non-transferable; not redeemable for crypto or cash. Service may be paused (kill switch).",
+    "where": "returned by quote_allowance / quote_big_upload (terms, refundable=false, auto_renew=false) and in every purchase_event; constants ALLOWANCE_TERMS / BIG_TERMS in Station.ts",
+    "contract": "cancel_allowance removed; the station never pays tokens to buyers. Kill switch set_paused stays"
   }
 }

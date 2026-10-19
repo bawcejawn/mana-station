@@ -1250,6 +1250,126 @@ export namespace station {
     }
   }
 
+  export class purchase_event {
+    static encode(message: purchase_event, writer: Writer): void {
+      const unique_name_allowance = message.allowance;
+      if (unique_name_allowance !== null) {
+        writer.uint32(10);
+        writer.fork();
+        allowance_object.encode(unique_name_allowance, writer);
+        writer.ldelim();
+      }
+
+      const unique_name_ticket = message.ticket;
+      if (unique_name_ticket !== null) {
+        writer.uint32(18);
+        writer.fork();
+        ticket_object.encode(unique_name_ticket, writer);
+        writer.ldelim();
+      }
+
+      const unique_name_token = message.token;
+      if (unique_name_token !== null) {
+        writer.uint32(26);
+        writer.bytes(unique_name_token);
+      }
+
+      if (message.paid != 0) {
+        writer.uint32(32);
+        writer.uint64(message.paid);
+      }
+
+      if (message.refundable != false) {
+        writer.uint32(40);
+        writer.bool(message.refundable);
+      }
+
+      if (message.auto_renew != false) {
+        writer.uint32(48);
+        writer.bool(message.auto_renew);
+      }
+
+      const unique_name_terms = message.terms;
+      if (unique_name_terms !== null) {
+        writer.uint32(58);
+        writer.string(unique_name_terms);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): purchase_event {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new purchase_event();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.allowance = allowance_object.decode(
+              reader,
+              reader.uint32()
+            );
+            break;
+
+          case 2:
+            message.ticket = ticket_object.decode(reader, reader.uint32());
+            break;
+
+          case 3:
+            message.token = reader.bytes();
+            break;
+
+          case 4:
+            message.paid = reader.uint64();
+            break;
+
+          case 5:
+            message.refundable = reader.bool();
+            break;
+
+          case 6:
+            message.auto_renew = reader.bool();
+            break;
+
+          case 7:
+            message.terms = reader.string();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    allowance: allowance_object | null;
+    ticket: ticket_object | null;
+    token: Uint8Array | null;
+    paid: u64;
+    refundable: bool;
+    auto_renew: bool;
+    terms: string | null;
+
+    constructor(
+      allowance: allowance_object | null = null,
+      ticket: ticket_object | null = null,
+      token: Uint8Array | null = null,
+      paid: u64 = 0,
+      refundable: bool = false,
+      auto_renew: bool = false,
+      terms: string | null = null
+    ) {
+      this.allowance = allowance;
+      this.ticket = ticket;
+      this.token = token;
+      this.paid = paid;
+      this.refundable = refundable;
+      this.auto_renew = auto_renew;
+      this.terms = terms;
+    }
+  }
+
   export class buffer_event {
     static encode(message: buffer_event, writer: Writer): void {
       if (message.app != 0) {
@@ -2069,6 +2189,22 @@ export namespace station {
 
   export class quote_allowance_result {
     static encode(message: quote_allowance_result, writer: Writer): void {
+      if (message.refundable != false) {
+        writer.uint32(40);
+        writer.bool(message.refundable);
+      }
+
+      if (message.auto_renew != false) {
+        writer.uint32(48);
+        writer.bool(message.auto_renew);
+      }
+
+      const unique_name_terms = message.terms;
+      if (unique_name_terms !== null) {
+        writer.uint32(58);
+        writer.string(unique_name_terms);
+      }
+
       if (message.price != 0) {
         writer.uint32(8);
         writer.uint64(message.price);
@@ -2098,6 +2234,18 @@ export namespace station {
       while (reader.ptr < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
+          case 5:
+            message.refundable = reader.bool();
+            break;
+
+          case 6:
+            message.auto_renew = reader.bool();
+            break;
+
+          case 7:
+            message.terms = reader.string();
+            break;
+
           case 1:
             message.price = reader.uint64();
             break;
@@ -2123,17 +2271,26 @@ export namespace station {
       return message;
     }
 
+    refundable: bool;
+    auto_renew: bool;
+    terms: string | null;
     price: u64;
     available: bool;
     reason: string | null;
     unit_price: u64;
 
     constructor(
+      refundable: bool = false,
+      auto_renew: bool = false,
+      terms: string | null = null,
       price: u64 = 0,
       available: bool = false,
       reason: string | null = null,
       unit_price: u64 = 0
     ) {
+      this.refundable = refundable;
+      this.auto_renew = auto_renew;
+      this.terms = terms;
       this.price = price;
       this.available = available;
       this.reason = reason;
@@ -2190,6 +2347,22 @@ export namespace station {
 
   export class quote_big_upload_result {
     static encode(message: quote_big_upload_result, writer: Writer): void {
+      if (message.refundable != false) {
+        writer.uint32(40);
+        writer.bool(message.refundable);
+      }
+
+      if (message.auto_renew != false) {
+        writer.uint32(48);
+        writer.bool(message.auto_renew);
+      }
+
+      const unique_name_terms = message.terms;
+      if (unique_name_terms !== null) {
+        writer.uint32(58);
+        writer.string(unique_name_terms);
+      }
+
       if (message.price != 0) {
         writer.uint32(8);
         writer.uint64(message.price);
@@ -2219,6 +2392,18 @@ export namespace station {
       while (reader.ptr < end) {
         const tag = reader.uint32();
         switch (tag >>> 3) {
+          case 5:
+            message.refundable = reader.bool();
+            break;
+
+          case 6:
+            message.auto_renew = reader.bool();
+            break;
+
+          case 7:
+            message.terms = reader.string();
+            break;
+
           case 1:
             message.price = reader.uint64();
             break;
@@ -2244,17 +2429,26 @@ export namespace station {
       return message;
     }
 
+    refundable: bool;
+    auto_renew: bool;
+    terms: string | null;
     price: u64;
     available: bool;
     reason: string | null;
     unit_price: u64;
 
     constructor(
+      refundable: bool = false,
+      auto_renew: bool = false,
+      terms: string | null = null,
       price: u64 = 0,
       available: bool = false,
       reason: string | null = null,
       unit_price: u64 = 0
     ) {
+      this.refundable = refundable;
+      this.auto_renew = auto_renew;
+      this.terms = terms;
       this.price = price;
       this.available = available;
       this.reason = reason;
@@ -3608,87 +3802,6 @@ export namespace station {
     static decode(reader: Reader, length: i32): withdraw_revenue_result {
       const end: usize = length < 0 ? reader.end : reader.ptr + length;
       const message = new withdraw_revenue_result();
-
-      while (reader.ptr < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          default:
-            reader.skipType(tag & 7);
-            break;
-        }
-      }
-
-      return message;
-    }
-
-    constructor() {}
-  }
-
-  export class cancel_allowance_arguments {
-    static encode(message: cancel_allowance_arguments, writer: Writer): void {
-      if (message.id != 0) {
-        writer.uint32(8);
-        writer.uint32(message.id);
-      }
-
-      const unique_name_token = message.token;
-      if (unique_name_token !== null) {
-        writer.uint32(18);
-        writer.bytes(unique_name_token);
-      }
-
-      if (message.refund != 0) {
-        writer.uint32(24);
-        writer.uint64(message.refund);
-      }
-    }
-
-    static decode(reader: Reader, length: i32): cancel_allowance_arguments {
-      const end: usize = length < 0 ? reader.end : reader.ptr + length;
-      const message = new cancel_allowance_arguments();
-
-      while (reader.ptr < end) {
-        const tag = reader.uint32();
-        switch (tag >>> 3) {
-          case 1:
-            message.id = reader.uint32();
-            break;
-
-          case 2:
-            message.token = reader.bytes();
-            break;
-
-          case 3:
-            message.refund = reader.uint64();
-            break;
-
-          default:
-            reader.skipType(tag & 7);
-            break;
-        }
-      }
-
-      return message;
-    }
-
-    id: u32;
-    token: Uint8Array | null;
-    refund: u64;
-
-    constructor(id: u32 = 0, token: Uint8Array | null = null, refund: u64 = 0) {
-      this.id = id;
-      this.token = token;
-      this.refund = refund;
-    }
-  }
-
-  @unmanaged
-  export class cancel_allowance_result {
-    static encode(message: cancel_allowance_result, writer: Writer): void {}
-
-    static decode(reader: Reader, length: i32): cancel_allowance_result {
-      const end: usize = length < 0 ? reader.end : reader.ptr + length;
-      const message = new cancel_allowance_result();
 
       while (reader.ptr < end) {
         const tag = reader.uint32();

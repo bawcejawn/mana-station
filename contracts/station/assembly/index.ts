@@ -241,19 +241,6 @@ export function main(): i32 {
       break;
     }
 
-    case 0xc7643cce: {
-      const args = Protobuf.decode<ProtoNamespace.cancel_allowance_arguments>(
-        contractArgs.args,
-        ProtoNamespace.cancel_allowance_arguments.decode
-      );
-      const res = c.cancel_allowance(args);
-      retbuf = Protobuf.encode(
-        res,
-        ProtoNamespace.cancel_allowance_result.encode
-      );
-      break;
-    }
-
     default:
       System.exit(1);
       break;

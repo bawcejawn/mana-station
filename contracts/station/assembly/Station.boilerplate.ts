@@ -83,6 +83,9 @@ export class Station {
     // YOUR CODE HERE
 
     const res = new station.quote_allowance_result();
+    // res.refundable = ;
+    // res.auto_renew = ;
+    // res.terms = ;
     // res.price = ;
     // res.available = ;
     // res.reason = ;
@@ -100,6 +103,9 @@ export class Station {
     // YOUR CODE HERE
 
     const res = new station.quote_big_upload_result();
+    // res.refundable = ;
+    // res.auto_renew = ;
+    // res.terms = ;
     // res.price = ;
     // res.available = ;
     // res.reason = ;
@@ -300,20 +306,6 @@ export class Station {
     // YOUR CODE HERE
 
     const res = new station.withdraw_revenue_result();
-
-    return res;
-  }
-
-  cancel_allowance(
-    args: station.cancel_allowance_arguments
-  ): station.cancel_allowance_result {
-    // const id = args.id;
-    // const token = args.token;
-    // const refund = args.refund;
-
-    // YOUR CODE HERE
-
-    const res = new station.cancel_allowance_result();
 
     return res;
   }

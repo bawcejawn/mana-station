@@ -138,6 +138,17 @@ message big_object {
   bool low_alerted = 6;                              // reserve_low already emitted for this dip
 }
 
+// Payload of station.allowance_bought / station.allowance_renewed / station.big_upload_bought, with the purchase terms.
+message purchase_event {
+  allowance_object allowance = 1;
+  ticket_object ticket = 2;
+  bytes token = 3 [(koinos.btype) = CONTRACT_ID];
+  uint64 paid = 4 [jstype = JS_STRING];
+  bool refundable = 5;                      // always false
+  bool auto_renew = 6;                      // always false
+  string terms = 7;
+}
+
 // Emitted when a fee-exempt reserved app uses its buffer (Mana above its daily allowance, from the reserve).
 message buffer_event {
   uint32 app = 1;
@@ -232,6 +243,10 @@ message quote_allowance_arguments {
 }
 
 message quote_allowance_result {
+  // Shown by the UI before purchase (Carl, 7:32 PM): prepaid for future use, no refunds, no auto-renew.
+  bool refundable = 5;                     // always false
+  bool auto_renew = 6;                     // always false
+  string terms = 7;
   uint64 price = 1 [jstype = JS_STRING];   // token units (vUSDT / vUSDC: 8 decimals)
   bool available = 2;
   string reason = 3;
@@ -246,6 +261,10 @@ message quote_big_upload_arguments {
 }
 
 message quote_big_upload_result {
+  // Shown by the UI before purchase (Carl, 7:32 PM): prepaid for future use, no refunds, no auto-renew.
+  bool refundable = 5;                     // always false
+  bool auto_renew = 6;                     // always false
+  string terms = 7;
   uint64 price = 1 [jstype = JS_STRING];
   bool available = 2;
   string reason = 3;
@@ -419,12 +438,4 @@ message withdraw_revenue_arguments {
 
 message withdraw_revenue_result {}
 
-// @description End a sold allowance early and optionally refund from revenue (owner; policy is an open decision).
-// @read-only false
-message cancel_allowance_arguments {
-  uint32 id = 1;
-  bytes token = 2 [(koinos.btype) = CONTRACT_ID];
-  uint64 refund = 3 [jstype = JS_STRING];
-}
-
-message cancel_allowance_result {}
+// (cancel_allowance removed, Carl 7:32 PM: no refunds; prepaid for future use. The kill switch `set_paused` stays.)
