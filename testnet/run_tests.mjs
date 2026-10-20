@@ -20,7 +20,10 @@ const fmt = (v) => (typeof v === "bigint" ? `${v} (${(Number(v) / 1e8).toFixed(5
 const R = { chainId, rpc: RPC, started: new Date().toISOString(), checks: [], costs: {}, notes: [] };
 const OUT = new URL("./results.json", import.meta.url);
 const save = () => fs.writeFileSync(OUT, JSON.stringify(R, (k, v) => (typeof v === "bigint" ? v.toString() : v), 2));
-const check = (area, name, pass, detail = "") => { R.checks.push({ area, name, pass: !!pass, detail: String(detail) }); console.log(`${pass ? "PASS" : "FAIL"} [${area}] ${name} ${detail}`); save(); return !!pass; };
+// A refusal for low wallet Mana ("insufficient pending account resources", code 104) means the station never saw the tx:
+// such a "refused" check proves nothing, so it is recorded as an INCONCLUSIVE failure, never a pass.
+const check = (area, name, pass, detail = "") => {
+  if (pass && /"code":104|insufficient pending account resources/.test(String(detail))) { pass = false; detail = "INCONCLUSIVE (wallet low on Mana, the station never saw it): " + detail; } R.checks.push({ area, name, pass: !!pass, detail: String(detail) }); console.log(`${pass ? "PASS" : "FAIL"} [${area}] ${name} ${detail}`); save(); return !!pass; };
 const cost = (k, v) => { R.costs[k] = v; console.log(`COST ${k} = ${fmt(v)}`); save(); };
 const note = (s) => { R.notes.push(s); console.log("NOTE " + s); save(); };
 
@@ -42,9 +45,16 @@ const eventsOf = (rcpt) => (rcpt?.events || []).map((e) => e.name);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // One tx. opts: payer/payee/rcLimit; cosigner = role that signs as payer (when payer != signer and payer is a key account).
+// The station allows one sponsored tx per user per block, so consecutive sponsored txs for the same user wait for a new block.
+const lastH = new Map();
+async function nextBlockFor(payer, payee) {
+  if (payer !== ST || !payee) return;
+  for (let i = 0; i < 40; i++) { const h = BigInt((await provider.getHeadInfo()).head_topology.height); if (!lastH.has(payee) || h > lastH.get(payee)) { lastH.set(payee, h + 1n); return; } await sleep(1500); }
+}
 async function send(contract, fn, args, { payer, payee, rcLimit, cosigner } = {}) {
+  await nextBlockFor(payer, payee);
   try {
-    const o = { sendTransaction: true, rcLimit: String(rcLimit ?? 2n * M) };
+    const o = { sendTransaction: true, rcLimit: String(rcLimit ?? M) };
     if (payer) o.payer = payer; if (payee) o.payee = payee; if (cosigner) o.beforeSend = coSign(cosigner);
     const { transaction, receipt } = await contract.functions[fn](args, o);
     await transaction.wait("byBlock", 90000);
@@ -52,8 +62,9 @@ async function send(contract, fn, args, { payer, payee, rcLimit, cosigner } = {}
   } catch (e) { return { ok: false, error: String(e?.message || e).slice(0, 300) }; }
 }
 async function sendOps(signer, ops, { payer, payee, rcLimit, cosigner } = {}) {
+  await nextBlockFor(payer, payee);
   try {
-    const options = { rcLimit: String(rcLimit ?? 2n * M) }; if (payer) options.payer = payer; if (payee) options.payee = payee; if (cosigner) options.beforeSend = coSign(cosigner);
+    const options = { rcLimit: String(rcLimit ?? M) }; if (payer) options.payer = payer; if (payee) options.payee = payee; if (cosigner) options.beforeSend = coSign(cosigner);
     const tx = new Transaction({ signer: S(signer), provider, options });
     for (const [c, fn, a] of ops) await tx.pushOperation(c.functions[fn], a);
     const receipt = await tx.send(); await tx.wait("byBlock", 90000);
@@ -74,6 +85,7 @@ const tbal = async (a) => BigInt((await read(C(TOK, abiT), "balance_of", { owner
 // ---------------------------------------------------------------- 0. preflight
 console.log(`chain ${chainId}  rpc ${RPC.replace(/apikey=[^&]+/, "apikey=***")}  KOIN ${KOIN}`); // never print the API key
 const kbal = async (a) => BigInt((await new Contract({ id: KOIN, abi: utils.tokenAbi, provider }).functions.balanceOf({ owner: a })).result?.value || 0);
+note("wallets (public addresses): " + ["funder", "station", "owner", "buyer", "user1", "user2", "spam1", "spam2", "token", "app"].map((r) => `${r} ${A(r)}`).join(", "));
 const fb = await kbal(FUN);
 check("preflight", "funder 1N6yd5… holds tKOIN", fb > 0n, `${Number(fb) / 1e8} tKOIN, Mana ${Number(await rc(FUN)) / 1e8}`);
 const meta = await provider.invokeGetContractMetadata(ST).catch(() => null);
@@ -111,9 +123,11 @@ check("deploy", "station: only authorizes_transaction_application", stMeta?.valu
 if (!stMeta?.value?.hash) { note("station contract is not on chain, so nothing after the deploy step can run: stopping"); save(); process.exit(1); }
 
 // ---------------------------------------------------------------- 2b. funding (after the uploads, while the funder still has its full Mana)
-const want = { [ST]: 21n, [BUY]: 2n, [U1]: 2n, [OWN]: 1n }; // station holds >= its configured koin_amount (20; init refuses more), funder keeps Mana for later steps
+const want = { [ST]: 21n, [BUY]: 5n, [U1]: 4n, [A("user2")]: 3n, [OWN]: 3n, [SP1]: 2n, [SP2]: 2n }; // station >= its koin_amount (20)
+const RESERVE = 5n * M;                                    // the funder keeps this much Mana for the uploads and mints it pays
 for (const [to, amt] of Object.entries(want)) {
   const have = await kbal(to); const need = amt * M - have;
+  if (need > M / 10n && (await rc(FUN)) - need < RESERVE) { note(`skip funding ${to.slice(0, 6)}…: funder Mana ${Number(await rc(FUN)) / 1e8} would drop below the ${Number(RESERVE) / 1e8} reserve (top it up from the faucet)`); continue; }
   if (need > M / 10n) check("fund", `fund ${to.slice(0, 6)}… to ${amt} tKOIN`, (await send(koinC("funder"), "transfer", { from: FUN, to, value: String(need) }, { rcLimit: 2n * M })).ok, `${Number(need) / 1e8}`);
 }
 await sleep(4000);
@@ -206,7 +220,7 @@ const PAYAPP = SP2;
 const unpaid = await send(C(PAYAPP, abiA, "user1"), "play", { user: U1 }, sponsored(U1, L));
 check("designated", "app without a paid allowance refused", !unpaid.ok, unpaid.error || "");
 // ---------------------------------------------------------------- 7. escrow: allowance purchase / reservation refusal / suspend / cancel
-for (const to of [BUY, U1]) check("escrow", `mint 1,000 tUSDT to ${to.slice(0, 6)}…`, (await send(tok("token"), "mint", { to, value: String(1000n * M) }, { payer: FUN, payee: TOK, cosigner: "funder" })).ok);
+for (const to of [BUY, U1]) { const x = await send(tok("token"), "mint", { to, value: String(1000n * M) }, { payer: FUN, payee: TOK, cosigner: "funder" }); check("escrow", `mint 1,000 tUSDT to ${to.slice(0, 6)}…`, x.ok, x.error || (x.reverted ? "reverted: " + JSON.stringify(x.logs || []) : "")); }
 const stE = await read(sta(), "get_status"); note(`sold_capacity ${stE.sold_capacity} (expected 3L = ${3n * L})`);
 const qBig = await read(sta(), "quote_allowance", { token: TOK, mana_per_day: String(4n * L), days: "7" });
 check("escrow", "quote above the sellable slice: not available (reservations protected)", !qBig.available, qBig.reason || JSON.stringify(qBig));
