@@ -32,7 +32,10 @@ const note = (s) => { R.notes.push(s); console.log("NOTE " + s); save(); };
 // clean, so 24 h windows, cooldowns and new-user status from earlier runs can't skew the checks. The funder, owner,
 // mock token and test app stay the same (their keys come from TESTNET_KEYS). Set FRESH=0 to reuse the stored keys.
 const FRESH = process.env.FRESH === "0" ? [] : ["station", "user1", "user2", "buyer", "spam1", "spam2", "council1", "council2", "council3", "app3", "player3"];
-for (const r of FRESH) { const k = new Signer({ privateKey: crypto.randomBytes(32).toString("hex") }); K[r] = { address: k.getAddress(), wif: k.getPrivateKey("wif") }; }
+// Oct 20: derived from the run id + the funder key (never random), so a run that stops early can always be swept back
+// with `playground.mjs sweep <run id>`. Still fresh every run: a new run id gives new accounts.
+const RUN = process.env.GITHUB_RUN_ID || String(Date.now());
+for (const r of FRESH) { const k = new Signer({ privateKey: crypto.createHash("sha256").update("mana-station-run/" + RUN + "/" + r + "/" + K.funder.wif).digest("hex") }); K[r] = { address: k.getAddress(), wif: k.getPrivateKey("wif") }; }
 const S = (r) => { const s = Signer.fromWif(K[r].wif); s.provider = provider; return s; };
 const A = (r) => K[r].address;
 const ST = A("station"), OWN = A("owner"), APP = A("app"), TOK = A("token"), FUN = A("funder");
@@ -101,7 +104,11 @@ if (meta?.value?.hash) note(`station account already has a contract (hash ${meta
 
 // ---------------------------------------------------------------- 0b. funding (first: init checks the station's KOIN balance)
 const want = { [ST]: 160n, [BUY]: 20n, [U1]: 8n, [U2]: 8n, [OWN]: 10n, [SP1]: 3n, [SP2]: 3n }; // station >= its koin_amount (150)
-const RESERVE = 5n * M;                                    // the funder keeps this much Mana for the uploads and mints it pays
+// The funder keeps enough Mana for what it pays after funding: the station upload (the biggest), app uploads, mints.
+const LIM0 = (await provider.call("chain.get_resource_limits", {})).resource_limit_data;
+const upRc = (bytes) => (BigInt(bytes) * (BigInt(LIM0.disk_storage_cost) + BigInt(LIM0.network_bandwidth_cost)) + M) * 3n / 2n;
+const RESERVE = upRc(fs.statSync(new URL("../contracts/station/build/testnet/contract.wasm", import.meta.url)).size) + 2n * upRc(14000) + 10n * M;
+note(`run id ${RUN} (sweep leftovers with: playground.mjs sweep ${RUN}); funder must keep ${Number(RESERVE) / 1e8} Mana for uploads`);
 // Preflight (Oct 20): fund nobody unless the funder can fund everyone. A run that stops halfway leaves tKOIN in fresh
 // throwaway accounts whose keys are gone.
 { let total = 0n; for (const [to, amt] of Object.entries(want)) { const n = amt * M - (await kbal(to)); if (n > M / 10n) total += n; }

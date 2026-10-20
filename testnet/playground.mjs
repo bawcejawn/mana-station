@@ -131,6 +131,22 @@ if (cmd === "reclaim") {                    // reclaim <generation, e.g. v2>: re
   log(`funder now holds ${Number(await kbal(FUN)) / 1e8} tKOIN`);
 }
 
+if (cmd === "sweep") {                      // sweep <run id>: return a test run's leftover tKOIN to the funder
+  const run = process.argv[3]; if (!/^[0-9]+$/.test(run || "")) throw new Error("usage: sweep <run id>");
+  const roles = ["station", "user1", "user2", "buyer", "spam1", "spam2", "council1", "council2", "council3", "app3", "player3"]; // as run_tests.mjs FRESH
+  let total = 0n;
+  for (const r of roles) {
+    const k = new Signer({ privateKey: crypto.createHash("sha256").update("mana-station-run/" + run + "/" + r + "/" + K.funder.wif).digest("hex") }); k.provider = provider;
+    const a = k.getAddress(); const bal = await kbal(a); if (bal < M) continue;
+    const meta = await provider.invokeGetContractMetadata(a).catch(() => null);
+    if (meta?.value?.hash) { log(`skip ${r} ${a}: a contract now (its KOIN leaves only by council withdrawal)`); continue; }
+    const mana = BigInt(await provider.getAccountRc(a)); const amt = (bal < mana ? bal : mana) - M / 10n; if (amt <= 0n) continue;
+    const x = await send(new Contract({ id: KOIN, abi: utils.tokenAbi, provider, signer: k }), "transfer", { from: a, to: FUN, value: String(amt) }, { rcLimit: M / 10n });
+    if (ok(`return ${Number(amt) / 1e8} tKOIN from ${r} ${a}`, x)) total += amt;
+  }
+  log(`returned ${Number(total) / 1e8} tKOIN; funder now holds ${Number(await kbal(FUN)) / 1e8}`);
+}
+
 if (cmd === "traffic") {
   const n = Number(process.argv[3] || 6);
   for (let i = 0; i < n; i++) {
