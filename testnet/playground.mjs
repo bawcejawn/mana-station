@@ -25,10 +25,10 @@ const derive = (label) => { const s = new Signer({ privateKey: crypto.createHash
 // Station generation: a new label = a brand-new station address (v2: wallet Mana passes; v3: free checkout, Oct 20). The owner and council
 // labels stay the same, so the same handover command works on every generation.
 const GEN = "-v3";
-const KEY = { funder: Signer.fromWif(K.funder.wif), station: derive("station" + GEN), owner: derive("owner"), c1: derive("council1"), c2: derive("council2"), c3: derive("council3"), demo: derive("demoapp") };
+const KEY = { funder: Signer.fromWif(K.funder.wif), station: derive("station" + GEN), owner: derive("owner"), c1: derive("council1"), c2: derive("council2"), c3: derive("council3"), demo: derive("demoapp"), open: derive("openapp") };
 KEY.funder.provider = provider;
 const A = (r) => KEY[r].getAddress();
-const ST = A("station"), FUN = A("funder"), DEMO = A("demo"), TOK = K.token.address;
+const ST = A("station"), FUN = A("funder"), DEMO = A("demo"), OPEN = A("open"), TOK = K.token.address;
 const KOIN = (await provider.invokeGetContractAddress("koin")).value.address;
 const rd = (p) => JSON.parse(fs.readFileSync(new URL(p, import.meta.url)));
 const abiS = rd("../contracts/station/abi/station.koilib.json"), abiA = rd("../contracts/testapp/abi/testapp.koilib.json"), abiT = rd("../contracts/mocktoken/abi/mocktoken.koilib.json");
@@ -83,9 +83,17 @@ if (cmd === "deploy") {
     try { const c = new Contract({ id: DEMO, abi: abiA, provider, signer: KEY.demo, bytecode: code }); const { transaction } = await c.deploy({ payer: FUN, payee: DEMO, rcLimit: String(rcFor(code.length)), beforeSend: coSign("funder") }); await transaction.wait("byBlock", 120000); ok(`deploy demo app ${DEMO}`, { ok: true }); }
     catch (e) { ok("deploy demo app", { ok: false, error: String(e.message).slice(0, 240) }); }
   }
+  // 3b. an app NOBODY sponsors (never connected): shows a wallet's Mana pass paying where no app does
+  const om = await provider.invokeGetContractMetadata(OPEN).catch(() => null);
+  if (!om?.value?.hash) {
+    const code = wasm("../contracts/testapp/build/release/contract.wasm");
+    try { const c = new Contract({ id: OPEN, abi: abiA, provider, signer: KEY.open, bytecode: code }); const { transaction } = await c.deploy({ payer: FUN, payee: OPEN, rcLimit: String(rcFor(code.length)), beforeSend: coSign("funder") }); await transaction.wait("byBlock", 120000); ok(`deploy open app ${OPEN} (not connected)`, { ok: true }); }
+    catch (e) { ok("deploy open app", { ok: false, error: String(e.message).slice(0, 240) }); }
+  }
   const L = await read("list_connected");
   if (!(L.free_apps || []).some((a) => a.contract_id === DEMO)) ok("connect the demo app (8 Mana/day)", await asRole("owner", "connect_app", { contract_id: DEMO, mana_per_day: String(8n * M), strict: false }));
-  ok("price the test stablecoin (tUSDT) for paid allowances", await asRole("owner", "set_price", { token: TOK, value: { active: true, max_per_purchase: String(1000n * M), price_1d: "3000000", price_7d: "20000000", price_30d: "75000000", big_per_1000: "5000000", big_min_mana: String(M), min_purchase: "0" } }));
+  const q0 = await read("quote_allowance", { token: TOK, mana_per_day: String(M), days: "1" });
+  if (/not accepted/.test(q0.reason || "")) ok("price the test stablecoin (tUSDT) for paid allowances", await asRole("owner", "set_price", { token: TOK, value: { active: true, max_per_purchase: String(1000n * M), price_1d: "3000000", price_7d: "20000000", price_30d: "75000000", big_per_1000: "5000000", big_min_mana: String(M), min_purchase: "0" } }));
 }
 
 if (cmd === "handover") {
@@ -132,7 +140,7 @@ if (cmd === "mint") {
 // status (always)
 const st = await read("get_status"); const L = await read("list_connected"); const P = (await read("list_proposals")).proposals || [];
 const info = {
-  network: RPC, chain_id: TESTNET_ID, station: ST, demo_app: DEMO, test_stablecoin: TOK, koin: KOIN,
+  network: RPC, chain_id: TESTNET_ID, station: ST, demo_app: DEMO, open_app: OPEN, test_stablecoin: TOK, koin: KOIN,
   owner: st.config?.owner, council: st.config?.council, threshold: st.config?.threshold, guard_delay_ms: st.config?.guard_delay_ms,
   station_mana: st.mana, daily_budget: L.daily_budget, reserved: L.reserved, sellable: L.sellable, sold: L.sold,
   free_apps: (L.free_apps || []).map((a) => ({ contract: a.contract_id, mana_per_day: a.mana_per_day, used_24h: a.used_24h })),
