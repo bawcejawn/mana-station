@@ -25,7 +25,17 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Unit tests (MockVM)
         working-directory: contracts/station
-        run: npm test </dev/null
+        # npm test first builds with the ABI generator, which sometimes fails to read its pipe (EAGAIN): retry up to 3 times.
+        # On a real failure, the last lines are posted as an annotation (raw logs aren't reachable from every reviewer).
+        run: |
+          set -o pipefail
+          for i in 1 2 3; do
+            npm test </dev/null 2>&1 | tee unit.log && exit 0
+            grep -q EAGAIN unit.log || break
+            echo "::warning::unit test build hit the EAGAIN flake (attempt $i), retrying"
+          done
+          echo "::error title=unit tests failed::$(tail -n 60 unit.log | sed -e 's/\x1b\[[0-9;]*[mGK]//g' | sed -e ':a;N;$!ba' -e 's/%/%25/g' -e 's/\r//g' -e 's/\n/%0A/g')"
+          exit 1
       - name: Write throwaway testnet keys (secret, masked)
         env:
           TESTNET_KEYS: ${{ secrets.TESTNET_KEYS }}
