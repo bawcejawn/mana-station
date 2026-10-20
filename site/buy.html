@@ -230,7 +230,7 @@
       const [has, tk] = await Promise.all([new Contract({ id: a, abi: ABI.app, provider }).functions.get({ user: a }).then(() => true, () => false), read(station, "get_ticket", { payee: a }).catch(() => ({}))]);
       const t = tk.ticket; const open = t && Number(t.expiry) > Date.now();
       $("appState").textContent = a + (has ? " · app code uploaded" : " · no code yet") + (open ? ` · ticket open: ${mana(t.remaining)} of ${mana(t.mana)} Mana left until ${when(t.expiry)}` : "");
-      $("upload").disabled = !open;
+      $("upload").disabled = !open || has;
     }
     async function quoteTicket() {
       const v = Number($("tMana").value); if (!(v >= 1)) { $("tQuote").textContent = "Reserve at least 1 Mana."; return; }
@@ -272,11 +272,12 @@
       const rows = [];
       for (const p of (st.paid || []).filter((p) => p.buyer === b)) {
         const al = (await read(station, "get_allowance", { id: p.id })).allowance || {};
-        let refund = 0n;
-        for (const id of al.purchase_ids || []) refund += BigInt((await read(station, "get_escrow", { purchase_id: id })).refundable_now || 0);
-        const ended = Number(p.expiry) <= Date.now();
-        rows.push({ what: "Daily free play #" + p.id, for: p.target, mana: mana(p.mana_per_day) + "/day · " + mana(p.used_24h) + " used today", ends: when(p.expiry), paid: usd(al.total_paid), refund, state: p.suspended ? "Suspended" : ended ? "Ended" : "",
-          acts: ended ? [] : [["Renew", (btn) => renew(btn, p.id, al)], ["Cancel", (btn) => cancelAllow(btn, p.id, refund)]] });
+        let refund = 0n, refunded = 0n;
+        for (const id of al.purchase_ids || []) { const e = await read(station, "get_escrow", { purchase_id: id }); refund += BigInt(e.refundable_now || 0); refunded += BigInt(e.purchase?.refunded || 0); }
+        const ended = Number(p.expiry) <= Date.now(), cancelled = !ended && refunded > 0n && refund === 0n;
+        rows.push({ what: "Daily free play #" + p.id, for: p.target, mana: mana(p.mana_per_day) + "/day · " + mana(p.used_24h) + " used today", ends: when(p.expiry), paid: usd(al.total_paid), refund,
+          state: p.suspended ? "Suspended" : ended ? "Ended" : cancelled ? "Cancelled: runs to the end of today's paid day" : "",
+          acts: ended || cancelled ? [] : [["Renew", (btn) => renew(btn, p.id, al)], ...(refund > 0n ? [["Cancel", (btn) => cancelAllow(btn, p.id, refund)]] : [])] });
       }
       for (const w of MSWallets.list().filter((w) => /^App/.test(w.name))) {
         const t = (await read(station, "get_ticket", { payee: w.address }).catch(() => ({}))).ticket;
