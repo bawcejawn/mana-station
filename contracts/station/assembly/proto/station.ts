@@ -1281,6 +1281,11 @@ export namespace station {
         writer.uint32(64);
         writer.uint64(message.paused_at);
       }
+
+      if (message.ticket_open != 0) {
+        writer.uint32(72);
+        writer.uint64(message.ticket_open);
+      }
     }
 
     static decode(reader: Reader, length: i32): big_object {
@@ -1322,6 +1327,10 @@ export namespace station {
             message.paused_at = reader.uint64();
             break;
 
+          case 9:
+            message.ticket_open = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -1339,6 +1348,7 @@ export namespace station {
     low_alerted: bool;
     next_purchase: u32;
     paused_at: u64;
+    ticket_open: u64;
 
     constructor(
       debt: u64 = 0,
@@ -1348,7 +1358,8 @@ export namespace station {
       next_id: u32 = 0,
       low_alerted: bool = false,
       next_purchase: u32 = 0,
-      paused_at: u64 = 0
+      paused_at: u64 = 0,
+      ticket_open: u64 = 0
     ) {
       this.debt = debt;
       this.debt_ts = debt_ts;
@@ -1358,6 +1369,7 @@ export namespace station {
       this.low_alerted = low_alerted;
       this.next_purchase = next_purchase;
       this.paused_at = paused_at;
+      this.ticket_open = ticket_open;
     }
   }
 
@@ -1802,6 +1814,11 @@ export namespace station {
         writer.uint32(120);
         writer.bool(message.closed);
       }
+
+      if (message.min_keep != 0) {
+        writer.uint32(128);
+        writer.uint64(message.min_keep);
+      }
     }
 
     static decode(reader: Reader, length: i32): escrow_object {
@@ -1871,6 +1888,10 @@ export namespace station {
             message.closed = reader.bool();
             break;
 
+          case 16:
+            message.min_keep = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -1895,6 +1916,7 @@ export namespace station {
     refunded: u64;
     released: u64;
     closed: bool;
+    min_keep: u64;
 
     constructor(
       id: u32 = 0,
@@ -1911,7 +1933,8 @@ export namespace station {
       mana: u64 = 0,
       refunded: u64 = 0,
       released: u64 = 0,
-      closed: bool = false
+      closed: bool = false,
+      min_keep: u64 = 0
     ) {
       this.id = id;
       this.kind = kind;
@@ -1928,6 +1951,7 @@ export namespace station {
       this.refunded = refunded;
       this.released = released;
       this.closed = closed;
+      this.min_keep = min_keep;
     }
   }
 

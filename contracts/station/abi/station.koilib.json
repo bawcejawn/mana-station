@@ -804,6 +804,13 @@
                 "options": {
                   "jstype": "JS_STRING"
                 }
+              },
+              "ticket_open": {
+                "type": "uint64",
+                "id": 9,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
               }
             }
           },
@@ -1033,6 +1040,13 @@
               "closed": {
                 "type": "bool",
                 "id": 15
+              },
+              "min_keep": {
+                "type": "uint64",
+                "id": 16,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
               }
             }
           },

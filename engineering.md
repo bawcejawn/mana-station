@@ -579,7 +579,18 @@ Source: the security audit of Oct 19 (findings #1–#8). Decided by Carl the sam
 
 **#6 Terms.** `ALLOWANCE_TERMS` / `BIG_TERMS` were rewritten to promise only what the code does: operator custody (not trustless escrow) until the permission takeover, top-level-call scope, co-signing, the minimum charge, per-user limits, and the lock model. They are marked DRAFT pending legal review.
 
-**Tests: 53/53 pass** (45 existing, some updated for the new rules, plus 8 attack replays). Mutation check, each fix undone alone, all caught: debt pausing paid allowances → 2 fail; no target signature → 1; no minimum charge → 1; no per-buyer cap → 1; no sweep → 1; no oversell guard → 1; no fee floor → 4; no used-Mana cap → 2; station-wide wait restored → 8. Test note: the MockVM key-store quirk (bytes ≥ 0x80) caps the #4 replay at 120 purchases.
+**Independent review of the branch (same evening).** A separate reviewer re-read the contract and found:
+- **C1 (critical, pre-existing):** `cancel_allowance` with a renewed future term refunded about 86% and kept the service live until that term's start. It was repeatable, and each free slot also clogged the open list. Fixed: a refunded future term never counts toward the expiry and is closed at once.
+- **H1:** ticket Mana wasn't really locked. Fixed: `big.ticket_open` tracks unused ticket Mana. Quotes, other tickets and buffers can't spend into it.
+- **M1:** one broken token in `sweep` blocked all purchases. Fixed: the sweep only covers the purchase's own token.
+- **M3:** cancelling dodged the minimum charge. Fixed: `escrow.min_keep` is kept on buyer cancels; owner refunds ignore it.
+- **L3:** the oversell guard only fires when capacity shrinks.
+- **L4:** `set_price` refuses a min_purchase above max_per_purchase.
+- **L5:** the sweep and `release` also respect suspension or sanctions of the allowance owner when a third party paid a renewal.
+- Not changed: fresh addresses bypass the per-buyer ticket wait (the station-wide caps still apply), and `ticketCd` isn't pause-shifted. Both are low and noted.
+- Debt repayment is still an estimate (the sold slice keeps selling). Safety comes from the live floor + `ticket_open` checks.
+
+**Tests: 57/57 pass** after the review (4 more: C1, H1, M3, L4; the mutation check on C1, H1 quote, H1 buffer and M3 catches each). Before the review: **53/53 pass** (45 existing, some updated for the new rules, plus 8 attack replays). Mutation check, each fix undone alone, all caught: debt pausing paid allowances → 2 fail; no target signature → 1; no minimum charge → 1; no per-buyer cap → 1; no sweep → 1; no oversell guard → 1; no fee floor → 4; no used-Mana cap → 2; station-wide wait restored → 8. Test note: the MockVM key-store quirk (bytes ≥ 0x80) caps the #4 replay at 120 purchases.
 
 **Still open before any mainnet:**
 - #1: the station key keeps every permission except transaction_application, so it can move KOIN and escrowed stablecoins and re-upload code. The permission takeover, multisig owner and time delay need their own design plus a testnet validation.

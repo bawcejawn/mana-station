@@ -99,6 +99,7 @@ function setupA(): Station {
   signedBy([]); return s;
 }
 let gC: station.config_object | null = null;
+let gP: station.price_object | null = null;
 function countEv(name: string): i32 { let k = 0; const ev = MockVM.getEvents(); for (let i = 0; i < ev.length; i++) if (ev[i].name == name) k++; return k; }
 
 describe("v1 rules still hold", () => {
@@ -431,7 +432,7 @@ describe("escrow and pro-rata refunds (Carl, 7:47 PM)", () => {
     inv(s, USDT);
     at(T + DAYMS);
     expect(s.release(new station.release_arguments(1)).amount).toBe(30_000);
-    expect(s.release(new station.release_arguments(2)).amount).toBe(0);      // fully refunded term just closes
+    expect(s.get_escrow(new station.get_escrow_arguments(2)).purchase!.closed).toBe(true); // review C1: closed at cancel time
     MockVM.commitTransaction(); expect(() => { gS!.release(new station.release_arguments(2)); }).toThrow();
     expect(testGetToken(USDT, OWNER)).toBe(30_000); inv(s, USDT);
     const r2 = buyAccount(s, U1, 10 * M, 7);
@@ -948,6 +949,48 @@ describe("audit 2026-10-19: attacks replayed (branch fix/squat-freeze-stall)", (
     const c = cfg(); c.koin_amount = 900 * M; gC = c;                                                         // budget 180 → sellable 10
     MockVM.commitTransaction(); expect(() => { gS!.set_config(new station.set_config_arguments(gC)); }).toThrow();
     signedBy([]);
+  });
+  it("review C1: cancelling with a renewed future term can't keep the service (was: ~86% back and still served 7 days)", () => {
+    const s = setup(); gS = s; const T = NOW;
+    const r = buyAccount(s, U2, 10 * M, 7);                                      // 200,000 for days 1-7
+    signedBy([BUYER]); s.renew(new station.renew_arguments(BUYER, r.id, 1, USDT, 1000 * USD)); signedBy([]); // + day 8, 30,000
+    at(T + HOUR);
+    const x = cancelBy(s, BUYER, r.id);
+    expect(x.refund).toBe(171_428 + 30_000);                                     // 6/7 of term 1 + all of the future term
+    expect(s.get_allowance(new station.get_allowance_arguments(r.id)).allowance!.expiry).toBe(T + DAYMS); // served to end of day 1 only
+    at(T + DAYMS + 1000); tx(U2, 2 * M, [op(U2, EP_PLAY)]); expect(ok(s)).toBe(false); // no free service after the refund
+    expect(s.get_escrow(new station.get_escrow_arguments(2)).purchase!.closed).toBe(true); // refunded future term closed at once
+    inv(s, USDT);
+  });
+  it("review H1: Mana locked by open tickets is never sold twice or spent by buffers", () => {
+    const s = setup(); gS = s;                                                   // mana 1,000; big floor 5 + 200 = 205
+    signedBy([OWNER]); const c = cfg(); c.big_cooldown_ms = 0; c.big_week_cap = 2000 * M; c.big_max_debt = 2000 * M; s.set_config(new station.set_config_arguments(c)); signedBy([]);
+    signedBy([BUYER]); s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U1, 300 * M, USDT, 1000 * USD, false));
+    s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U2, 300 * M, USDT, 1000 * USD, false)); signedBy([]); // 600 locked
+    expect(s.quote_big_upload(new station.quote_big_upload_arguments(USDT, 200 * M)).reason!).toBe("reserve too low right now"); // 1,000 − 600 − 200 < 205
+    expect(s.quote_big_upload(new station.quote_big_upload_arguments(USDT, 190 * M)).available).toBe(true);
+    testSetMana(806 * M);                                                        // floor 205 + 600 locked = 805: 1 Mana spare
+    let served = 0;
+    for (let i = 0; i < 50; i++) { at(NOW + 70_000); if (play(s, user(100 + (i % 6)))) served++; } // 100 Mana asked of Knode's 80
+    expect(served).toBe(40);                                                     // its 80-Mana allowance, all served
+    expect(s.get_status(new station.get_status_arguments()).buffer_used_24h).toBe(0); // buffer refused: it would eat into the locks
+    tx(U1, 300 * M, [op(U1, EP_PLAY)]); expect(ok(s)).toBe(true);              // the holder still gets its locked Mana
+  });
+  it("review M3: a cancel never refunds below the minimum charge; owner refunds still can", () => {
+    const s = setup();
+    const p = PRICE(); p.min_purchase = 1 * USD;
+    signedBy([OWNER]); s.set_price(new station.set_price_arguments(USDT, p)); signedBy([]);
+    const r = buyAccount(s, U2, 10 * M, 30);                                     // 750,000 < $1 → charged 100,000,000
+    expect(r.paid).toBe(1 * USD);
+    expect(cancelBy(s, BUYER, r.id).refund).toBe(0);                             // 29/30 would be 96,666,666: capped at paid − minimum
+    const r2 = buyAccount(s, U1, 10 * M, 30);                                    // also charged the $1 minimum
+    signedBy([OWNER]); expect(s.owner_refund(new station.owner_refund_arguments(r2.id, null)).refund).toBe(96_666_666); signedBy([]); // 29/30 of $1: no minimum kept
+    inv(s, USDT);
+  });
+  it("review L4: a minimum charge above the per-purchase maximum is refused", () => {
+    const s = setup(); gS = s;
+    const p = PRICE(); p.min_purchase = 101 * USD; gP = p;                       // max per purchase is 100
+    signedBy([OWNER]); MockVM.commitTransaction(); expect(() => { gS!.set_price(new station.set_price_arguments(USDT, gP)); }).toThrow(); signedBy([]);
   });
   it("#8 a stranger closing an expired ticket late doesn't extend the buyer's wait", () => {
     const s = setup(); const T = NOW;

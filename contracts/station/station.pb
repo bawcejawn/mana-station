@@ -1,5 +1,5 @@
 
-äM
+ŒM
 assembly/proto/station.protostationkoinos/options.proto"Ó
 config_object
 owner (BÄµRowner
@@ -114,7 +114,7 @@ total_paid (B0R	totalPaid!
 purchaseId
 bought	 (B0Rbought&
 prev_last_buy
- (B0RprevLastBuy"å
+ (B0RprevLastBuy"±
 
 big_object
 debt (B0Rdebt
@@ -125,7 +125,9 @@ big_object
 low_alerted (R
 lowAlerted#
 next_purchase (RnextPurchase
-	paused_at (B0RpausedAt"Ç
+	paused_at (B0RpausedAt#
+ticket_open	 (B0R
+ticketOpen"Ç
 purchase_event7
 	allowance (2.station.allowance_objectR	allowance.
 ticket (2.station.ticket_objectRticket
@@ -157,7 +159,7 @@ hard_floor (B0R	hardFloor"l
 registry_object
 app_ids (RappIds
 open_ids (RopenIds%
-open_purchases (RopenPurchases"õ
+open_purchases (RopenPurchases"∫
 escrow_object
 id (Rid
 kind (Rkind
@@ -174,7 +176,8 @@ hard_floor (B0R	hardFloor"l
 mana (B0Rmana
 refunded (B0Rrefunded
 released (B0Rreleased
-closed (Rclosed"ê
+closed (Rclosed
+min_keep (B0RminKeep"ê
 escrow_totals_object
 held (B0Rheld 
 	collected (B0R	collected

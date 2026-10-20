@@ -152,6 +152,7 @@ message big_object {
   bool low_alerted = 6;                              // reserve_low already emitted for this dip
   uint32 next_purchase = 7;                          // escrow purchase ids
   uint64 paused_at = 8 [jstype = JS_STRING];         // set while paused: the escrow clock stops here
+  uint64 ticket_open = 9 [jstype = JS_STRING];       // review H1: unused Mana locked by open tickets (kept above the floor)
 }
 
 // Payload of station.allowance_bought / station.allowance_renewed / station.big_upload_bought, with the purchase terms.
@@ -208,6 +209,7 @@ message escrow_object {
   uint64 refunded = 13 [jstype = JS_STRING];
   uint64 released = 14 [jstype = JS_STRING];
   bool closed = 15;
+  uint64 min_keep = 16 [jstype = JS_STRING];         // review M3: buyer cancels never refund below this (min charge at purchase)
 }
 
 // Per token: held = Σ (amount − refunded − released) over all purchases; must equal the station's token balance.

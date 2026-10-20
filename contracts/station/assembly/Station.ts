@@ -47,8 +47,8 @@ function entryKey(contract: Uint8Array, ep: u32): Uint8Array { const k = new Uin
 function pct(amount: u64, bp: u32): u64 { return amount / 10_000 * u64(bp); }
 function wholeManaUp(m: u64): u64 { return (m + MANA - 1) / MANA; }
 // DRAFT terms (audit #1/#6, 2026-10-19): rewritten to promise only what the code does. Pending legal review.
-export const ALLOWANCE_TERMS = "DRAFT, pending legal review. Prepaid Mana for one app contract. The station sponsors a transaction only when every top-level operation in it calls that app; what the app does internally when called is up to the app. The app's own key must approve the purchase. Per-user anti-spam limits apply to each of the app's users. Payment is held at the station's address until the term ends, then released to the operator. Until the station's planned permission upgrade, that address is controlled by the operator's key: this is operator custody, not trustless escrow. Each purchase costs at least the minimum charge shown in the quote. Cancel any time: unused whole days are refunded (the current day counts as used, so 1 day is the minimum charge). If the operator pauses the station, paused time is credited: your term is extended by the pause. No auto-renew: service stops at expiry unless you renew, at the price current then. 1-, 7- and 30-day terms only. Non-transferable; not redeemable for crypto or cash except these refunds. Introductory prices may increase for new purchases. A buyer may be suspended for abuse, sanctions or AUP reasons; suspended time is not extended, and the operator may refund unused days (never to a sanctioned party).";
-export const BIG_TERMS = "DRAFT, pending legal review. Prepaid big upload: the station locks the Mana you buy for you for one full 24-hour period, at the full price, whether you use it or not. Paid in vUSDT or vUSDC and held at the station's address (operator custody until the planned permission upgrade, not trustless escrow). If the lock runs its full period, nothing is refunded. If you end it early, you get back the unexpired share of the price, decreasing in a straight line over the 24 hours, minus a fee that is always kept (currently 5%), and never more than the share of Mana you have not used. Each purchase costs at least the minimum charge shown in the quote. Refunds are only in the stablecoin you paid, never in Mana or KOIN. Each buyer can buy one ticket per cooldown period (default 24 hours). Tickets only sponsor uploading or calling the payee's own contract, and only while the station's reserve is above its safety floor. Paused time extends the lock. No auto-renew. Non-transferable; not redeemable for crypto or cash except these refunds. A buyer may be suspended for abuse, sanctions or AUP reasons; the operator may refund the unexpired share (never to a sanctioned party).";
+export const ALLOWANCE_TERMS = "DRAFT, pending legal review. Prepaid Mana for one app contract. The station sponsors a transaction only when every top-level operation in it calls that app; what the app does internally when called is up to the app. The app's own key must approve the purchase. Per-user anti-spam limits apply to each of the app's users. Payment is held at the station's address until the term ends, then released to the operator. Until the station's planned permission upgrade, that address is controlled by the operator's key: this is operator custody, not trustless escrow. Each purchase costs at least the minimum charge shown in the quote, and that minimum is kept if you cancel. Cancel any time: unused whole days are refunded (the current day counts as used, so 1 day is the minimum charge). If the operator pauses the station, paused time is credited: your term is extended by the pause. No auto-renew: service stops at expiry unless you renew, at the price current then. 1-, 7- and 30-day terms only. Non-transferable; not redeemable for crypto or cash except these refunds. Introductory prices may increase for new purchases. A buyer may be suspended for abuse, sanctions or AUP reasons; suspended time is not extended, and the operator may refund unused days (never to a sanctioned party).";
+export const BIG_TERMS = "DRAFT, pending legal review. Prepaid big upload: the station reserves the Mana you buy for you for one full 24-hour period, at the full price, whether you use it or not. Reserved Mana is not sold again or spent by the station's other services. Paid in vUSDT or vUSDC and held at the station's address (operator custody until the planned permission upgrade, not trustless escrow). If the lock runs its full period, nothing is refunded. If you end it early, you get back the unexpired share of the price, decreasing in a straight line over the 24 hours, minus a fee that is always kept (currently 5%), and never more than the share of Mana you have not used. Each purchase costs at least the minimum charge shown in the quote, and that minimum is kept if you cancel. Refunds are only in the stablecoin you paid, never in Mana or KOIN. Each buyer can buy one ticket per cooldown period (default 24 hours). Tickets only sponsor uploading or calling the payee's own contract. In rare cases (for example if the station's Mana falls below its safety floor) a transaction can still be refused; tell the operator, who may refund the unexpired share. Paused time extends the lock. No auto-renew. Non-transferable; not redeemable for crypto or cash except these refunds. A buyer may be suspended for abuse, sanctions or AUP reasons; the operator may refund the unexpired share (never to a sanctioned party).";
 const MAX_OPEN_PURCHASES: i32 = 128;                 // bounded loops (pause credit)
 const MAX_TERMS: i32 = 8;
 const DEFAULT_TICKET_FEE_BP: u32 = 500;             // 5% (Carl, 8:10 PM)
@@ -187,9 +187,11 @@ export class Station {
     return used >= e.days ? 0 : e.days - used;
   }
   /** Refund = floor(amount × unused / days): rounds down by < 1 base unit (in Carl's favour); never creates value. */
-  termRefund(e: station.escrow_object, t: u64): u64 {
+  termRefund(e: station.escrow_object, t: u64, keepMin: bool = true): u64 {
     const u = this.unusedDays(e, t); if (u == 0) return 0;
-    const r = mulDiv(e.amount, u, e.days); const h = this.held(e); return r > h ? h : r;
+    let r = mulDiv(e.amount, u, e.days);
+    if (keepMin) { const cap = e.amount > e.min_keep ? e.amount - e.min_keep : 0; if (r > cap) r = cap; } // review M3: the minimum charge stays
+    const h = this.held(e); return r > h ? h : r;
   }
   /** Ticket refund (Carl, 2026-10-19 8:19 PM): a ticket LOCKS its Mana for one full 24 h period at the full price,
    *  used or not. Ending it early returns the unexpired share of the price on a straight line over the lock
@@ -207,6 +209,7 @@ export class Station {
       const keep = e.amount - mulDiv(e.amount, u64(10_000 - feeBp), 10_000);
       const cap = e.amount - keep; if (r > cap) r = cap;
     }
+    if (feeBp > 0) { const cap = e.amount > e.min_keep ? e.amount - e.min_keep : 0; if (r > cap) r = cap; } // review M3
     if (t.mana > 0 && t.remaining < t.mana) {                            // used Mana is never refunded
       const unusedShare = mulDiv(e.amount, t.remaining, t.mana); if (r > unusedShare) r = unusedShare;
     }
@@ -220,12 +223,12 @@ export class Station {
   /** Audit #4: close up to SWEEP_MAX finished purchases so the open list (capped at 128) can't fill up and stop sales.
    *  Same outcome as release() / close_ticket(): earned money to the treasury, refunds to buyers. Purchases of any
    *  suspended buyer are skipped (the owner decides those, and sanctions freeze them). Bounded: <= 128 reads. */
-  sweep(c: station.config_object, now: u64): void {
+  sweep(c: station.config_object, now: u64, token: Uint8Array): void {
     const ids = this.registry.get()!.open_purchases.slice(0);
     let done = 0;
     for (let i = 0; i < ids.length && done < SWEEP_MAX; i++) {
       const e = this.escrow.get(u32Key(ids[i]));
-      if (e == null || e.closed || this.suspended.has(e.buyer!)) continue;
+      if (e == null || e.closed || !Arrays.equal(e.token, token) || this.frozenOwner(e)) continue; // review M1/L5
       if (e.kind == 1) {
         if (now < e.end) continue;                                       // term still running
         this.doRelease(c, e, "auto_release"); done++;
@@ -236,10 +239,20 @@ export class Station {
       }
     }
   }
+  /** Review L5: skip a purchase if its payer OR (for a renewal paid by someone else) the allowance owner is suspended. */
+  frozenOwner(e: station.escrow_object): bool {
+    if (this.suspended.has(e.buyer!)) return true;
+    if (e.kind != 1) return false;
+    const a = this.allowances.get(u32Key(e.allowance_id));
+    return a != null && this.suspended.has(a.buyer!);
+  }
   /** Audit #7: an owner change may never leave less sellable capacity than is already sold to paying customers. */
-  noOversell(c: station.config_object, now: u64): void {
+  noOversell(c: station.config_object, now: u64, oldCap: u64): void {
+    if (this.soldCap(c) >= oldCap) return;                              // review L3: never block a change that doesn't shrink capacity
     System.require(this.committed(c, now, false)[0] <= this.soldCap(c), "change would oversell: sold allowances exceed the new sellable capacity");
   }
+  /** Review M3: the minimum charge kept on a buyer cancel = min(price's min_purchase at purchase time, amount paid). */
+  minKeep(token: Uint8Array, amount: u64): u64 { const p = this.prices.get(token); const m = p != null ? p.min_purchase : 0; return m < amount ? m : amount; }
   maxPerBuyer(c: station.config_object): u32 { return c.max_per_buyer > 0 ? c.max_per_buyer : DEFAULT_MAX_PER_BUYER; }
   /** Audit #3: unexpired allowances bought by `buyer` (bounded by max_allowances). */
   openFor(buyer: Uint8Array, now: u64): u32 {
@@ -436,7 +449,7 @@ export class Station {
           add(gw, now / APP_SLOT, APP_N, rc, false); this.globalWin.put(gw);
         } else {
           if (used > limit) return false;
-          if (mana - rc < this.bigFloor(c)) return false;              // hard floor (admin_min + budget) untouchable
+          if (mana - rc < this.bigFloor(c) + this.big.get()!.ticket_open) return false; // hard floor + tickets' locked Mana untouchable (H1)
           const bw = this.bufferWin.get()!; roll(bw, now / APP_SLOT, APP_N, false);
           add(bw, now / APP_SLOT, APP_N, rc, false); this.bufferWin.put(bw);
           System.event("station.buffer_used", Protobuf.encode(new station.buffer_event(ex.app, payee, rc, used, allow, limit, mana - rc), station.buffer_event.encode), [payee]);
@@ -485,7 +498,8 @@ export class Station {
   bigOk(c: station.config_object, t: station.ticket_object, ops: protocol.operation[], rc: u64, mana: u64, now: u64, payee: Uint8Array): bool {
     if (this.ticketEnded(t, now) || rc > t.remaining) return false;    // lock expired or Mana used up
     if (this.suspended.has(t.buyer!)) return false;                    // buyer suspended by the owner
-    if (mana - rc < this.bigFloor(c)) return false;                     // never below admin_min + one day's budget
+    const b = this.big.get()!; const others = b.ticket_open > t.remaining ? b.ticket_open - t.remaining : 0;
+    if (mana - rc < this.bigFloor(c) + others) return false;            // never below the floor, nor into other tickets' locks
     for (let i = 0; i < ops.length; i++) {
       const up = ops[i].upload_contract;
       if (ops[i].call_contract != null) { if (!Arrays.equal(ops[i].call_contract!.contract_id, payee)) return false; continue; } // the payee's own app only (9:09 PM)
@@ -494,6 +508,7 @@ export class Station {
     }
     t.remaining -= rc;
     this.tickets.put(payee, t);
+    b.ticket_open = b.ticket_open > rc ? b.ticket_open - rc : 0; this.big.put(b); // used: no longer locked
     this.watchReserve(c, mana - rc);
     return true;
   }
@@ -565,7 +580,8 @@ export class Station {
     if (sumMana(w) + mana > c.big_week_cap) { r.reason = "weekly big-upload cap reached"; return r; }
     if (this.debtNow(c, b, now) + mana > c.big_max_debt) { r.reason = "reserve still repaying"; return r; }
     const m = this.mana();
-    if (m < mana || m - mana < this.bigFloor(c)) { r.reason = "reserve too low right now"; return r; }
+    // Review H1: Mana already locked by other open tickets is not for sale again.
+    if (m < mana || m - mana < this.bigFloor(c) + b.ticket_open) { r.reason = "reserve too low right now"; return r; }
     r.available = true; return r;
   }
   quote_big_upload(args: station.quote_big_upload_arguments): station.quote_big_upload_result {
@@ -595,7 +611,7 @@ export class Station {
     // Audit #3: the app itself must approve being sponsored (its key, or its own authorize, signs this purchase), so
     // nobody can claim another developer's contract and lock them out.
     System.require(System.checkAuthority(authority.authorization_type.contract_call, args.target!), "the target app must approve (sign) this purchase");
-    this.sweep(c, now);                                                 // audit #4: close finished purchases first
+    this.sweep(c, now, args.token!);                                    // audit #4: close finished purchases first (same token: M1)
     this.committed(c, now, true);                                       // clean expired entries
     System.require(this.openFor(args.buyer!, now) < this.maxPerBuyer(c), "too many open allowances for this buyer");
     const existing = this.targets.get(args.target!);
@@ -607,7 +623,7 @@ export class Station {
     const a = new station.allowance_object(b.next_id, args.buyer, args.kind, args.target, args.mana_per_day, now + args.days * DAY, new station.window_object());
     a.token = args.token; a.term_days = args.days; a.unit_price = q.unit_price; a.paid = q.price; a.term_start = now; a.total_paid = q.price;
     const e = this.newPurchase(1, args.buyer!, args.token!, q.price, now, a.expiry);
-    e.days = args.days; e.per_day = q.price / args.days; e.allowance_id = a.id; this.escrow.put(u32Key(e.id), e);
+    e.days = args.days; e.per_day = q.price / args.days; e.allowance_id = a.id; e.min_keep = this.minKeep(args.token!, q.price); this.escrow.put(u32Key(e.id), e);
     a.purchase_ids.push(e.id);
     this.allowances.put(u32Key(a.id), a);
     const reg = this.registry.get()!; reg.open_ids.push(a.id); this.registry.put(reg);
@@ -622,7 +638,7 @@ export class Station {
     System.require(isAddress(args.payer) && System.checkAuthority(authority.authorization_type.contract_call, args.payer!), "payer must sign");
     const a = this.allowances.get(u32Key(args.id)); System.require(a != null, "no such allowance");
     System.require(!this.suspended.has(args.payer!) && !this.suspended.has(a!.buyer!), "buyer suspended");
-    this.sweep(c, now);                                                 // audit #4
+    this.sweep(c, now, args.token!);                                    // audit #4
     const t = this.targets.get(a!.target!); System.require(t != null, "target was taken by another allowance");
     System.require(u32(t!.total) == a!.id, "target was taken by another allowance");
     const q = this.allowanceQuote(c, args.token!, a!.mana_per_day, args.days, now, a!.id);
@@ -638,7 +654,7 @@ export class Station {
     for (let i = 0; i < a!.purchase_ids.length; i++) { const x = this.escrow.get(u32Key(a!.purchase_ids[i])); if (x != null && !x.closed) keep.push(x.id); }
     System.require(keep.length < MAX_TERMS, "too many open terms on this allowance");
     const e = this.newPurchase(1, args.payer!, args.token!, q.price, start, a!.expiry);
-    e.days = args.days; e.per_day = q.price / args.days; e.allowance_id = a!.id; this.escrow.put(u32Key(e.id), e);
+    e.days = args.days; e.per_day = q.price / args.days; e.allowance_id = a!.id; e.min_keep = this.minKeep(args.token!, q.price); this.escrow.put(u32Key(e.id), e);
     keep.push(e.id); a!.purchase_ids = keep;
     this.allowances.put(u32Key(a!.id), a!);
     System.event("station.allowance_renewed", Protobuf.encode(new station.purchase_event(a!, null, args.token, q.price, true, false, ALLOWANCE_TERMS), station.purchase_event.encode), [args.payer!, a!.target!]);
@@ -651,7 +667,7 @@ export class Station {
     System.require(isAddress(args.buyer) && System.checkAuthority(authority.authorization_type.contract_call, args.buyer!), "buyer must sign");
     System.require(isAddress(args.payee) && !Arrays.equal(args.payee!, this.contractId), "payee required");
     System.require(!this.suspended.has(args.buyer!), "buyer suspended");
-    this.sweep(c, now);                                                 // audit #4 (may also settle an expired ticket here)
+    this.sweep(c, now, args.token!);                                    // audit #4 (may also settle an expired ticket here)
     const old = this.tickets.get(args.payee!); System.require(old == null, "payee already has a ticket");
     const cd = this.ticketCd.get(args.buyer!);
     System.require(cd == null || now >= cd.total, "buyer cooldown: one ticket per buyer per cooldown period");
@@ -660,6 +676,7 @@ export class Station {
     System.require(q.price <= args.max_price, "price above the accepted quote");
     const b = this.big.get()!;
     b.debt = this.debtNow(c, b, now) + args.mana; b.debt_ts = now;
+    b.ticket_open += args.mana;                                          // review H1: this Mana is now locked for the buyer
     if (b.week == null) b.week = new station.window_object();
     roll(b.week!, now / DAY, WEEK_N, false); add(b.week!, now / DAY, WEEK_N, args.mana, false);
     this.big.put(b);
@@ -669,7 +686,7 @@ export class Station {
     // can't repeat faster than once per cooldown (so no separate refund-triggered cooldown is needed).
     if (c.big_cooldown_ms > 0) this.ticketCd.put(args.buyer!, new station.revenue_object(now + c.big_cooldown_ms));
     const e = this.newPurchase(2, args.buyer!, args.token!, q.price, now, t.expiry);
-    e.payee = args.payee; e.mana = args.mana; this.escrow.put(u32Key(e.id), e); t.purchase_id = e.id;
+    e.payee = args.payee; e.mana = args.mana; e.min_keep = this.minKeep(args.token!, q.price); this.escrow.put(u32Key(e.id), e); t.purchase_id = e.id;
     this.tickets.put(args.payee!, t);
     System.event("station.big_upload_bought", Protobuf.encode(new station.purchase_event(null, t, args.token, q.price, true, false, BIG_TERMS), station.purchase_event.encode), [args.buyer!, args.payee!]);
     this.collect(args.token!, args.buyer!, q.price);
@@ -702,9 +719,10 @@ export class Station {
   }
   set_config(args: station.set_config_arguments): station.set_config_result {
     this.requireOwner(); System.require(args.config != null, "config required");
+    const oldCap = this.soldCap(this.config.get()!);
     args.config!.paused = this.config.get()!.paused;                     // pause only via set_paused (escrow clock)
     this.checkConfig(args.config!); this.config.put(args.config!);
-    this.noOversell(args.config!, this.now());                          // audit #7
+    this.noOversell(args.config!, this.now(), oldCap);                  // audit #7
     return new station.set_config_result();
   }
   set_paused(args: station.set_paused_arguments): station.set_paused_result {
@@ -735,10 +753,11 @@ export class Station {
     const c = this.requireOwner();
     System.require(args.value != null && args.app != GLOBAL_KEY, "app value required");
     this.validateReservations(c, args.app, args.value);                 // boosts are explicit owner permission
+    const oldCap = this.soldCap(c);
     this.apps.put(u32Key(args.app), args.value!);
     const reg = this.registry.get()!;
     if (!reg.app_ids.includes(args.app)) { System.require(reg.app_ids.length < 32, "too many apps"); reg.app_ids.push(args.app); this.registry.put(reg); }
-    this.noOversell(c, this.now());                                     // audit #7
+    this.noOversell(c, this.now(), oldCap);                             // audit #7
     return new station.set_app_result();
   }
   set_entry(args: station.set_entry_arguments): station.set_entry_result {
@@ -787,6 +806,7 @@ export class Station {
     // never KOIN or any other token (Carl, 8:10 PM). Mana itself can't be transferred at all.
     System.require(Arrays.equal(args.token!, Base58.decode(VUSDT)) || Arrays.equal(args.token!, Base58.decode(VUSDC)), "only vUSDT or vUSDC");
     const v = args.value!;
+    System.require(v.min_purchase <= v.max_per_purchase, "minimum charge above the per-purchase maximum"); // review L4
     System.require(v.price_1d <= MAX_UNIT_PRICE && v.price_7d <= MAX_UNIT_PRICE && v.price_30d <= MAX_UNIT_PRICE && v.big_per_1000 <= MAX_UNIT_PRICE, "price too large");
     // Affects new purchases and renewals only: existing allowances and tickets keep their stored snapshot and expiry.
     this.prices.put(args.token!, args.value!);
@@ -794,12 +814,12 @@ export class Station {
   }
   // ═══════ escrow: cancel, settle, release, owner refund (Carl, 7:47 PM) ═══════
   /** End an allowance's terms at time t: refund unused whole days; return the new expiry (end of the paid current day). */
-  endTerms(a: station.allowance_object, t: u64, action: string): u64[] {
+  endTerms(a: station.allowance_object, t: u64, action: string, keepMin: bool = true): u64[] {
     let refund: u64 = 0; let newExpiry: u64 = t;
     for (let i = 0; i < a.purchase_ids.length; i++) {
       const e = this.escrow.get(u32Key(a.purchase_ids[i]));
       if (e == null || e.closed || t >= e.end) continue;                // finished terms: releasable as they are
-      const r = this.termRefund(e!, t);
+      const r = this.termRefund(e!, t, keepMin);
       // Shorten the term to what was used, so nothing can be refunded twice (later refunds compute 0 unused days).
       const used = e!.days - this.unusedDays(e!, t);
       if (t < e!.start) e!.end = e!.start;                               // future term: nothing used
@@ -807,14 +827,22 @@ export class Station {
       e!.days = t < e!.start ? 0 : used;
       this.escrow.put(u32Key(e!.id), e!);
       this.doRefund(e!, r, action);
+      refund += r;
+      if (t < e!.start) {
+        // Review C1 (critical, pre-existing): a future (renewed) term that is refunded must NOT keep the service alive.
+        // It used to set end = start and then extend the expiry to that start, so a buyer got ~86% back and kept the
+        // service. Now it never counts toward the expiry and is closed at once (anything kept goes to the treasury).
+        this.doRelease(this.config.get()!, this.escrow.get(u32Key(e!.id))!, "term_cancelled");
+        continue;
+      }
       if (e!.end > newExpiry) newExpiry = e!.end;
     }
     a.expiry = newExpiry; this.allowances.put(u32Key(a.id), a);
     return [refund, newExpiry];
   }
-  refundSum(a: station.allowance_object, t: u64): u64 {
+  refundSum(a: station.allowance_object, t: u64, keepMin: bool = true): u64 {
     let r: u64 = 0;
-    for (let i = 0; i < a.purchase_ids.length; i++) { const e = this.escrow.get(u32Key(a.purchase_ids[i])); if (e != null && !e.closed) r += this.termRefund(e, t); }
+    for (let i = 0; i < a.purchase_ids.length; i++) { const e = this.escrow.get(u32Key(a.purchase_ids[i])); if (e != null && !e.closed && t < e.end) r += this.termRefund(e, t, keepMin); }
     return r;
   }
   cancel_allowance(args: station.cancel_allowance_arguments): station.cancel_allowance_result {
@@ -838,6 +866,7 @@ export class Station {
     const b = this.big.get()!; const d = this.debtNow(c, b, now);
     const unused = t.remaining;
     b.debt = unused >= d ? 0 : d - unused; b.debt_ts = now;                 // outstanding
+    b.ticket_open = b.ticket_open > unused ? b.ticket_open - unused : 0;     // review H1: the lock ends here
     if (unused > 0 && b.week != null) {                                       // weekly cap: only used Mana counts
       roll(b.week!, now / DAY, WEEK_N, false);
       const slot = t.bought / DAY;
@@ -890,6 +919,8 @@ export class Station {
     System.require(t >= e!.end, "term not ended: funds stay in escrow");
     const sus = this.suspended.get(e!.buyer!);
     System.require(sus == null || sus.reason != 2, "sanctions: funds frozen in escrow pending legal review");
+    const al = this.allowances.get(u32Key(e!.allowance_id));
+    if (al != null) { const so = this.suspended.get(al.buyer!); System.require(so == null || so.reason != 2, "sanctions: funds frozen in escrow pending legal review"); } // review L5
     return new station.release_result(this.doRelease(c, e!, "release"));
   }
   owner_refund(args: station.owner_refund_arguments): station.owner_refund_result {
@@ -897,8 +928,8 @@ export class Station {
     if (args.allowance_id > 0) {
       const a = this.allowances.get(u32Key(args.allowance_id)); System.require(a != null, "no such allowance");
       this.noSanctionedRefund(a!.buyer!);
-      const r = this.refundSum(a!, t);
-      this.endTerms(a!, t, "owner_refund");
+      const r = this.refundSum(a!, t, false);                            // buyer not at fault: no minimum kept
+      this.endTerms(a!, t, "owner_refund", false);
       return new station.owner_refund_result(r);
     }
     System.require(isAddress(args.ticket_payee), "allowance_id or ticket_payee");
