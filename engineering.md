@@ -617,3 +617,35 @@ Koinos Foundation testnet node, fresh accounts per run (see `testnet/README.md` 
 - Real costs replace the estimates: about 0.17 Mana per sponsored play, of which authorize is about 0.13.
 
 **Open, for Carl:** a ticket is charged its tx's rc limit, not the Mana actually used (authorize runs before execution, so it can't know the actual cost).
+
+## Audit #1 built: permission takeover, council, connected-apps list (Oct 20 2026)
+**Chain fact (koinos-chain `check_authority`):** with an authority overridden, the chain calls the station's `authorize` for EVERY check of that type. There is no automatic approval when caller == account. For `contract_call`, `call.caller` is the caller of the contract doing the check (for example the station calling KOIN.transfer). Payer and payee are checked before any operation runs.
+
+**Lockdown (all three overrides, enforced at init):**
+- `contract_call`: true only when `call.caller` is the station itself. That covers escrow payouts and council withdrawals. A transaction signed with the key gets false.
+- `contract_upload`: only the exact approved bytecode (sha2-256 multihash), alone in its transaction, after the wait, within 7 days, with all three overrides kept.
+- `init`: only inside the station's own upload transaction, with all three overrides. It can't be front-run, and a deploy without the lockdown can't be set up.
+- The station never pays for its own transactions.
+
+**Council:**
+- 2–7 members; threshold ≥ 2.
+- Delay: 48 h minimum (60 s on testnet builds), 30 days maximum.
+- Any one member can veto, except their own removal.
+- Max 3 open proposals per member, 16 in total.
+- A council change restarts every open proposal's wait.
+- `execute` can be called by anyone after the wait, and re-counts approvals from current members only.
+- Guarded actions: upgrade, KOIN withdrawal (never below `koin_amount`), rescue of non-KOIN tokens above escrow, council, delay, treasury, ticket fee, owner.
+
+**Owner:** handles everyday operations. Council members can pause (emergency brake), vote and veto. Station-paid admin transactions follow the per-user limits.
+
+**Connected apps:**
+- `connect_app` / `disconnect_app`, one step each.
+- `list_connected`: free apps and paid allowances, use in the last 24 h, budget, reserved, sellable, sold.
+- Bounded index of up to 64 apps.
+- Tools: `site/console.html` (Kondor) and `admin/station-admin.mjs`.
+
+**Independent review (same day) found a CRITICAL bypass in the first version:** the upgrade check read the last upload in the transaction, while the chain asks once per upload. An attacker could have put their own code before the approved code in one transaction and drained the station in between. It is fixed: the approved upload must be the only operation, and only the first operation is ever considered. Unit tests and an on-chain replay cover it. H1, M1–M3, L1, L2, L4 and L5 were fixed too (see commit b0322dd).
+
+**Tests: 71/71.** Mutation checks: all 15 lockdown/council rules and 4 review fixes are caught.
+
+**Not supported:** upgrading an already-deployed pre-lockdown station in place. Deploy fresh (nothing is on mainnet).

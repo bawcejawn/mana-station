@@ -146,7 +146,10 @@
           </details>
           <details>
             <summary>Who holds my payment?</summary>
-            <div><p>The station operator holds it until your term ends. For now that's operator custody, not a trustless escrow. Shared control with a time delay is planned before mainnet.</p></div>
+            <div>
+              <p>The station contract holds it until your term ends. Then it goes to the operator, or back to you if you cancel. The station's own key can't move it on its own.</p>
+              <p>Anything else that moves money or changes the station's code needs two of the three council members to approve, then a 48-hour public wait. During the wait, any one member can veto. It isn't fully trustless, but no single person can take your payment.</p>
+            </div>
           </details>
         </div>
       </div>
@@ -177,7 +180,7 @@
   <footer class="site-foot">
     <div class="wrap">
       <span>Mana Station, built on Koinos</span>
-      <p>Draft service terms are under legal review. Payments are held by the station operator until a term ends; this is operator custody, not a trustless escrow.</p>
+      <p>Draft service terms are under legal review. Payments are held by the station contract until a term ends. Its key alone can't move them: money moves need two of the three council members, a 48-hour public wait and no veto.</p>
     </div>
   </footer>
 </body>
