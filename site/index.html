@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Mana Station: free transactions for Koinos apps</title>
+  <meta name="description" content="Mana Station pays the Koinos transaction cost for your app's users. Prepay a daily amount of Mana in vUSDT or vUSDC and your users play free, with no KOIN needed.">
+  <meta name="theme-color" content="#2f5bff">
+  <!-- Add <link rel="canonical"> and og:url once the domain is chosen. -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Mana Station">
+  <meta property="og:title" content="Mana Station: free transactions for Koinos apps">
+  <meta property="og:description" content="Your app's users play free. You prepay a daily amount of Mana that refills every day.">
+  <meta name="twitter:card" content="summary">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Figtree:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"WebApplication","name":"Mana Station","applicationCategory":"DeveloperApplication","operatingSystem":"Web",
+   "description":"Pays the Koinos transaction cost (Mana) for an app's users. App builders prepay a daily Mana allowance in vUSDT or vUSDC.",
+   "offers":{"@type":"Offer","price":"0.03","priceCurrency":"USD","description":"Introductory: 1,000 Mana per day for 1 day"}}
+  </script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="site-head">
+    <div class="wrap">
+      <a class="brand" href="index.html" aria-label="Mana Station home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--ink)"/><path d="M16 6c4 5 7 8.6 7 12.4A7 7 0 0 1 9 18.4C9 14.6 12 11 16 6Z" fill="var(--mana)"/><rect x="11" y="20" width="10" height="3" rx="1.5" fill="var(--spark)"/></svg>
+        Mana Station
+      </a>
+      <nav class="nav" aria-label="Main">
+        <a href="index.html" aria-current="page">Home</a>
+        <a href="how-it-works.html">How it works</a>
+        <a href="how-it-works.html#pricing">Pricing</a>
+        <span class="status-pill">Testing on Harbinger</span>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="wrap">
+        <div class="hero-copy">
+          <h1 id="hero-title">Let your users play free.</h1>
+          <p class="lede">Mana Station pays the Koinos transaction cost for your app's users. You prepay a daily amount of Mana in stablecoins, and your players never need KOIN to get started.</p>
+          <div class="actions">
+            <a class="btn btn-main" href="how-it-works.html">See how to take part</a>
+            <a class="btn btn-quiet" href="how-it-works.html#pricing">Check the prices</a>
+          </div>
+          <p class="small">Not live yet. The station is being tested on Harbinger, the Koinos test network.</p>
+        </div>
+
+        <figure class="tank-card" aria-labelledby="tank-title">
+          <div class="tank-top">
+            <span class="tank-title" id="tank-title">Station Mana</span>
+            <span class="tank-reading">92%</span>
+          </div>
+          <div class="tank" role="img" aria-label="A tank of five cells, one per day of refill. Four are full and the fifth is refilling.">
+            <span class="cell"><i></i></span>
+            <span class="cell"><i></i></span>
+            <span class="cell"><i></i></span>
+            <span class="cell"><i></i></span>
+            <span class="cell refill"><i style="height:60%"></i></span>
+          </div>
+          <div class="tank-days" aria-hidden="true"><span>Day 1</span><span>Day 2</span><span>Day 3</span><span>Day 4</span><span>Day 5</span></div>
+          <div class="tank-legend"><span class="key">Ready to spend</span><span class="key spark">Refilling now</span></div>
+          <p class="small">Mana refills 20% of the station's KOIN every day, so the tank is full again in five days. Apps draw from it as their users play.</p>
+          <figcaption class="stack" style="gap:10px">
+            <span class="small">Example day of use</span>
+            <ul class="draws" aria-label="Example of today's use">
+              <li><span>Knode players</span><b>2,140 Mana</b></li>
+              <li><span>SwarmTales readers</span><b>1,380 Mana</b></li>
+              <li><span>Apps with a paid allowance</span><b>410 Mana</b></li>
+            </ul>
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="band" aria-labelledby="who-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="who-title">Who it's for</h2>
+          <p class="lede">Every Koinos transaction costs Mana, which comes from holding KOIN. New players usually have none. The station covers it for them.</p>
+        </div>
+        <div class="split">
+          <article class="audience">
+            <span class="tag">App builders</span>
+            <h3>You pick how much your players can do each day</h3>
+            <ul class="ticks">
+              <li>Buy a daily Mana allowance for your app's contract, for 1, 7 or 30 days.</li>
+              <li>Pay in vUSDT or vUSDC. No KOIN to buy, lock up or manage.</li>
+              <li>Every player of your app is covered, with built-in limits so one account can't use it all.</li>
+              <li>Cancel any time and get back the whole days you haven't used.</li>
+            </ul>
+            <p><a href="how-it-works.html">Read the builder guide</a></p>
+          </article>
+          <article class="audience">
+            <span class="tag">Players</span>
+            <h3>You just play</h3>
+            <ul class="ticks">
+              <li>Nothing to install or set up beyond your usual wallet.</li>
+              <li>If an app uses Mana Station, your actions in it cost you nothing.</li>
+              <li>If free play is busy, the app can offer to use your own Mana instead. Refused attempts never cost you anything.</li>
+            </ul>
+            <p><a href="how-it-works.html#players">What players should know</a></p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" aria-labelledby="price-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="price-title">What a day of free play costs</h2>
+          <p class="lede">Introductory prices, per 1,000 Mana a day. We estimate 1,000 Mana covers roughly 650 to 900 simple player actions; testnet measurements will firm that up.</p>
+        </div>
+        <div class="price-table-wrap">
+          <table>
+            <caption class="small" style="text-align:left;padding:16px 22px 0">Paid in vUSDT or vUSDC. Prices may rise for new purchases, never for a term you've already bought.</caption>
+            <thead><tr><th scope="col">Term</th><th scope="col">Price per 1,000 Mana a day</th><th scope="col">Good for</th></tr></thead>
+            <tbody>
+              <tr><td>1 day</td><td class="num">$0.03</td><td>Trying it out, launch days</td></tr>
+              <tr><td>7 days</td><td class="num">$0.20</td><td>A week of steady play</td></tr>
+              <tr><td>30 days</td><td class="num">$0.75</td><td>Running an app month to month</td></tr>
+              <tr><td>Big upload</td><td class="num">$0.05</td><td>One-off contract uploads. Per 1,000 Mana, reserved for 24 hours</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="price-notes">
+          <p class="small">No auto-renew. Service stops when your term ends unless you renew.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" aria-labelledby="apps-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="apps-title">First up</h2>
+          <p class="lede">Two Koinos apps from the same team get the first reserved share of the station's Mana.</p>
+        </div>
+        <div class="apps">
+          <article class="app">
+            <h3>Knode</h3>
+            <p>Make predictions on Koinos block producers. Every prediction is a transaction, and the station covers it.</p>
+          </article>
+          <article class="app">
+            <h3>SwarmTales Stories</h3>
+            <p>A story app on Koinos. Its readers' actions come out of the station's reserved share, so they don't need KOIN first.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" aria-labelledby="status-title">
+      <div class="wrap split">
+        <div class="stack">
+          <h2 id="status-title">Where things stand</h2>
+          <p class="lede">We'd rather tell you exactly where the station is than promise a launch date.</p>
+        </div>
+        <ol class="timeline">
+          <li class="done"><div><strong>Contract written and audited</strong><span class="small">Security review done, the issues it found fixed and tested.</span></div></li>
+          <li class="now"><div><strong>Testing on Harbinger</strong><span class="small">Every scenario rehearsed on the Koinos test network. In progress.</span></div></li>
+          <li><div><strong>Stronger fund protection</strong><span class="small">Shared control of the station's funds and upgrades, with a time delay, before any real money is involved.</span></div></li>
+          <li><div><strong>Mainnet</strong><span class="small">Opens to app builders once everything above is done.</span></div></li>
+        </ol>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-foot">
+    <div class="wrap">
+      <span>Mana Station, built on Koinos</span>
+      <p>Draft service terms are under legal review. Payments are held by the station operator until a term ends; this is operator custody, not a trustless escrow.</p>
+    </div>
+  </footer>
+</body>
+</html>

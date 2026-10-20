@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>How Mana Station works: a guide for app builders</title>
+  <meta name="description" content="How to cover your Koinos app's transaction costs with Mana Station: pick a daily Mana amount, pay in vUSDT or vUSDC, and your users play free. Prices, limits, refunds and what players need to know.">
+  <meta name="theme-color" content="#2f5bff">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Mana Station">
+  <meta property="og:title" content="How Mana Station works">
+  <meta property="og:description" content="Five steps from your wallet to free play for every user of your Koinos app.">
+  <meta name="twitter:card" content="summary">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Figtree:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"HowTo","name":"Cover your Koinos app's transaction costs with Mana Station",
+   "step":[{"@type":"HowToStep","name":"Connect your wallet"},{"@type":"HowToStep","name":"Choose your app and a daily amount"},
+   {"@type":"HowToStep","name":"Approve with your app's key"},{"@type":"HowToStep","name":"Pay in vUSDT or vUSDC"},
+   {"@type":"HowToStep","name":"Point your app at the station"}]}
+  </script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="site-head">
+    <div class="wrap">
+      <a class="brand" href="index.html" aria-label="Mana Station home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--ink)"/><path d="M16 6c4 5 7 8.6 7 12.4A7 7 0 0 1 9 18.4C9 14.6 12 11 16 6Z" fill="var(--mana)"/><rect x="11" y="20" width="10" height="3" rx="1.5" fill="var(--spark)"/></svg>
+        Mana Station
+      </a>
+      <nav class="nav" aria-label="Main">
+        <a href="index.html">Home</a>
+        <a href="how-it-works.html" aria-current="page">How it works</a>
+        <a href="#pricing">Pricing</a>
+        <span class="status-pill">Testing on Harbinger</span>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" aria-labelledby="page-title">
+      <div class="wrap" style="grid-template-columns:minmax(0,1fr)">
+        <div class="hero-copy">
+          <h1 id="page-title">From your wallet to free play in five steps.</h1>
+          <p class="lede">This guide is for people who build Koinos apps. If you just want to play, <a href="#players">skip to the part for players</a>.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" aria-labelledby="steps-title" style="padding-top:0">
+      <div class="wrap split">
+        <div class="stack">
+          <h2 id="steps-title">Taking part as a builder</h2>
+          <p class="lede">You buy a daily amount of Mana for your app. Every user of your app then draws from it when they play.</p>
+          <p class="small">The builder dashboard opens with mainnet. Until then, this is exactly what it will ask of you.</p>
+        </div>
+        <ol class="route">
+          <li><div class="step-body">
+            <h3>Connect your wallet</h3>
+            <p>Use Kondor or any Koinos wallet that holds a little vUSDT or vUSDC. You don't need KOIN.</p>
+          </div></li>
+          <li><div class="step-body">
+            <h3>Choose your app and a daily amount</h3>
+            <p>Enter your app's contract address, how much Mana a day your players may use, and a term of 1, 7 or 30 days. You'll see the exact price before anything is charged.</p>
+          </div></li>
+          <li><div class="step-body">
+            <h3>Approve with your app's key</h3>
+            <p>Your app's own key signs the purchase too. That proves the app is yours, so nobody else can claim it.</p>
+          </div></li>
+          <li><div class="step-body">
+            <h3>Pay in vUSDT or vUSDC</h3>
+            <p>One transaction approves the amount and pays it. The payment is held until your term ends, so you can still cancel.</p>
+          </div></li>
+          <li><div class="step-body">
+            <h3>Point your app at the station</h3>
+            <p>Set the station as the payer on your users' transactions. Your players sign as usual; the station covers the Mana.</p>
+            <div class="example"><b>For developers:</b> with Koilib, pass <code>payer: STATION</code> and <code>payee: user</code> in the transaction options. If free play is busy, fall back to the user's own Mana.</div>
+          </div></li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="band" id="pricing" aria-labelledby="pricing-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="pricing-title">Pricing</h2>
+          <p class="lede">Introductory prices, per 1,000 Mana a day. You pay once for the whole term.</p>
+        </div>
+        <div class="price-table-wrap">
+          <table>
+            <thead><tr><th scope="col">Term</th><th scope="col">Per 1,000 Mana a day</th><th scope="col">Example: 3,000 Mana a day</th></tr></thead>
+            <tbody>
+              <tr><td>1 day</td><td class="num">$0.03</td><td>$0.09</td></tr>
+              <tr><td>7 days</td><td class="num">$0.20</td><td>$0.60</td></tr>
+              <tr><td>30 days</td><td class="num">$0.75</td><td>$2.25</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="price-notes">
+          <p class="small">Big uploads, such as putting a whole contract on-chain, cost $0.05 per 1,000 Mana, with a minimum of 5,000 Mana. That Mana is reserved for you for 24 hours.</p>
+          <p class="small">No auto-renew. Prices may rise for new purchases, never for a term you've already paid for.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" aria-labelledby="qa-title">
+      <div class="wrap split">
+        <div class="stack">
+          <h2 id="qa-title">Good to know</h2>
+          <p class="lede">The rules the station follows, in plain words. These match the draft terms, which are still under legal review.</p>
+        </div>
+        <div class="qa">
+          <details>
+            <summary>Which transactions does my allowance cover?</summary>
+            <div><p>Any transaction where every step calls your app's contract. A transaction that also calls another contract, or moves tokens directly, isn't covered.</p></div>
+          </details>
+          <details>
+            <summary>What if I cancel?</summary>
+            <div>
+              <p>You get back every whole day you haven't started, in the stablecoin you paid with. The current day counts as used, so the minimum charge is one day.</p>
+              <div class="example">Bought 7 days and cancelled on day 1: you get 6/7 of the price back.</div>
+            </div>
+          </details>
+          <details>
+            <summary>Can one player use up my whole allowance?</summary>
+            <div><p>No. Each player has a few actions a minute and a daily cap, and brand-new accounts get a smaller share on their first day. That keeps bots from draining what you paid for.</p></div>
+          </details>
+          <details>
+            <summary>How many purchases can one wallet hold?</summary>
+            <div><p>Up to five at a time, counting daily allowances and big uploads together.</p></div>
+          </details>
+          <details>
+            <summary>How do refunds work for big uploads?</summary>
+            <div>
+              <p>The Mana is reserved for you for 24 hours at the full price, whether you use it or not. If you end early, you get back the value of the Mana you didn't use, reduced by the time that has passed. At least 5% is always kept.</p>
+              <div class="example">Half the Mana unused, with 18 of 24 hours left: 50% × 75% = 37.5% of the price back.</div>
+            </div>
+          </details>
+          <details>
+            <summary>What if the station is paused?</summary>
+            <div><p>Paused time is added back to your term, so you don't lose days you couldn't use.</p></div>
+          </details>
+          <details>
+            <summary>Who holds my payment?</summary>
+            <div><p>The station operator holds it until your term ends. For now that's operator custody, not a trustless escrow. Shared control with a time delay is planned before mainnet.</p></div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="players" aria-labelledby="players-title">
+      <div class="wrap">
+        <div class="player-box">
+          <h2 id="players-title">Just here to play?</h2>
+          <p>There's nothing to set up. If an app uses Mana Station, your actions in it are free. Sign with your wallet as usual.</p>
+          <p>If free play is busy, the app may ask whether you want to use your own Mana instead. A refused attempt never costs you anything.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" aria-labelledby="words-title">
+      <div class="wrap">
+        <div class="section-head"><h2 id="words-title">Three words you'll see</h2></div>
+        <dl class="glossary">
+          <div><dt>Mana</dt><dd>What a Koinos transaction costs. It comes from holding KOIN and refills by itself, about 20% a day.</dd></div>
+          <div><dt>KOIN</dt><dd>The Koinos coin. The station holds it so your players don't have to.</dd></div>
+          <div><dt>vUSDT and vUSDC</dt><dd>Dollar stablecoins on Koinos. They're how builders pay for allowances.</dd></div>
+        </dl>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-foot">
+    <div class="wrap">
+      <span>Mana Station, built on Koinos</span>
+      <p>Draft service terms are under legal review. Payments are held by the station operator until a term ends; this is operator custody, not a trustless escrow.</p>
+    </div>
+  </footer>
+</body>
+</html>
