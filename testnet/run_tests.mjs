@@ -103,11 +103,14 @@ const meta = await provider.invokeGetContractMetadata(ST).catch(() => null);
 if (meta?.value?.hash) note(`station account already has a contract (hash ${meta.value.hash}): a prior run (ours or another assistant's, e.g. Clover) touched it`);
 
 // ---------------------------------------------------------------- 0b. funding (first: init checks the station's KOIN balance)
-const want = { [ST]: 160n, [BUY]: 20n, [U1]: 8n, [U2]: 8n, [OWN]: 10n, [SP1]: 3n, [SP2]: 3n }; // station >= its koin_amount (150)
+const want = { [ST]: 70n, [BUY]: 20n, [U1]: 8n, [U2]: 8n, [OWN]: 10n, [SP1]: 3n, [SP2]: 3n }; // station >= its koin_amount (60)
 // The funder keeps enough Mana for what it pays after funding: the station upload (the biggest), app uploads, mints.
 const LIM0 = (await provider.call("chain.get_resource_limits", {})).resource_limit_data;
 const upRc = (bytes) => (BigInt(bytes) * (BigInt(LIM0.disk_storage_cost) + BigInt(LIM0.network_bandwidth_cost)) + M) * 3n / 2n;
-const RESERVE = upRc(fs.statSync(new URL("../contracts/station/build/testnet/contract.wasm", import.meta.url)).size) + 2n * upRc(14000) + 10n * M;
+// Station-size uploads paid by the funder: the deploy and the approved upgrade (spent), plus refused attempts that
+// still need the full limit available (the C1 replay puts two station-size uploads in one transaction).
+const stUp = upRc(fs.statSync(new URL("../contracts/station/build/testnet/contract.wasm", import.meta.url)).size);
+const RESERVE = 3n * stUp + 2n * upRc(14000) + 10n * M;
 note(`run id ${RUN} (sweep leftovers with: playground.mjs sweep ${RUN}); funder must keep ${Number(RESERVE) / 1e8} Mana for uploads`);
 // Preflight (Oct 20): fund nobody unless the funder can fund everyone. A run that stops halfway leaves tKOIN in fresh
 // throwaway accounts whose keys are gone.
@@ -124,7 +127,7 @@ await sleep(4000);
 
 
 // ---------------------------------------------------------------- 3. init (provisional config for the measurements)
-const koinAmt = 150n * M;                // configured capacity → daily budget 30 Mana (20%), enough for repeated runs in one day
+const koinAmt = 60n * M;                 // configured capacity → daily budget 12 Mana (20%); each run has its own station
 const base = { owner: OWN, paused: false, koin_amount: String(koinAmt), refill_bp: 2000, admin_min: String(M / 2n), hard_max: String(2n * M),
   per_min: 10, cooldown_ms: "60000", day_actions: 50, day_mana: String(40n * M), new_actions: 50, new_mana: String(40n * M), new_pct: 100, max_ops: 2,
   big_max: String(5n * M), big_cooldown_ms: "86400000", big_week_cap: String(15n * M), big_max_debt: String(10n * M), big_ticket_ms: "0",
@@ -382,6 +385,7 @@ const APP3 = A("app3");
   note(`list_connected: ${(L.free_apps || []).length} free apps, ${(L.paid || []).length} paid allowances, daily budget ${L.daily_budget}, reserved ${L.reserved}, sellable ${L.sellable}, sold ${L.sold}`); }
 { const x = await send(C(APP3, abiA, "player3"), "play", { user: A("player3") }, sponsored(A("player3"), L)); check("connect", "its users play free right away", x.ok, x.error || `rc ${x.rc}`); }
 { const x = await admin("disconnect_app", { contract_id: APP3 }); check("connect", "disconnect_app in one step", x.ok, errOf(x)); }
+{ const x = await send(C(APP3, abiA, "player3"), "play", { user: A("player3") }, sponsored(A("player3"), L)); check("connect", "after disconnect its users are no longer sponsored", refusedNot104(x), x.error || "ACCEPTED"); }
 // ---------------------------------------------------------------- 8b2. wallet Mana pass (kind 2, Carl Oct 20: any app, no token moves)
 { const qp = await read(sta(), "quote_allowance", { token: TOK, mana_per_day: String(AU), days: "1" });
   if (!qp.available) note(`pass quote unavailable: ${qp.reason || ""}`);
@@ -418,7 +422,6 @@ const APP3 = A("app3");
   if (mine) { const c = await send(sta("player3"), "cancel_allowance", { buyer: P3, id: mine.id }, { payer: ST, payee: P3, rcLimit: M / 2n }); check("checkout", "player3 cancels with the station paying the Mana", c.ok, c.error || ""); }
   else check("checkout", "player3's pass is listed", false, JSON.stringify(Lc.paid || []));
 }
-{ const x = await send(C(APP3, abiA, "player3"), "play", { user: A("player3") }, sponsored(A("player3"), L)); check("connect", "after disconnect its users are no longer sponsored", refusedNot104(x), x.error || "ACCEPTED"); }
 
 // ---------------------------------------------------------------- 8c. audit #1: approved upgrade, then council withdrawal (also returns the test KOIN)
 { const x = await uploadTo("funder", wasm("../contracts/testapp/build/release/contract.wasm")); check("upgrade", "uploading code the council did not approve is refused", refusedNot104(x), x.error || "ACCEPTED"); }
