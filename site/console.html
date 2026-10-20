@@ -160,12 +160,14 @@
       for (const a of L.free_apps || []) {
         const tr = document.createElement("tr");
         cell(tr, a.contract_id || "(slot " + a.app + ", no contract linked)", "mono");
-        cell(tr, mana(a.mana_per_day));
-        const used = Number(BigInt(a.used_24h || 0)), cap = Number(BigInt(a.mana_per_day || 0)) || 1;
+        const off = !a.active || BigInt(a.mana_per_day || 0) === 0n;
+        if (off) { const pill = document.createElement("span"); pill.className = "pill warn"; pill.textContent = "Off"; cell(tr, pill); }
+        else cell(tr, mana(a.mana_per_day));
+        const used = Number(BigInt(a.used_24h || 0)), cap = Number(BigInt(a.mana_per_day || 0));
         const wrap = document.createElement("div"); wrap.className = "stack"; wrap.style.gap = "6px";
-        const bar = document.createElement("div"); bar.className = "bar"; bar.innerHTML = "<i></i>"; bar.firstChild.style.width = Math.min(100, used / cap * 100).toFixed(1) + "%";
-        const t = document.createElement("span"); t.className = "small"; t.textContent = mana(a.used_24h);
-        wrap.append(bar, t); cell(tr, wrap);
+        if (!off) { const bar = document.createElement("div"); bar.className = "bar"; bar.setAttribute("role", "img"); bar.setAttribute("aria-label", Math.round(used / cap * 100) + "% of today's Mana used"); bar.innerHTML = "<i></i>"; bar.firstChild.style.width = Math.min(100, used / cap * 100).toFixed(1) + "%"; wrap.append(bar); }
+        const t = document.createElement("span"); t.className = "small"; t.textContent = off ? mana(a.used_24h) + " (before it was switched off)" : mana(a.used_24h) + " of " + mana(a.mana_per_day);
+        wrap.append(t); cell(tr, wrap);
         cell(tr, a.strict ? "Listed functions" : "Any function");
         const act = document.createElement("div"); act.className = "actions-cell";
         if (a.contract_id) {
