@@ -299,7 +299,7 @@ const aid = 1;
 const xfer = () => send(C(PAYAPP, abiA, "user2"), "play", { user: U2 }, sponsored(U2, L)); // user2: user1 is in its 10-min cooldown from the measurements
 const b1 = await xfer(); check("escrow", "paying app (app allowance): its users' txs sponsored from its allowance", b1.ok, b1.error || `rc ${b1.rc}`); if (b1.ok) cost("play on paying app, sponsored by its allowance", b1.rc);
 const acc = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 2n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 2, target: U1, mana_per_day: String(2n * AU), days: "7", token: TOK, max_price: String(price * 2n) }]], { rcLimit: M / 2n });
-check("designated", "account allowance (kind 2) refused (Carl, 9:09 PM)", !acc.ok, acc.error || "");
+check("designated", "wallet Mana pass without the wallet's own signature refused", !acc.ok, acc.error || "");
 const tokT = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 2n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 1, target: TOK, mana_per_day: String(AU), days: "7", token: TOK, max_price: String(price * 2n) }]], { rcLimit: M / 2n });
 check("designated", "allowance targeting a token contract refused", !tokT.ok, tokT.error || "");
 const tr = await send(tok("user1"), "transfer", { from: U1, to: U2, value: "1" }, sponsored(U1, L));
@@ -370,6 +370,24 @@ const APP3 = A("app3");
   note(`list_connected: ${(L.free_apps || []).length} free apps, ${(L.paid || []).length} paid allowances, daily budget ${L.daily_budget}, reserved ${L.reserved}, sellable ${L.sellable}, sold ${L.sold}`); }
 { const x = await send(C(APP3, abiA, "player3"), "play", { user: A("player3") }, sponsored(A("player3"), L)); check("connect", "its users play free right away", x.ok, x.error || `rc ${x.rc}`); }
 { const x = await admin("disconnect_app", { contract_id: APP3 }); check("connect", "disconnect_app in one step", x.ok, errOf(x)); }
+// ---------------------------------------------------------------- 8b2. wallet Mana pass (kind 2, Carl Oct 20: any app, no token moves)
+{ const qp = await read(sta(), "quote_allowance", { token: TOK, mana_per_day: String(AU), days: "1" });
+  if (!qp.available) note(`pass quote unavailable: ${qp.reason || ""}`);
+  const pp = BigInt(qp.price || 0);
+  const bp = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(pp) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 2, target: U1, mana_per_day: String(AU), days: "1", token: TOK, max_price: String(pp) }]], { rcLimit: M / 2n, cosigner: "user1" });
+  check("pass", "buy a 1 Mana/day pass for user1 (user1 co-signs)", bp.ok && bp.events.includes("station.allowance_bought"), bp.error || bp.events);
+  const own = await send(C(APP3, abiA, "user1"), "play", { user: U1 }, sponsored(U1, L));
+  check("pass", "user1's call to an app nobody pays for is sponsored by the pass", own.ok, own.error || `rc ${own.rc}`);
+  const other = await send(C(APP3, abiA, "player3"), "play", { user: A("player3") }, sponsored(A("player3"), L));
+  check("pass", "another wallet (no pass) calling the same app is refused", !other.ok, other.error || "ACCEPTED");
+  const mv = await send(tok("user1"), "transfer", { from: U1, to: BUY, value: "1" }, sponsored(U1, L));
+  check("pass", "the pass never pays a token transfer", !mv.ok, mv.error || "ACCEPTED");
+  const mvk = await send(koinC("user1"), "transfer", { from: U1, to: BUY, value: "1" }, sponsored(U1, L));
+  check("pass", "the pass never pays a KOIN transfer", !mvk.ok, mvk.error || "ACCEPTED");
+  const Lc = await read(sta(), "list_connected"); const mine = (Lc.paid || []).find((p) => p.target === U1);
+  check("pass", "list_connected shows the pass (kind 2) with today's use", !!mine && mine.kind === 2 && BigInt(mine.used_24h || 0) > 0n, JSON.stringify(mine || {}));
+  if (mine) { const x = await send(sta("buyer"), "cancel_allowance", { buyer: BUY, id: mine.id }, { rcLimit: M / 2n }); check("pass", "buyer cancels the pass (refund of unused whole days)", x.ok, x.error || ""); }
+}
 { const x = await send(C(APP3, abiA, "player3"), "play", { user: A("player3") }, sponsored(A("player3"), L)); check("connect", "after disconnect its users are no longer sponsored", refusedNot104(x), x.error || "ACCEPTED"); }
 
 // ---------------------------------------------------------------- 8c. audit #1: approved upgrade, then council withdrawal (also returns the test KOIN)

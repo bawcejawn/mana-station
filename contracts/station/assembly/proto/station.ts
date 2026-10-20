@@ -2322,6 +2322,11 @@ export namespace station {
         writer.uint32(56);
         writer.bool(message.suspended);
       }
+
+      if (message.kind != 0) {
+        writer.uint32(64);
+        writer.uint32(message.kind);
+      }
     }
 
     static decode(reader: Reader, length: i32): paid_app {
@@ -2359,6 +2364,10 @@ export namespace station {
             message.suspended = reader.bool();
             break;
 
+          case 8:
+            message.kind = reader.uint32();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -2375,6 +2384,7 @@ export namespace station {
     expiry: u64;
     used_24h: u64;
     suspended: bool;
+    kind: u32;
 
     constructor(
       id: u32 = 0,
@@ -2383,7 +2393,8 @@ export namespace station {
       mana_per_day: u64 = 0,
       expiry: u64 = 0,
       used_24h: u64 = 0,
-      suspended: bool = false
+      suspended: bool = false,
+      kind: u32 = 0
     ) {
       this.id = id;
       this.buyer = buyer;
@@ -2392,6 +2403,7 @@ export namespace station {
       this.expiry = expiry;
       this.used_24h = used_24h;
       this.suspended = suspended;
+      this.kind = kind;
     }
   }
 

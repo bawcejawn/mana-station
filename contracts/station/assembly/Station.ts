@@ -56,11 +56,15 @@ function entryKey(contract: Uint8Array, ep: u32): Uint8Array { const k = new Uin
 function pct(amount: u64, bp: u32): u64 { return amount / 10_000 * u64(bp); }
 function wholeManaUp(m: u64): u64 { return (m + MANA - 1) / MANA; }
 // DRAFT terms (audit #1/#6, 2026-10-19): rewritten to promise only what the code does. Pending legal review.
-export const ALLOWANCE_TERMS = "DRAFT, pending legal review. Prepaid Mana for one app contract. The station sponsors a transaction only when every top-level operation in it calls that app; what the app does internally when called is up to the app. The app's own key must approve the purchase. Per-user anti-spam limits apply to each of the app's users. Each wallet may hold a limited number of open allowances and tickets at once. Payment is held by the station contract until the term ends, then released to the operator. Its key alone can't move it: funds leave only through these rules (refunds, releases) or a council decision that needs at least two of its members' approvals, a public waiting period (48 hours) and no veto from any member. This is council custody, not fully trustless escrow. If the operator sets a minimum charge, it is shown in the quote and kept if you cancel. Cancel any time: unused whole days are refunded (the current day counts as used, so 1 day is the minimum charge). If the operator pauses the station, paused time is credited: your term is extended by the pause. No auto-renew: service stops at expiry unless you renew, at the price current then. 1-, 7- and 30-day terms only. Non-transferable; not redeemable for crypto or cash except these refunds. Introductory prices may increase for new purchases. A buyer may be suspended for abuse, sanctions or AUP reasons; suspended time is not extended, and the operator may refund unused days (never to a sanctioned party).";
+export const ALLOWANCE_TERMS = "DRAFT, pending legal review. Prepaid daily Mana, either for one app contract (app plan) or for one wallet (Mana pass). App plan: the station sponsors a transaction only when every top-level operation in it calls that app; what the app does internally when called is up to the app. The app's own key must approve the purchase. Per-user anti-spam limits apply to each of the app's users. Mana pass: the station sponsors the pass wallet's own transactions (the wallet is the payee and signs), calling any contract except the station and token contracts, never token transfers, approvals or burns, and never contract uploads, up to the daily amount. The wallet itself must approve the purchase. Each wallet may hold a limited number of open allowances and tickets at once. Payment is held by the station contract until the term ends, then released to the operator. Its key alone can't move it: funds leave only through these rules (refunds, releases) or a council decision that needs at least two of its members' approvals, a public waiting period (48 hours) and no veto from any member. This is council custody, not fully trustless escrow. If the operator sets a minimum charge, it is shown in the quote and kept if you cancel. Cancel any time: unused whole days are refunded (the current day counts as used, so 1 day is the minimum charge). If the operator pauses the station, paused time is credited: your term is extended by the pause. No auto-renew: service stops at expiry unless you renew, at the price current then. 1-, 7- and 30-day terms only. Non-transferable; not redeemable for crypto or cash except these refunds. Introductory prices may increase for new purchases. A buyer may be suspended for abuse, sanctions or AUP reasons; suspended time is not extended, and the operator may refund unused days (never to a sanctioned party).";
 export const BIG_TERMS = "DRAFT, pending legal review. Prepaid big upload: the station reserves the Mana you buy for you for one full 24-hour period, at the full price, whether you use it or not. Reserved Mana is not sold again or spent by the station's other services. Paid in vUSDT or vUSDC and held by the station contract (council custody: its key alone can't move funds; money moves need two or more council approvals, a 48-hour public wait and no veto). If the lock runs its full period, nothing is refunded. If you end it early, you get back the value of the Mana you have not used, reduced in a straight line by the time already passed (for example, half the Mana left with three quarters of the time left returns 37.5% of the price), always keeping a fee (currently 5%). If the operator sets a minimum charge, it is shown in the quote and kept if you cancel. Refunds are only in the stablecoin you paid, never in Mana or KOIN. Each buyer can buy one ticket per cooldown period (default 24 hours). Tickets only sponsor uploading or calling the payee's own contract. In rare cases (for example if the station's Mana falls below its safety floor) a transaction can still be refused; tell the operator, who may refund the unexpired share. Paused time extends the lock. No auto-renew. Non-transferable; not redeemable for crypto or cash except these refunds. Each wallet may hold a limited number of open allowances and tickets at once. A buyer may be suspended for abuse, sanctions or AUP reasons; the operator may refund the unexpired share (never to a sanctioned party).";
 const MAX_OPEN_PURCHASES: i32 = 128;                 // bounded loops (pause credit)
 const MAX_TERMS: i32 = 8;
 const DEFAULT_TICKET_FEE_BP: u32 = 500;             // 5% (Carl, 8:10 PM)
+// KCS-1/KCS-4 money-moving entry points: a Mana pass never pays for these on any contract.
+const EP_KCS_TRANSFER: u32 = 0x27f576ca;
+const EP_KCS_APPROVE: u32 = 0x74e21680;
+const EP_KCS_BURN: u32 = 0x859facc5;
 const DEFAULT_TICKET_MS: u64 = 86_400_000;          // ticket lifetime when big_ticket_ms = 0 (Carl, 8:02 PM: 24 h)
 const DEFAULT_MAX_PER_BUYER: u32 = 5;               // audit #3: open allowances per buyer when max_per_buyer = 0
 const SWEEP_MAX: i32 = 8;                           // audit #4: finished purchases closed per buy / renew
@@ -509,11 +513,12 @@ export class Station {
     // Route B: sold APP allowances only (Carl, 9:09 PM: "only usable through the apps that are paying for the Mana
     // usage"). Every op must call the one paying app contract; Mana is drawn from that app's allowance. No account
     // allowances: a payee address never unlocks sponsorship of arbitrary contracts.
-    if (!oneTarget) return false;
+    // Route C (Oct 20): the payee's own Mana pass covers what no app pays for (other contracts, mixed calls).
+    if (!oneTarget) return this.passOk(c, ops, payee, rc, now, gw, globalRoom, mana);
     const id = this.targets.get(target0); const kind: u32 = 1;
-    if (id == null) return false;
+    if (id == null) return this.passOk(c, ops, payee, rc, now, gw, globalRoom, mana);
     const s = this.allowances.get(u32Key(u32(id.total)));
-    if (s == null || s.kind != kind || s.expiry <= now) return false;    // expired: cut off automatically
+    if (s == null || s.kind != kind || s.expiry <= now) return this.passOk(c, ops, payee, rc, now, gw, globalRoom, mana); // expired: cut off
     if (this.suspended.has(s.buyer!)) return false;                    // buyer suspended by the owner
     if (!globalRoom) return false;                                     // paid: hard cap, no buffer
     // Audit #2: big-upload debt no longer pauses paid allowances (one unused ticket could freeze every paying customer).
@@ -526,6 +531,29 @@ export class Station {
     add(s.day!, now / USER_SLOT, USER_N, rc, false); add(gw, now / APP_SLOT, APP_N, rc, false);
     this.allowances.put(u32Key(s.id), s); this.globalWin.put(gw);
     if (u != null) this.users.put(payee, u);
+    this.watchReserve(c, mana - rc);
+    return true;
+  }
+
+  /** Route C: a wallet's Mana pass (kind 2). Only the pass wallet's own txs (payee = the wallet, who signs as payee),
+   *  calls only (no uploads: checked before), never the station, KOIN or stablecoins, and never a KCS transfer, approve
+   *  or burn on any contract (no money moves). Bounded by the pass's daily Mana and the station-wide 24 h cap. */
+  passOk(c: station.config_object, ops: protocol.operation[], payee: Uint8Array, rc: u64, now: u64, gw: station.window_object, globalRoom: bool, mana: u64): bool {
+    const id = this.targets.get(payee); if (id == null) return false;
+    const s = this.allowances.get(u32Key(u32(id.total)));
+    if (s == null || s.kind != 2 || s.expiry <= now || !Arrays.equal(s.target!, payee)) return false;
+    if (this.suspended.has(s.buyer!) || this.suspended.has(payee)) return false;
+    for (let i = 0; i < ops.length; i++) {
+      const o = ops[i].call_contract; if (o == null) return false;
+      if (Arrays.equal(o.contract_id, this.contractId) || this.isMoneyContract(o.contract_id)) return false;
+      if (o.entry_point == EP_KCS_TRANSFER || o.entry_point == EP_KCS_APPROVE || o.entry_point == EP_KCS_BURN) return false;
+    }
+    if (!globalRoom) return false;
+    if (s.day == null) s.day = new station.window_object();
+    roll(s.day!, now / USER_SLOT, USER_N, false);
+    if (sumMana(s.day!) + rc > s.mana_per_day) return false;
+    add(s.day!, now / USER_SLOT, USER_N, rc, false); add(gw, now / APP_SLOT, APP_N, rc, false);
+    this.allowances.put(u32Key(s.id), s); this.globalWin.put(gw);
     this.watchReserve(c, mana - rc);
     return true;
   }
@@ -640,7 +668,9 @@ export class Station {
     System.require(!c.paused, "paused");
     System.require(isAddress(args.buyer) && System.checkAuthority(authority.authorization_type.contract_call, args.buyer!), "buyer must sign");
     System.require(!this.suspended.has(args.buyer!), "buyer suspended");
-    System.require(args.kind == 1 && isAddress(args.target), "kind 1 (paying app contract) only; account allowances were removed (Carl, 9:09 PM)");
+    // kind 1 = app plan (target = the app contract); kind 2 = Mana pass (target = a wallet; its own txs, any contract
+    // except money moves; Carl, Oct 20 10:58, reversing 9:09 PM with "no token moves").
+    System.require((args.kind == 1 || args.kind == 2) && isAddress(args.target), "kind 1 (app plan) or kind 2 (wallet Mana pass)");
     System.require(!Arrays.equal(args.target!, this.contractId), "not the station");
     System.require(!this.isMoneyContract(args.target!), "token contracts (KOIN, stablecoins) cannot be sponsored");
     // Audit #3: the app itself must approve being sponsored (its key, or its own authorize, signs this purchase), so
@@ -1119,7 +1149,7 @@ export class Station {
     }
     for (let i = 0; i < reg.open_ids.length; i++) {
       const a = this.allowances.get(u32Key(reg.open_ids[i])); if (a == null) continue;
-      const x = new station.paid_app(); x.id = a.id; x.buyer = a.buyer; x.target = a.target; x.mana_per_day = a.mana_per_day; x.expiry = a.expiry;
+      const x = new station.paid_app(); x.id = a.id; x.buyer = a.buyer; x.target = a.target; x.mana_per_day = a.mana_per_day; x.expiry = a.expiry; x.kind = a.kind;
       if (a.day != null) { roll(a.day!, now / USER_SLOT, USER_N, false); x.used_24h = sumMana(a.day!); }
       x.suspended = this.suspended.has(a.buyer!);
       r.paid.push(x);

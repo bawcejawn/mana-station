@@ -587,7 +587,7 @@ describe("only paying apps (Carl, 9:09 PM)", () => {
     at(NOW + 3000); expect(play(s, user(5))).toBe(true);                               // Carl's Knode
     at(NOW + 3000); expect(play(s, user(6), 2 * M, STORIES)).toBe(true);               // Carl's Stories
     signedBy([BUYER, U2, USDT, USDC]);
-    MockVM.commitTransaction(); expect(() => { gS!.buy_allowance(new station.buy_allowance_arguments(BUYER, 2, U2, 10 * M, 1, USDT, 1000 * USD)); }).toThrow(); // account allowance
+    MockVM.commitTransaction(); expect(() => { gS!.buy_allowance(new station.buy_allowance_arguments(BUYER, 3, U2, 10 * M, 1, USDT, 1000 * USD)); }).toThrow(); // unknown kind (kind 2 = wallet pass, below)
     MockVM.commitTransaction(); expect(() => { gS!.buy_allowance(new station.buy_allowance_arguments(BUYER, 1, USDT, 10 * M, 1, USDT, 1000 * USD)); }).toThrow(); // token contract
     MockVM.commitTransaction(); expect(() => { gS!.buy_allowance(new station.buy_allowance_arguments(BUYER, 1, USDC, 10 * M, 1, USDT, 1000 * USD)); }).toThrow();
     signedBy([]);
@@ -599,6 +599,50 @@ describe("only paying apps (Carl, 9:09 PM)", () => {
     signedBy([BUYER]); s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U1, 100 * M, USDT, 1000 * USD, true)); signedBy([]);
     tx(U1, 10 * M, [op(OTHER, EP_PLAY)]); expect(ok(s)).toBe(false);
     tx(U1, 10 * M, [op(U1, EP_PLAY)]); expect(ok(s)).toBe(true);
+  });
+});
+
+describe("wallet Mana pass (kind 2, Carl Oct 20: any app, no token moves)", () => {
+  it("only the wallet itself can approve its pass; a wallet can buy its own", () => {
+    const s = setup(); gS = s;
+    signedBy([BUYER]); MockVM.commitTransaction();
+    expect(() => { gS!.buy_allowance(new station.buy_allowance_arguments(BUYER, 2, U2, 10 * M, 1, USDT, 1000 * USD)); }).toThrow(); // U2 didn't sign
+    signedBy([U1]); const r = s.buy_allowance(new station.buy_allowance_arguments(U1, 2, U1, 10 * M, 1, USDT, 1000 * USD)); signedBy([]);
+    expect(r.id).toBeGreaterThan(0);
+    const L = s.list_connected(new station.list_connected_arguments()).paid;
+    expect(L.length).toBe(1); expect(L[0].kind).toBe(2);
+    inv(s, USDT);
+  });
+  it("pays the wallet's own calls to any contract; never another payee, the station, tokens, transfers, approvals, burns or uploads", () => {
+    const s = setup();
+    signedBy([U1]); s.buy_allowance(new station.buy_allowance_arguments(U1, 2, U1, 10 * M, 1, USDT, 1000 * USD)); signedBy([]);
+    expect(play(s, U1, 2 * M, OTHER)).toBe(true);                                     // an app nobody pays for
+    at(NOW + 3000); tx(U1, 2 * M, [op(OTHER, EP_PLAY), op(SOLDAPP, EP_HEAVY)]); expect(ok(s)).toBe(true); // mixed contracts
+    at(NOW + 3000); expect(play(s, user(9), 2 * M, OTHER)).toBe(false);               // someone else as payee
+    at(NOW + 3000); expect(play(s, U1, 2 * M, USDT)).toBe(false);                     // stablecoin contract, any entry point
+    at(NOW + 3000); tx(U1, 2 * M, [op(OTHER, EP_TRANSFER)]); expect(ok(s)).toBe(false); // KCS transfer on any token
+    at(NOW + 3000); tx(U1, 2 * M, [op(OTHER, 0x74e21680)]); expect(ok(s)).toBe(false);  // approve
+    at(NOW + 3000); tx(U1, 2 * M, [op(OTHER, 0x859facc5)]); expect(ok(s)).toBe(false);  // burn
+    at(NOW + 3000); tx(U1, 2 * M, [op(STATION, EP_PLAY), op(OTHER, EP_PLAY)]); expect(ok(s)).toBe(false); // the station itself
+    const up = new protocol.operation(); up.upload_contract = new protocol.upload_contract_operation(U1, new Uint8Array(4));
+    at(NOW + 3000); tx(U1, 2 * M, [up]); expect(ok(s)).toBe(false);                   // uploads need a ticket
+    at(NOW + 3000); tx(null, 2 * M, [op(OTHER, EP_PLAY)]); expect(ok(s)).toBe(false); // no payee
+  });
+  it("daily amount is a hard cap, refills on the rolling 24 h, ends at expiry; suspension stops it; free apps keep priority", () => {
+    const s = setup();
+    signedBy([U1]); const r = s.buy_allowance(new station.buy_allowance_arguments(U1, 2, U1, 5 * M, 7, USDT, 1000 * USD)); signedBy([]);
+    expect(play(s, U1, 2 * M, OTHER)).toBe(true);
+    at(NOW + 3000); expect(play(s, U1, 2 * M, OTHER)).toBe(true);
+    at(NOW + 3000); expect(play(s, U1, 2 * M, OTHER)).toBe(false);                    // 4 + 2 > 5
+    at(NOW + 3000); expect(play(s, U1, 1 * M, OTHER)).toBe(true);                     // exactly 5
+    expect(s.get_allowance(new station.get_allowance_arguments(r.id)).used_24h).toBe(5 * M);
+    at(NOW + 3000); expect(play(s, U1, 2 * M, KNODE)).toBe(true);                     // Knode's free slot pays, not the pass
+    expect(s.get_allowance(new station.get_allowance_arguments(r.id)).used_24h).toBe(5 * M);
+    at(NOW + DAYMS + HOUR); expect(play(s, U1, 2 * M, OTHER)).toBe(true);           // the day rolled: room again
+    signedBy([OWNER]); s.suspend_allowance(new station.suspend_allowance_arguments(U1, 1)); signedBy([]);
+    at(NOW + 3000); expect(play(s, U1, 1 * M, OTHER)).toBe(false);                    // suspended
+    signedBy([OWNER]); s.unsuspend_allowance(new station.unsuspend_allowance_arguments(U1, 0)); signedBy([]);
+    at(r.expiry + 1); expect(play(s, U1, 1 * M, OTHER)).toBe(false);                  // expired
   });
 });
 

@@ -22,7 +22,10 @@ const K = JSON.parse(fs.readFileSync(new URL("./keys.testnet.json", import.meta.
 const M = 100_000_000n;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const derive = (label) => { const s = new Signer({ privateKey: crypto.createHash("sha256").update("mana-station-playground/" + label + "/" + K.funder.wif).digest("hex") }); s.provider = provider; return s; };
-const KEY = { funder: Signer.fromWif(K.funder.wif), station: derive("station"), owner: derive("owner"), c1: derive("council1"), c2: derive("council2"), c3: derive("council3"), demo: derive("demoapp") };
+// Station generation: a new label = a brand-new station address (v2, Oct 20: wallet Mana passes). The owner and council
+// labels stay the same, so the same handover command works on every generation.
+const GEN = "-v2";
+const KEY = { funder: Signer.fromWif(K.funder.wif), station: derive("station" + GEN), owner: derive("owner"), c1: derive("council1"), c2: derive("council2"), c3: derive("council3"), demo: derive("demoapp") };
 KEY.funder.provider = provider;
 const A = (r) => KEY[r].getAddress();
 const ST = A("station"), FUN = A("funder"), DEMO = A("demo"), TOK = K.token.address;

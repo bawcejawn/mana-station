@@ -257,6 +257,7 @@ message paid_app {
   uint64 expiry = 5 [jstype = JS_STRING];
   uint64 used_24h = 6 [jstype = JS_STRING];
   bool suspended = 7;
+  uint32 kind = 8;                                     // 1 = app plan, 2 = wallet Mana pass
 }
 
 // One prepaid purchase held in the station's escrow (Carl, 7:47 PM). kind 1 = an allowance term, kind 2 = a big-upload

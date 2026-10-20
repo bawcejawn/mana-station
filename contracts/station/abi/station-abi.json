@@ -1274,6 +1274,10 @@
                             "suspended": {
                                 "type": "bool",
                                 "id": 7
+                            },
+                            "kind": {
+                                "type": "uint32",
+                                "id": 8
                             }
                         }
                     },
