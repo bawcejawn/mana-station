@@ -6,6 +6,12 @@ on:
       run_testnet:
         description: "Run the Harbinger scenarios after the unit tests"
         default: "true"
+      playground:
+        description: "Instead of the scenarios, run a playground command: deploy, status, handover, traffic or mint"
+        default: ""
+      playground_args:
+        description: "Playground arguments (public addresses and numbers only)"
+        default: ""
 permissions:
   contents: read
 concurrency:
@@ -57,8 +63,19 @@ jobs:
           retry() { for i in 1 2 3; do "$@" && return 0; echo "::warning::'$*' failed (attempt $i), retrying"; sleep 2; done; return 1; }
           (cd contracts/testapp && retry npm run build)
           (cd contracts/mocktoken && retry npm run build)
+      - name: Playground command
+        if: ${{ inputs.playground != '' }}
+        env:
+          RPC: https://testnet.koinosfoundation.org
+          CMD: ${{ inputs.playground }}
+          ARGS: ${{ inputs.playground_args }}
+        run: |
+          set -o pipefail
+          case "$CMD" in deploy|status|handover|traffic|mint) ;; *) echo "unknown playground command"; exit 1;; esac
+          echo "$ARGS" | grep -Eq '^[1-9A-HJ-NP-Za-km-z0-9 .]*$' || { echo "args may only contain addresses and numbers"; exit 1; }
+          node testnet/playground.mjs "$CMD" $ARGS 2>&1 | tee testnet/run.log
       - name: Harbinger scenarios
-        if: ${{ inputs.run_testnet == 'true' }}
+        if: ${{ inputs.run_testnet == 'true' && inputs.playground == '' }}
         env:
           # Koinos Foundation public testnet node (Carl, Oct 19 10:05 PM). The script also refuses any chain id but the testnet's.
           # Optional override: the HARBINGER_RPC secret.
