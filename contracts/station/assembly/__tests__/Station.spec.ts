@@ -873,7 +873,7 @@ describe("audit 2026-10-19: attacks replayed (branch fix/squat-freeze-stall)", (
     expect(testGetToken(USDT, A)).toBe(10 * USD - 250_000);
     expect(a.id).toBe(1); inv(s, USDT);
   });
-  it("#2 early end: straight-line time refund, at least the 5% fee kept, independent of use (unless used Mana exceeds it)", () => {
+  it("#2 early end: refund = unused Mana share × time left share, at least the 5% fee kept (Carl, 8:43 PM)", () => {
     const s = setup(); gS = s; const T = NOW;
     signedBy([OWNER]); const c = cfg(); c.big_ticket_ms = DAYMS; c.big_cooldown_ms = 0; s.set_config(new station.set_config_arguments(c)); signedBy([]);
     signedBy([BUYER]); s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U1, 100 * M, USDT, 1000 * USD, false)); // 500,000
@@ -883,11 +883,11 @@ describe("audit 2026-10-19: attacks replayed (branch fix/squat-freeze-stall)", (
     signedBy([BUYER]); expect(s.cancel_big_upload(new station.cancel_big_upload_arguments(BUYER, U1)).refund).toBe(375_000); signedBy([]); // 18 of 24 h left = 75%
     at(T + 6 * HOUR + 1000);
     signedBy([BUYER]); s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U2, 100 * M, USDT, 1000 * USD, false)); signedBy([]);
-    tx(U2, 10 * M, [op(U2, EP_PLAY)]); expect(ok(s)).toBe(true);              // 10% used: doesn't change the time refund
+    tx(U2, 10 * M, [op(U2, EP_PLAY)]); expect(ok(s)).toBe(true);              // 10% used
     at(T + 12 * HOUR + 1000);
-    expect(s.get_escrow(new station.get_escrow_arguments(3)).refundable_now).toBe(375_000); // 18 h left of 24 → 75%
+    expect(s.get_escrow(new station.get_escrow_arguments(3)).refundable_now).toBe(337_500); // 90% unused × 18/24 h left = 67.5%
     tx(U2, 70 * M, [op(U2, EP_PLAY)]); expect(ok(s)).toBe(true);              // now 80% used
-    signedBy([BUYER]); expect(s.cancel_big_upload(new station.cancel_big_upload_arguments(BUYER, U2)).refund).toBe(100_000); signedBy([]); // capped at the unused 20%
+    signedBy([BUYER]); expect(s.cancel_big_upload(new station.cancel_big_upload_arguments(BUYER, U2)).refund).toBe(75_000); signedBy([]); // 20% unused × 75% left = 15%
     inv(s, USDT);
   });
   it("#2 a pause freezes the lock clock: the refund and the remaining lock are the same after the pause", () => {
@@ -991,6 +991,22 @@ describe("audit 2026-10-19: attacks replayed (branch fix/squat-freeze-stall)", (
     const s = setup(); gS = s;
     const p = PRICE(); p.min_purchase = 101 * USD; gP = p;                       // max per purchase is 100
     signedBy([OWNER]); MockVM.commitTransaction(); expect(() => { gS!.set_price(new station.set_price_arguments(USDT, gP)); }).toThrow(); signedBy([]);
+  });
+  it("Carl 8:43 PM: one wallet's open allowances and tickets together are capped (default 5)", () => {
+    const s = setup(); gS = s;
+    signedBy([OWNER]); const c = cfg(); c.big_cooldown_ms = 0; c.big_week_cap = 2000 * M; c.big_max_debt = 2000 * M; s.set_config(new station.set_config_arguments(c)); signedBy([]);
+    for (let i = 0; i < 3; i++) buyAccount(s, user(30 + i), 5 * M, 7);           // 3 allowances
+    signedBy([BUYER]);
+    s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, user(40), 50 * M, USDT, 1000 * USD, false));
+    s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, user(41), 50 * M, USDT, 1000 * USD, false)); // + 2 tickets = 5
+    MockVM.commitTransaction(); expect(() => { gS!.buy_big_upload(new station.buy_big_upload_arguments(BUYER, user(42), 50 * M, USDT, 1000 * USD, false)); }).toThrow(); // 6th: ticket refused
+    signedBy([BUYER, user(43)]);
+    MockVM.commitTransaction(); expect(() => { gS!.buy_allowance(new station.buy_allowance_arguments(BUYER, 1, user(43), 5 * M, 1, USDT, 1000 * USD)); }).toThrow(); // 6th: allowance refused
+    signedBy([BUYER]); s.cancel_big_upload(new station.cancel_big_upload_arguments(BUYER, user(41))); // one closes…
+    s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, user(42), 50 * M, USDT, 1000 * USD, false)); signedBy([]); // …so there is room again
+    const B2 = user(77); testSetToken(USDT, B2, 10 * USD);
+    signedBy([B2]); s.buy_big_upload(new station.buy_big_upload_arguments(B2, user(44), 50 * M, USDT, 1000 * USD, false)); signedBy([]); // other wallets unaffected
+    inv(s, USDT);
   });
   it("#8 a stranger closing an expired ticket late doesn't extend the buyer's wait", () => {
     const s = setup(); const T = NOW;

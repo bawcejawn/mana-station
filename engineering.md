@@ -597,3 +597,10 @@ Source: the security audit of Oct 19 (findings #1–#8). Decided by Carl the sam
 - #5: app co-signing of sponsored txs (sybil drain).
 - #8 (mempool reservation) and the authorize-event check: testnet items.
 - Residual: a buyer who pays the full price can still hold big-upload capacity for 24 h. That is now a paid choice, not a cheap attack.
+
+**Carl's decisions on the PR (Oct 19, 8:43 PM):**
+- **Ticket refund:** `refund = floor(floor(paid × time left / lock) × unused Mana / ticket Mana)`. It is the value of the Mana still left, decayed by elapsed time, always keeping ticket_fee_bp (5%). Example: 50% Mana left with 75% of the time left returns 37.5%. This replaces the min(time share, unused share) cap.
+- **No default minimum charge:** `min_purchase` stays available per token but is proposed as 0.
+- **Per-wallet limit:** `max_per_buyer` (default 5) caps one wallet's open allowances **plus** open big-upload tickets together.
+- **Residual risk (flagged):** with no minimum charge, a sybil attacker can still fill the `max_allowances` slots with self-owned targets at about $0.00003 each. They can't take a real app's target, because the app must sign. Mitigations, if this shows up: raise `max_allowances`, set a small per-token `min_purchase`, or suspend the buyers.
+- **Tests: 58/58**. The mutation check catches removal of the time × unused formula and of the ticket count in the wallet limit.

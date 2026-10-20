@@ -42,7 +42,7 @@ message config_object {
   // the pro-rata used share). 0 = default 500 (5%); max 2000 (20%). Refunds are only ever in the stablecoin paid.
   uint32 ticket_fee_bp = 26;
   reserved 27;                                      // was big_idle_ms (dropped for the time-based ticket model)
-  // Audit #3: open (unexpired) allowances one buyer may hold at once. 0 = default 5.
+  // Audit #3 (Carl, 8:43 PM): open allowances + open big-upload tickets one wallet may hold at once. 0 = default 5.
   uint32 max_per_buyer = 28;
 }
 

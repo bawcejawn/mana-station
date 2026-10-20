@@ -246,11 +246,12 @@ note(`ticket after upload: mana ${tk.ticket?.mana} remaining ${tk.ticket?.remain
 const ob0 = await tbal(OWN), bb1 = await tbal(BUY);
 const ct = await send(sta("buyer"), "cancel_big_upload", { buyer: BUY, payee: U2 }, { rcLimit: 3n * M });
 const ref1 = (await tbal(BUY)) - bb1, rel1 = (await tbal(OWN)) - ob0;
-// Time-based refund (Carl, 8:19 PM): min(time left share, 95% fee floor, unused-Mana share). This runs a few minutes
-// into a 24 h lock, so the time share (> 99%) is above the 95% floor and the expected refund is min(95%, unused share).
-const fee95 = tprice * 9500n / 10000n, unusedShare = T > 0n ? tprice * (T - used) / T : 0n;
-const expRef1 = fee95 < unusedShare ? fee95 : unusedShare;
-check("ticket", "cancel minutes into the 24 h lock: refund = min(95%, unused-Mana share), rest released to the owner wallet, refund in tUSDT only", ct.ok && ref1 === expRef1 && ref1 + rel1 === tprice, `paid ${tprice} used ${used}/${T} refund ${ref1} (exp ${expRef1}) released ${rel1} events ${ct.events} ${ct.error || ""}`);
+// Refund (Carl, 8:43 PM) = floor(floor(paid × time left / lock) × unused / ticket Mana), keeping >= 5%. The exact
+// "time left" depends on block times, so accept the formula for anywhere from 0 to 10 minutes elapsed of the 24 h lock.
+const LOCK = 86_400_000n, fee95 = tprice * 9500n / 10000n;
+const refAt = (elapsed) => { const r = (tprice * (LOCK - elapsed) / LOCK) * (T - used) / (T > 0n ? T : 1n); return r < fee95 ? r : fee95; };
+const expHi = refAt(0n), expLo = refAt(600_000n);
+check("ticket", "cancel minutes into the 24 h lock: refund = unused share × time left (≤ 95%), rest released to the owner wallet, refund in tUSDT only", ct.ok && ref1 >= expLo && ref1 <= expHi && ref1 + rel1 === tprice, `paid ${tprice} used ${used}/${T} refund ${ref1} (expected ${expLo}..${expHi}) released ${rel1} events ${ct.events} ${ct.error || ""}`);
 const debt = BigInt((await read(sta(), "get_status")).big_debt || 0);
 check("ticket", "unused ticket Mana returned to the pool (only used Mana stays as debt)", debt <= used, `big_debt ${debt}, used ${used}`);
 const t2 = await buyT("buyer", SP1);
