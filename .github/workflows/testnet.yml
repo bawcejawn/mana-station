@@ -71,7 +71,7 @@ jobs:
           ARGS: ${{ inputs.playground_args }}
         run: |
           set -o pipefail
-          case "$CMD" in deploy|status|handover|traffic|mint|fund) ;; *) echo "unknown playground command"; exit 1;; esac
+          case "$CMD" in deploy|status|handover|traffic|mint|fund|reclaim) ;; *) echo "unknown playground command"; exit 1;; esac
           echo "$ARGS" | grep -Eq '^[1-9A-HJ-NP-Za-km-z0-9 .]*$' || { echo "args may only contain addresses and numbers"; exit 1; }
           node testnet/playground.mjs "$CMD" $ARGS 2>&1 | tee testnet/run.log
       - name: Harbinger scenarios

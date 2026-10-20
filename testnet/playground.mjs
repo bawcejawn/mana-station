@@ -112,6 +112,25 @@ if (cmd === "handover") {
   ok(`council → ${council.join(", ")}`, await send(sta("funder"), "execute", { id: idCouncil }, { rcLimit: M }));
 }
 
+if (cmd === "reclaim") {                    // reclaim <generation, e.g. v2>: return an old playground station's test KOIN to the funder
+  const gen = process.argv[3] ? "-" + process.argv[3] : ""; const OLD = derive("station" + gen).getAddress();
+  if (OLD === ST) throw new Error("that is the current playground station");
+  const old = (role) => new Contract({ id: OLD, abi: abiS, provider, signer: role ? KEY[role] : undefined });
+  const rd2 = async (fn, a = {}) => (await old().functions[fn](a)).result || {};
+  const st = await rd2("get_status"); const c = st.config || {};
+  if (c.owner !== A("owner") || !["c1", "c2"].every((r) => (c.council || []).includes(A(r)))) throw new Error("that station is no longer ours");
+  const as = async (role, fn, args) => { let x = await send(old(role), fn, args, { payer: OLD, payee: A(role) }); if (!x.ok) x = await send(old(role), fn, args, { payer: FUN, payee: FUN, cosigner: "funder" }); return x; };
+  for (const a of (await rd2("list_connected")).free_apps || []) if (a.contract_id) ok(`disconnect ${a.contract_id}`, await as("owner", "disconnect_app", { contract_id: a.contract_id }));
+  ok("lower koin_amount to 1 tKOIN", await as("owner", "set_config", { config: { ...c, koin_amount: String(M) } }));
+  const bal = await kbal(OLD); const amount = bal - M;
+  ok(`propose withdrawing ${Number(amount) / 1e8} tKOIN to the funder`, await as("c1", "propose", { signer: A("c1"), action: { kind: 2, to: FUN, amount: String(amount) } }));
+  const P = (await rd2("list_proposals")).proposals || []; const id = P.filter((p) => p.proposer === A("c1")).slice(-1)[0]?.id;
+  ok(`approve #${id}`, await as("c2", "approve", { signer: A("c2"), id }));
+  await sleep(Number(c.guard_delay_ms) + 15000);
+  ok(`execute #${id}`, await send(old("funder"), "execute", { id }, { rcLimit: M }));
+  log(`funder now holds ${Number(await kbal(FUN)) / 1e8} tKOIN`);
+}
+
 if (cmd === "traffic") {
   const n = Number(process.argv[3] || 6);
   for (let i = 0; i < n; i++) {
