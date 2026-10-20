@@ -4,6 +4,8 @@ A plain static site: no build step, no framework, no JavaScript. Two pages share
 
 - `index.html`: home (what it is, who it's for, prices, first apps, status)
 - `how-it-works.html`: the guide for app builders (five steps, pricing, questions), plus a short section for players
+- `console.html`: the owner console (not indexed). It lists connected apps, paid allowances and council proposals live from the chain, and lets the owner connect, change or disconnect apps and pause the station through Kondor. Council members can pause, propose, approve, veto and execute. It loads koilib and kondor-js from jsDelivr.
+- `station-abi.json`: copy of `contracts/station/abi/station.koilib.json`. Copy it again after any contract change.
 - `styles.css`: all styling. Colors and fonts are tokens at the top, with light and dark themes.
 
 **See it locally:** open `index.html` in a browser, or run `npx serve site` from the repo root.
