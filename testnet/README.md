@@ -23,3 +23,51 @@
 - BLOCKED again at the first RPC call: `connect ETIMEDOUT 45.79.244.237:443` (harbinger-api.koinos.io). No tx was sent, and no tKOIN was spent.
 - Fix ready: the workflow now reads the RPC from the Actions secret `HARBINGER_RPC` when it is set, falling back to the public endpoint. Set it to `https://api.harbinger.koinos.pro/jsonrpc?apikey=<free Koinos Pro key>` (docs.koinos.io/developers/testnet), then rerun the workflow on the branch. The script masks the key in its output.
 - The workflow now also posts the results and the script's last 60 lines as annotations, so failures are readable through the API.
+
+### Status 2026-10-20 ~06:45 UTC: full rehearsal PASSED, 74/74 (run 39379717585)
+Node `https://testnet.koinosfoundation.org`, chain id `EiAIKVvm6-V2qmsmUvPJy09vCCLbtn9lHFpwrJbcTIEWRQ==`. Fresh in-memory accounts each run, leftovers swept back to the funder (`1N6yd5SzAQaHe484vkV7pFhmYiGfQh2Cuy`, topped up from the faucet on Oct 19).
+
+**Measured costs:**
+| Action | Mana |
+|---|---|
+| Upload the station (66 KB) | 5.39 |
+| Play, self-paid | 0.036 |
+| Play, sponsored | 0.167 (authorize adds 0.131) |
+| Play on a paying app (Route B) | 0.150 |
+| Buy an allowance (approve + pay) | 0.141 |
+| Buy a ticket (approve + pay) | 0.132 |
+| Upload a 10.6 KB contract via a ticket | 2.01 |
+
+Kondor's 1.1× margin fits (about 90% of the limit used).
+
+**Confirmed on chain:**
+- Upload, init, and owner admin paid by the station.
+- Exempt apps:
+  - per-user rate limit and cooldown
+  - new-user pool
+  - buffer, with `buffer_used` events in receipts (events emitted inside authorize DO land)
+- Refusals:
+  - non-allowlisted entries, token and KOIN transfers, mixed targets, uploads without a ticket
+  - refusals cost the station 0 Mana
+- Paid allowances:
+  - target-app signature required (#3)
+  - over-capacity refused
+  - escrow purchase in one tx
+  - users sponsored
+  - suspend / unsuspend
+  - early release refused
+  - cancel refund 6/7
+- Tickets:
+  - big tx via the enlarged buffer
+  - time-based refund
+  - per-buyer wait
+  - 5% fee floor
+  - fee cap
+- Escrow invariant holds; the station's KOIN never moves.
+
+**Found on testnet:**
+1. **Fixed:** a freshly uploaded station refused its own txs before init, so it could never be set up.
+2. **This node rejects a reverting sponsored call at submission,** so the station pays nothing. Docs assumed it would be included and charged.
+3. **The mempool holds each tx's full rc limit for a while,** so wallets need limits near real costs.
+4. **Open (product):** tickets deduct the tx's rc LIMIT, not the Mana actually used (5 Mana limit, 2 Mana used → ticket at 0). Charging `rc_used` isn't possible inside authorize (it runs before execution). Options: tell buyers to set tight limits (the helper can), or accept it as the cost of safety.
+5. **One sponsored tx per player per block:** consecutive actions must land in different blocks (about 3 s apart). Fine for typical play; the helper's own-Mana fallback covers bursts.

@@ -604,3 +604,16 @@ Source: the security audit of Oct 19 (findings #1–#8). Decided by Carl the sam
 - **Per-wallet limit:** `max_per_buyer` (default 5) caps one wallet's open allowances **plus** open big-upload tickets together.
 - **Residual risk (flagged):** with no minimum charge, a sybil attacker can still fill the `max_allowances` slots with self-owned targets at about $0.00003 each. They can't take a real app's target, because the app must sign. Mitigations, if this shows up: raise `max_allowances`, set a small per-token `min_purchase`, or suspend the buyers.
 - **Tests: 58/58**. The mutation check catches removal of the time × unused formula and of the ticket count in the wallet limit.
+
+
+## Testnet rehearsal, Oct 20 2026: 74/74 PASS
+Koinos Foundation testnet node, fresh accounts per run (see `testnet/README.md` for costs and the full list).
+
+**Contract bug found and fixed:** `sponsorOk` checked "initialized?" before "is this the station's own tx?". Once uploaded, the station refused its own transactions, so `init` could never be approved. A fresh mainnet deploy would have been stuck. The station-key path now comes first. There's a unit test for it, and it fails without the fix.
+
+**Resolved "UNVERIFIED" items:**
+- Events emitted inside `authorize` do land in receipts (`buffer_used` seen).
+- A reverting sponsored call is rejected at submission on this node, so the station is not charged.
+- Real costs replace the estimates: about 0.17 Mana per sponsored play, of which authorize is about 0.13.
+
+**Open, for Carl:** a ticket is charged its tx's rc limit, not the Mana actually used (authorize runs before execution, so it can't know the actual cost).
