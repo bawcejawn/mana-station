@@ -71,3 +71,30 @@ Kondor's 1.1× margin fits (about 90% of the limit used).
 3. **The mempool holds each tx's full rc limit for a while,** so wallets need limits near real costs.
 4. **Open (product):** tickets deduct the tx's rc LIMIT, not the Mana actually used (5 Mana limit, 2 Mana used → ticket at 0). Charging `rc_used` isn't possible inside authorize (it runs before execution). Options: tell buyers to set tight limits (the helper can), or accept it as the cost of safety.
 5. **One sponsored tx per player per block:** consecutive actions must land in different blocks (about 3 s apart). Fine for typical play; the helper's own-Mana fallback covers bursts.
+
+### Status 2026-10-20 ~13:00 UTC: lockdown + council rehearsal PASSED, 100/100 (run 39427353315)
+**Confirmed on chain:**
+- The station is uploaded and initialized in one transaction, overriding all three authorities.
+- The station key alone:
+  - can't re-init
+  - can't move the station's KOIN (KOIN contract: "account 'from' has not authorized transfer")
+  - can't replace the code
+- Council:
+  - an upgrade proposal and its approval start the wait
+  - one member's veto works
+  - non-members can't propose
+- Owner and council split: a council member can pause but not resume or reconfigure; the owner resumes; the treasury can't be changed outside the council.
+- Upgrades:
+  - unapproved code is refused
+  - approved code without the overrides is refused
+  - attacker code + approved code in one tx is refused (review C1), and the code stays unchanged
+  - the approved code, alone and after the wait, uploads without the station key, once only
+- Withdrawal:
+  - 1 of 2 approvals: refused
+  - 2 of 2 inside the wait: refused
+  - after the wait anyone executes: 189 tKOIN back to the funder
+- connect / list / disconnect work in one step each.
+
+**Helper:** its tight limit for a 10,580-byte ticket upload was 2.55 Mana, of which 2.01 was used (78.7%). The rest of the earlier checks still pass.
+
+**Cost:** upload + init of the station (81 KB) costs 8.27 Mana.
