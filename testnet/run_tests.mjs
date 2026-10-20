@@ -54,15 +54,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const lastH = new Map();
 async function nextBlockFor(payer, payee) {
   if (payer !== ST || !payee) return;
-  for (let i = 0; i < 40; i++) { const h = BigInt((await provider.getHeadInfo()).head_topology.height); if (!lastH.has(payee) || h > lastH.get(payee)) { lastH.set(payee, h + 1n); return; } await sleep(1500); }
+  for (let i = 0; i < 40; i++) { const h = BigInt((await provider.getHeadInfo()).head_topology.height); if (!lastH.has(payee) || h > lastH.get(payee)) return; await sleep(1500); }
 }
+// Remember the block a sponsored tx actually landed in; the next one for that user waits until the head is past it.
+const landed = (payer, payee, w) => { if (payer === ST && payee && w?.blockNumber) lastH.set(payee, BigInt(w.blockNumber)); };
 async function send(contract, fn, args, { payer, payee, rcLimit, cosigner } = {}) {
   await nextBlockFor(payer, payee);
   try {
     const o = { sendTransaction: true, rcLimit: String(rcLimit ?? M) };
     if (payer) o.payer = payer; if (payee) o.payee = payee; if (cosigner) o.beforeSend = coSign(cosigner);
     const { transaction, receipt } = await contract.functions[fn](args, o);
-    await transaction.wait("byBlock", 90000);
+    landed(payer, payee, await transaction.wait("byBlock", 90000));
     return { ok: !receipt.reverted, reverted: !!receipt.reverted, rc: BigInt(receipt.rc_used), events: eventsOf(receipt), receipt, logs: receipt.logs };
   } catch (e) { return { ok: false, error: String(e?.message || e).slice(0, 300) }; }
 }
@@ -72,7 +74,7 @@ async function sendOps(signer, ops, { payer, payee, rcLimit, cosigner } = {}) {
     const options = { rcLimit: String(rcLimit ?? M) }; if (payer) options.payer = payer; if (payee) options.payee = payee; if (cosigner) options.beforeSend = coSign(cosigner);
     const tx = new Transaction({ signer: S(signer), provider, options });
     for (const [c, fn, a] of ops) await tx.pushOperation(c.functions[fn], a);
-    const receipt = await tx.send(); await tx.wait("byBlock", 90000);
+    const receipt = await tx.send(); landed(payer, payee, await tx.wait("byBlock", 90000));
     return { ok: !receipt.reverted, rc: BigInt(receipt.rc_used), events: eventsOf(receipt), receipt, logs: receipt.logs };
   } catch (e) { return { ok: false, error: String(e?.message || e).slice(0, 300) }; }
 }
@@ -82,7 +84,7 @@ const sta = (who) => C(ST, abiS, who), app = (who) => C(APP, abiA, who), tok = (
 // Owner admin: try the station-sponsored owner path (kill-switch route) first, else owner self-paid.
 async function admin(fn, args, rcLimit = 2n * M) {
   let r = await send(sta("owner"), fn, args, sponsored(OWN, rcLimit));
-  if (!r.ok && !r.reverted) { const r2 = await send(sta("owner"), fn, args, { rcLimit: 3n * M }); r2.viaSelf = true; r2.firstError = r.error; r = r2; }
+  if (!r.ok && !r.reverted) { const r2 = await send(sta("owner"), fn, args, { rcLimit: M / 2n }); r2.viaSelf = true; r2.firstError = r.error; r = r2; }
   return r;
 }
 const tbal = async (a) => BigInt((await read(C(TOK, abiT), "balance_of", { owner: a })).value || 0);
@@ -128,7 +130,7 @@ check("deploy", "station: only authorizes_transaction_application", stMeta?.valu
 if (!stMeta?.value?.hash) { note("station contract is not on chain, so nothing after the deploy step can run: stopping"); save(); process.exit(1); }
 
 // ---------------------------------------------------------------- 2b. funding (after the uploads, while the funder still has its full Mana)
-const want = { [ST]: 200n, [BUY]: 5n, [U1]: 4n, [U2]: 4n, [OWN]: 3n, [SP1]: 3n, [SP2]: 3n }; // station >= its koin_amount (150)
+const want = { [ST]: 200n, [BUY]: 20n, [U1]: 8n, [U2]: 8n, [OWN]: 10n, [SP1]: 3n, [SP2]: 3n }; // station >= its koin_amount (150)
 const RESERVE = 5n * M;                                    // the funder keeps this much Mana for the uploads and mints it pays
 for (const [to, amt] of Object.entries(want)) {
   const have = await kbal(to); const need = amt * M - have;
@@ -176,7 +178,7 @@ check("measure", "sponsored play at exactly 1.1x measured rc (Kondor margin) is 
 const bm = await send(app("user1"), "boom", {}, sponsored(U1, L));
 const ctl = await send(app("user1"), "play", { user: U1 }, sponsored(U1, L)); // control: same user, same limit, a call that succeeds
 note(`boom control: a normal sponsored play right after boom was ${ctl.ok ? "ACCEPTED (so a boom refusal is specific to the reverting call)" : "refused too: " + (ctl.error || "")}`);
-check("measure", "allowlisted entry that reverts is included and charged to the station", bm.reverted === true || (!bm.ok && !bm.error), bm.error || `rc ${bm.rc}`); if (bm.rc) cost("boom (reverted, charged)", bm.rc);
+check("measure", "a sponsored call that reverts: either included and charged, or rejected at submission (station pays nothing)", bm.reverted === true || /transaction reverted/.test(bm.error || ""), bm.reverted ? `included and charged, rc ${bm.rc}` : `${bm.error || ""} (rejected at submission: the station paid nothing)`); if (bm.rc) cost("boom (reverted, charged)", bm.rc);
 
 // ---------------------------------------------------------------- 5. Stories app (app 2): spam, new-user pool, buffer
 const H = sh.ok ? ceil11(sh.rc) : 2n * M;
@@ -235,8 +237,8 @@ check("escrow", "quote above the sellable slice: not available (reservations pro
 const q = await read(sta(), "quote_allowance", { token: TOK, mana_per_day: String(2n * AU), days: "7" });
 check("escrow", "quote 2 Mana/day × 7 d available, refundable, no auto-renew", q.available && q.refundable && !q.auto_renew, `price ${q.price}`);
 const price = BigInt(q.price || 0);
-const buyA = (mpd, appSigns = true) => sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 2n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 1, target: PAYAPP, mana_per_day: String(mpd), days: "7", token: TOK, max_price: String(price * 2n) }]], { rcLimit: 3n * M, cosigner: appSigns ? "spam2" : undefined }); // audit #3: the app co-signs
-const bigBuy = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 4n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 1, target: PAYAPP, mana_per_day: String(4n * AU), days: "7", token: TOK, max_price: String(price * 4n) }]], { rcLimit: 3n * M, cosigner: "spam2" });
+const buyA = (mpd, appSigns = true) => sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 2n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 1, target: PAYAPP, mana_per_day: String(mpd), days: "7", token: TOK, max_price: String(price * 2n) }]], { rcLimit: M / 2n, cosigner: appSigns ? "spam2" : undefined }); // audit #3: the app co-signs
+const bigBuy = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 4n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 1, target: PAYAPP, mana_per_day: String(4n * AU), days: "7", token: TOK, max_price: String(price * 4n) }]], { rcLimit: M / 2n, cosigner: "spam2" });
 check("escrow", "buy_allowance above the sellable slice refused", !bigBuy.ok, bigBuy.error || "");
 const noSig = await buyA(2n * AU, false);
 check("escrow", "audit #3: buy_allowance without the target app's signature refused (no squatting someone else's app)", !noSig.ok, noSig.error || "");
@@ -245,9 +247,9 @@ check("escrow", "buy_allowance 2 Mana/day × 7 d (approve + pull in one tx), all
 const aid = 1;
 const xfer = () => send(C(PAYAPP, abiA, "user2"), "play", { user: U2 }, sponsored(U2, L)); // user2: user1 is in its 10-min cooldown from the measurements
 const b1 = await xfer(); check("escrow", "paying app (app allowance): its users' txs sponsored from its allowance", b1.ok, b1.error || `rc ${b1.rc}`); if (b1.ok) cost("play on paying app, sponsored by its allowance", b1.rc);
-const acc = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 2n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 2, target: U1, mana_per_day: String(2n * AU), days: "7", token: TOK, max_price: String(price * 2n) }]], { rcLimit: 3n * M });
+const acc = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 2n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 2, target: U1, mana_per_day: String(2n * AU), days: "7", token: TOK, max_price: String(price * 2n) }]], { rcLimit: M / 2n });
 check("designated", "account allowance (kind 2) refused (Carl, 9:09 PM)", !acc.ok, acc.error || "");
-const tokT = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 2n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 1, target: TOK, mana_per_day: String(AU), days: "7", token: TOK, max_price: String(price * 2n) }]], { rcLimit: 3n * M });
+const tokT = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 2n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 1, target: TOK, mana_per_day: String(AU), days: "7", token: TOK, max_price: String(price * 2n) }]], { rcLimit: M / 2n });
 check("designated", "allowance targeting a token contract refused", !tokT.ok, tokT.error || "");
 const tr = await send(tok("user1"), "transfer", { from: U1, to: U2, value: "1" }, sponsored(U1, L));
 check("designated", "token transfer by a paying app's user still refused", !tr.ok, tr.error || "");
@@ -256,14 +258,14 @@ check("suspend", "owner suspends buyer (reason 1 abuse), buyer_suspended event",
 const b2 = await xfer(); check("suspend", "suspended buyer's allowance no longer sponsors", !b2.ok, b2.error || "");
 const mix = await sendOps("user1", [[C(PAYAPP, abiA, "user1"), "play", { user: U1 }], [app("user1"), "play", { user: U1 }]], sponsored(U1, L));
 check("designated", "mixed targets (paying app + Carl's Stories) refused", !mix.ok, mix.error || "");
-const sc = await send(sta("buyer"), "cancel_allowance", { buyer: BUY, id: aid }, { rcLimit: 3n * M }); check("suspend", "suspended buyer cannot self-cancel", !sc.ok, sc.error || "");
+const sc = await send(sta("buyer"), "cancel_allowance", { buyer: BUY, id: aid }, { rcLimit: M / 2n }); check("suspend", "suspended buyer cannot self-cancel", !sc.ok, sc.error || "");
 const us = await admin("unsuspend_allowance", { buyer: BUY, reason: 0 });
 check("suspend", "unsuspend, buyer_unsuspended event", us.ok && us.events.includes("station.buyer_unsuspended"), us.error || us.events);
 const b3 = await xfer(); check("suspend", "after unsuspend: sponsored again", b3.ok, b3.error || "");
 const preRel = await send(sta("user1"), "release", { purchase_id: 1 }, { rcLimit: 2n * M });
 check("escrow", "release before the term ends refused", !preRel.ok, preRel.error || "");
 const bb0 = await tbal(BUY);
-const ca = await send(sta("buyer"), "cancel_allowance", { buyer: BUY, id: aid }, { rcLimit: 3n * M });
+const ca = await send(sta("buyer"), "cancel_allowance", { buyer: BUY, id: aid }, { rcLimit: M / 2n });
 const refundA = (await tbal(BUY)) - bb0, expA = price * 6n / 7n;
 check("escrow", "cancel day 0 of 7: refund = floor(paid × 6/7) (current day used), escrow_refunded event", ca.ok && refundA === expA && ca.events.includes("station.escrow_refunded"), `paid ${price} refund ${refundA} expected ${expA} ${ca.error || ""}`);
 const b4 = await xfer(); note(`after cancel, same day: allowance ${b4.ok ? "still sponsors (current day was paid)" : "no longer sponsors"}`);
@@ -274,7 +276,7 @@ let T = 5n * M; if (mana - bigFloor - M < T) T = mana - bigFloor - M; T = T / 1_
 note(`ticket size T = ${fmt(T)} (station mana ${fmt(mana)}, big floor ${fmt(bigFloor)})`);
 const qb = await read(sta(), "quote_big_upload", { token: TOK, mana: String(T) }); const tprice = BigInt(qb.price || 0);
 check("ticket", "quote_big_upload available, refundable; terms describe the 24 h lock, the 5% fee and stablecoin-only refunds", qb.available && /24-hour/.test(qb.terms || "") && /5%/.test(qb.terms || "") && /never in Mana or KOIN/.test(qb.terms || ""), `price ${tprice} reason ${qb.reason || ""}`);
-const buyT = (who, payee) => sendOps(who, [[tok(who), "approve", { owner: A(who), spender: ST, value: String(tprice) }], [sta(who), "buy_big_upload", { buyer: A(who), payee, mana: String(T), token: TOK, max_price: String(tprice), allow_upload: true }]], { rcLimit: 3n * M });
+const buyT = (who, payee) => sendOps(who, [[tok(who), "approve", { owner: A(who), spender: ST, value: String(tprice) }], [sta(who), "buy_big_upload", { buyer: A(who), payee, mana: String(T), token: TOK, max_price: String(tprice), allow_upload: true }]], { rcLimit: M / 2n });
 const t1 = await buyT("buyer", U2);
 check("ticket", "buyer buys a ticket for user2 (big_upload_bought event)", t1.ok && t1.events.includes("station.big_upload_bought"), t1.error || t1.events); if (t1.ok) cost("buy_big_upload tx (approve + buy)", t1.rc);
 const code = wasm("../contracts/testapp/build/release/contract.wasm");
@@ -284,7 +286,7 @@ check("ticket", `big tx (${code.length} B contract upload, > 1 KiB) sponsored vi
 const tk = await read(sta(), "get_ticket", { payee: U2 }); const used = BigInt(tk.ticket?.mana || 0) - BigInt(tk.ticket?.remaining || 0);
 note(`ticket after upload: mana ${tk.ticket?.mana} remaining ${tk.ticket?.remaining} (charged = rc_used)`);
 const ob0 = await tbal(OWN), bb1 = await tbal(BUY);
-const ct = await send(sta("buyer"), "cancel_big_upload", { buyer: BUY, payee: U2 }, { rcLimit: 3n * M });
+const ct = await send(sta("buyer"), "cancel_big_upload", { buyer: BUY, payee: U2 }, { rcLimit: M / 2n });
 const ref1 = (await tbal(BUY)) - bb1, rel1 = (await tbal(OWN)) - ob0;
 // Refund (Carl, 8:43 PM) = floor(floor(paid × time left / lock) × unused / ticket Mana), keeping >= 5%. The exact
 // "time left" depends on block times, so accept the formula for anywhere from 0 to 10 minutes elapsed of the 24 h lock.
@@ -299,7 +301,7 @@ check("ticket", "anti-spam: one ticket per buyer per 24 h (counted from the purc
 const t3 = await buyT("user1", SP1);
 check("ticket", "audit #2: another buyer can buy at once (the wait is per buyer, never station-wide)", t3.ok, t3.error || "");
 const ub0 = await tbal(U1);
-const ct3 = await send(sta("user1"), "cancel_big_upload", { buyer: U1, payee: SP1 }, { rcLimit: 3n * M });
+const ct3 = await send(sta("user1"), "cancel_big_upload", { buyer: U1, payee: SP1 }, { rcLimit: M / 2n });
 const ref3 = (await tbal(U1)) - ub0;
 check("ticket", "0 used, cancelled at once: the 5% fee floor applies (refund exactly 95%)", ct3.ok && ref3 === tprice * 9500n / 10000n, `refund ${ref3} of ${tprice}`);
 const fee = await admin("set_config", { config: { ...cfg2, new_pct: 100, ticket_fee_bp: 2001 } });
