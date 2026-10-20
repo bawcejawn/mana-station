@@ -5,6 +5,7 @@
 // Never prints private keys. Every check is recorded PASS/FAIL and the run continues, to keep reruns to a minimum.
 import { createRequire } from "module"; const require = createRequire(import.meta.url);
 const { Provider, Signer, Contract, Transaction, utils } = require("../contracts/station/node_modules/koilib");
+import { estimateUploadRc } from "../helper/payer.js";
 import fs from "fs"; import crypto from "crypto";
 
 const MAINNET_ID_PREFIX = "EiBZK_GGVP0H_fXVAM3j6EAuz3-B-l3e";
@@ -30,7 +31,7 @@ const note = (s) => { R.notes.push(s); console.log("NOTE " + s); save(); };
 // Fresh throwaway accounts every run (in memory only, never printed or saved): the station and the players start
 // clean, so 24 h windows, cooldowns and new-user status from earlier runs can't skew the checks. The funder, owner,
 // mock token and test app stay the same (their keys come from TESTNET_KEYS). Set FRESH=0 to reuse the stored keys.
-const FRESH = process.env.FRESH === "0" ? [] : ["station", "user1", "user2", "buyer", "spam1", "spam2"];
+const FRESH = process.env.FRESH === "0" ? [] : ["station", "user1", "user2", "buyer", "spam1", "spam2", "council1", "council2", "council3", "app3", "player3"];
 for (const r of FRESH) { const k = new Signer({ privateKey: crypto.randomBytes(32).toString("hex") }); K[r] = { address: k.getAddress(), wif: k.getPrivateKey("wif") }; }
 const S = (r) => { const s = Signer.fromWif(K[r].wif); s.provider = provider; return s; };
 const A = (r) => K[r].address;
@@ -98,6 +99,25 @@ check("preflight", "funder 1N6yd5… holds tKOIN", fb > 0n, `${Number(fb) / 1e8}
 const meta = await provider.invokeGetContractMetadata(ST).catch(() => null);
 if (meta?.value?.hash) note(`station account already has a contract (hash ${meta.value.hash}): a prior run (ours or another assistant's, e.g. Clover) touched it`);
 
+// ---------------------------------------------------------------- 0b. funding (first: init checks the station's KOIN balance)
+const want = { [ST]: 200n, [BUY]: 20n, [U1]: 8n, [U2]: 8n, [OWN]: 10n, [SP1]: 3n, [SP2]: 3n }; // station >= its koin_amount (150)
+const RESERVE = 5n * M;                                    // the funder keeps this much Mana for the uploads and mints it pays
+for (const [to, amt] of Object.entries(want)) {
+  const have = await kbal(to); const need = amt * M - have;
+  if (need > M / 10n && (await rc(FUN)) - need < RESERVE) { note(`skip funding ${to.slice(0, 6)}…: funder Mana ${Number(await rc(FUN)) / 1e8} would drop below the ${Number(RESERVE) / 1e8} reserve (top it up from the faucet)`); continue; }
+  if (need > M / 10n) check("fund", `fund ${to.slice(0, 6)}… to ${amt} tKOIN`, (await send(koinC("funder"), "transfer", { from: FUN, to, value: String(need) }, { rcLimit: 2n * M })).ok, `${Number(need) / 1e8}`);
+}
+await sleep(4000);
+
+
+
+// ---------------------------------------------------------------- 3. init (provisional config for the measurements)
+const koinAmt = 150n * M;                // configured capacity → daily budget 30 Mana (20%), enough for repeated runs in one day
+const base = { owner: OWN, paused: false, koin_amount: String(koinAmt), refill_bp: 2000, admin_min: String(M / 2n), hard_max: String(2n * M),
+  per_min: 10, cooldown_ms: "60000", day_actions: 50, day_mana: String(40n * M), new_actions: 50, new_mana: String(40n * M), new_pct: 100, max_ops: 2,
+  big_max: String(5n * M), big_cooldown_ms: "86400000", big_week_cap: String(15n * M), big_max_debt: String(10n * M), big_ticket_ms: "0",
+  max_allowances: 4, max_days: "30", buffer_bp: 0, alert_mana: "0", ticket_fee_bp: 0,
+  council: [A("council1"), A("council2"), A("council3")], threshold: 2, guard_delay_ms: "70000" }; // audit #1: 2 of 3, 70 s (testnet floor 60 s)
 // ---------------------------------------------------------------- 1. deploys (paid by the funder, before it sends KOIN out)
 // Upload rc limit sized from the chain's real resource prices (bytes × (disk + network) cost, + 1 Mana for compute), × 1.5.
 // A flat 30 Mana was refused ("insufficient pending account resources") once the funder had sent KOIN out.
@@ -120,37 +140,66 @@ async function deploy(role, path, abi, extra = {}) {
   } catch (e) { return { ok: false, error: String(e?.message || e).slice(0, 300) }; }
 }
 for (const [role, path, abi, extra] of [["token", "../contracts/mocktoken/build/release/contract.wasm", abiT, {}],
-  ["app", "../contracts/testapp/build/release/contract.wasm", abiA, {}],
-  ["station", "../contracts/station/build/testnet/contract.wasm", abiS, { authorizesTransactionApplication: true }]]) {
+  ["app", "../contracts/testapp/build/release/contract.wasm", abiA, {}]]) {
   const r = await deploy(role, path, abi, extra);
   check("deploy", `${role} (${wasm(path).length} B)`, r.ok, r.skipped ? "already on chain (same bytecode)" : (r.error || "")); if (r.ok && !r.skipped) cost(`upload ${role} (${wasm(path).length} bytes)`, r.rc);
 }
+// Audit #1: the station is uploaded with ALL three permissions taken over, and init runs in the same transaction.
+const stCode = wasm("../contracts/station/build/testnet/contract.wasm");
+const STHASH = "0x1220" + crypto.createHash("sha256").update(stCode).digest("hex");
+async function deployStation() {
+  try {
+    const c = new Contract({ id: ST, abi: abiS, provider, signer: S("station"), bytecode: stCode });
+    const { operation } = await c.deploy({ onlyOperation: true, authorizesCallContract: true, authorizesTransactionApplication: true, authorizesUploadContract: true });
+    const tx = new Transaction({ signer: S("station"), provider, options: { payer: FUN, payee: FUN, rcLimit: String(rcFor(stCode.length) + 2n * M), beforeSend: coSign("funder") } });
+    await tx.pushOperation(operation);
+    await tx.pushOperation(sta("station").functions.init, { config: base });
+    const receipt = await tx.send(); await tx.wait("byBlock", 120000);
+    return { ok: !receipt.reverted, rc: BigInt(receipt.rc_used) };
+  } catch (e) { return { ok: false, error: String(e?.message || e).slice(0, 300) }; }
+}
+{ const r = await deployStation(); check("deploy", `station (${stCode.length} B) uploaded and initialized in one transaction`, r.ok, r.error || ""); if (r.ok) cost(`upload + init station (${stCode.length} bytes)`, r.rc); }
 const stMeta = await provider.invokeGetContractMetadata(ST).catch(() => null);
-check("deploy", "station: only authorizes_transaction_application", stMeta?.value?.authorizes_transaction_application && !stMeta?.value?.authorizes_call_contract && !stMeta?.value?.authorizes_upload_contract, JSON.stringify(stMeta?.value || {}).slice(0, 200));
+check("lockdown", "station overrides all three permissions (contract_call, transaction_application, contract_upload)", stMeta?.value?.authorizes_transaction_application && stMeta?.value?.authorizes_call_contract && stMeta?.value?.authorizes_upload_contract && stMeta?.value?.hash === STHASH, JSON.stringify(stMeta?.value || {}).slice(0, 200));
 if (!stMeta?.value?.hash) { note("station contract is not on chain, so nothing after the deploy step can run: stopping"); save(); process.exit(1); }
 
-// ---------------------------------------------------------------- 2b. funding (after the uploads, while the funder still has its full Mana)
-const want = { [ST]: 200n, [BUY]: 20n, [U1]: 8n, [U2]: 8n, [OWN]: 10n, [SP1]: 3n, [SP2]: 3n }; // station >= its koin_amount (150)
-const RESERVE = 5n * M;                                    // the funder keeps this much Mana for the uploads and mints it pays
-for (const [to, amt] of Object.entries(want)) {
-  const have = await kbal(to); const need = amt * M - have;
-  if (need > M / 10n && (await rc(FUN)) - need < RESERVE) { note(`skip funding ${to.slice(0, 6)}…: funder Mana ${Number(await rc(FUN)) / 1e8} would drop below the ${Number(RESERVE) / 1e8} reserve (top it up from the faucet)`); continue; }
-  if (need > M / 10n) check("fund", `fund ${to.slice(0, 6)}… to ${amt} tKOIN`, (await send(koinC("funder"), "transfer", { from: FUN, to, value: String(need) }, { rcLimit: 2n * M })).ok, `${Number(need) / 1e8}`);
-}
-await sleep(4000);
-
-
-// ---------------------------------------------------------------- 3. init (provisional config for the measurements)
-const koinAmt = 150n * M;                // configured capacity → daily budget 30 Mana (20%), enough for repeated runs in one day
-const base = { owner: OWN, paused: false, koin_amount: String(koinAmt), refill_bp: 2000, admin_min: String(M / 2n), hard_max: String(2n * M),
-  per_min: 10, cooldown_ms: "60000", day_actions: 50, day_mana: String(40n * M), new_actions: 50, new_mana: String(40n * M), new_pct: 100, max_ops: 2,
-  big_max: String(5n * M), big_cooldown_ms: "86400000", big_week_cap: String(15n * M), big_max_debt: String(10n * M), big_ticket_ms: "0",
-  max_allowances: 4, max_days: "30", buffer_bp: 0, alert_mana: "0", ticket_fee_bp: 0 };
 const st0 = await read(sta(), "get_status").catch(() => ({}));
-if (st0.config?.owner) note(`station already initialized (owner ${st0.config.owner}); reconfiguring with set_config`);
-else { const x = await send(sta("station"), "init", { config: base }, { payer: FUN, payee: FUN, cosigner: "funder", rcLimit: 3n * M }); /* station key signs the call; funder pays and is the payee */ check("init", "init (station key, funder pays)", x.ok, x.error || (x.reverted ? "reverted" : "")); }
-if (st0.config?.owner) { const x = await admin("set_config", { config: base }); check("init", "set_config provisional", x.ok, x.error || (x.reverted ? "reverted" : "")); }
+check("init", "initialized by the deploy transaction (owner and council set)", st0.config?.owner === OWN && (st0.config?.council || []).length === 3, JSON.stringify({ owner: st0.config?.owner, council: st0.config?.council, threshold: st0.config?.threshold }));
 const errOf = (x) => x.error || (x.reverted ? "reverted" : "") || (x.firstError ? `sponsored path: ${x.firstError}` : "");
+// ---------------------------------------------------------------- 3b. audit #1 lockdown: the key alone can't move or replace anything
+const refusedNot104 = (x) => !x.ok && !/"code":104|insufficient pending account resources|insufficient rc/.test(x.error || "");
+{ const x = await send(sta("station"), "init", { config: base }, { payer: FUN, payee: FUN, cosigner: "funder", rcLimit: M });
+  check("lockdown", "init again (station key) refused", refusedNot104(x), x.error || (x.reverted ? "reverted" : "ACCEPTED")); }
+{ const x = await send(koinC("station"), "transfer", { from: ST, to: FUN, value: String(M) }, { payer: FUN, payee: FUN, cosigner: "funder", rcLimit: M });
+  check("lockdown", "station key moving the station's KOIN refused", refusedNot104(x), x.error || (x.reverted ? "reverted" : "ACCEPTED")); }
+async function uploadTo(signerRole, bytes, flags = true) {
+  try {
+    const c = new Contract({ id: ST, abi: abiS, provider, signer: S(signerRole), bytecode: bytes });
+    const opts = { payer: FUN, payee: FUN, rcLimit: String(rcFor(bytes.length) + 2n * M), authorizesCallContract: flags, authorizesTransactionApplication: flags, authorizesUploadContract: flags };
+    if (signerRole !== "funder") opts.beforeSend = coSign("funder");
+    const { transaction, receipt } = await c.deploy(opts); await transaction.wait("byBlock", 120000);
+    return { ok: !receipt.reverted, rc: BigInt(receipt.rc_used) };
+  } catch (e) { return { ok: false, error: String(e?.message || e).slice(0, 300) }; }
+}
+{ const x = await uploadTo("station", wasm("../contracts/testapp/build/release/contract.wasm"));
+  check("lockdown", "station key replacing the station's code refused", refusedNot104(x), x.error || "ACCEPTED"); }
+const council = (i) => `council${i}`;
+const cmSend = (i, fn, args) => send(sta(council(i)), fn, args, sponsored(A(council(i)), M)); // council votes, station-sponsored
+const UP = await cmSend(1, "propose", { signer: A(council(1)), action: { kind: 1, hash: STHASH } });
+check("council", "council1 proposes an upgrade (hash of the reviewed build)", UP.ok, UP.error || "");
+const upId = Number((await read(sta(), "list_proposals")).proposals?.slice(-1)[0]?.id || 0);
+{ const x = await cmSend(2, "approve", { signer: A(council(2)), id: upId }); check("council", "council2 approves: 2 of 3, the 70 s wait starts", x.ok && (x.events || []).includes("station.proposal_ready"), x.error || x.events); }
+const VETO = await cmSend(1, "propose", { signer: A(council(1)), action: { kind: 2, to: FUN, amount: String(M) } });
+const vetoId = Number((await read(sta(), "list_proposals")).proposals?.slice(-1)[0]?.id || 0);
+await cmSend(2, "approve", { signer: A(council(2)), id: vetoId });
+{ const x = await cmSend(3, "cancel_proposal", { signer: A(council(3)), id: vetoId }); check("council", "council3 alone vetoes an approved withdrawal", VETO.ok && x.ok, x.error || VETO.error || ""); }
+{ const x = await send(sta("user1"), "propose", { signer: U1, action: { kind: 2, to: U1, amount: String(M) } }, { rcLimit: M / 2n });
+  check("council", "a non-member can't propose", refusedNot104(x), x.error || "ACCEPTED"); }
+{ const a = await cmSend(3, "set_paused", { paused: true }); const b = await cmSend(3, "set_paused", { paused: false });
+  check("operators", "a council member can pause and unpause (station-sponsored)", a.ok && b.ok, a.error || b.error || ""); }
+{ const x = await send(sta("user1"), "set_paused", { paused: true }, { rcLimit: M / 2n }); check("operators", "a stranger can't pause", refusedNot104(x), x.error || "ACCEPTED"); }
+{ const x = await admin("set_config", { config: { ...base, treasury: U1 } }); check("council", "owner alone can't change the treasury (council only)", !x.ok, errOf(x) || "ACCEPTED"); }
+
 let r;
 r = await admin("set_app", { app: 1, value: { reserved_mana: String(20n * M), active: true } }); check("init", "set_app 1 (measurement app)", r.ok, (r.viaSelf ? "owner self-paid " : "station-sponsored owner path ") + errOf(r));
 r = await admin("set_app", { app: 2, value: { reserved_mana: String(M / 2n), active: true } }); check("init", "set_app 2 (Stories)", r.ok, errOf(r));
@@ -281,8 +330,9 @@ const t1 = await buyT("buyer", U2);
 check("ticket", "buyer buys a ticket for user2 (big_upload_bought event)", t1.ok && t1.events.includes("station.big_upload_bought"), t1.error || t1.events); if (t1.ok) cost("buy_big_upload tx (approve + buy)", t1.rc);
 const code = wasm("../contracts/testapp/build/release/contract.wasm");
 let up = { ok: false };
-try { const c = new Contract({ id: U2, abi: abiA, provider, signer: S("user2"), bytecode: code }); const { transaction, receipt } = await c.deploy({ payer: ST, payee: U2, rcLimit: String(T) }); await transaction.wait("byBlock", 120000); up = { ok: !receipt.reverted, rc: BigInt(receipt.rc_used) }; } catch (e) { up = { ok: false, error: String(e.message).slice(0, 300) }; }
-check("ticket", `big tx (${code.length} B contract upload, > 1 KiB) sponsored via ticket: authorize read the tx with the enlarged buffer`, up.ok, up.error || `rc ${up.rc}`); if (up.ok) cost(`ticket upload of ${code.length} B contract`, up.rc);
+const upLimit = await estimateUploadRc(provider, code.length); note(`helper upload limit for ${code.length} B: ${upLimit} (${Number(upLimit) / 1e8} Mana)`);
+try { const c = new Contract({ id: U2, abi: abiA, provider, signer: S("user2"), bytecode: code }); const { transaction, receipt } = await c.deploy({ payer: ST, payee: U2, rcLimit: String(upLimit) }); await transaction.wait("byBlock", 120000); up = { ok: !receipt.reverted, rc: BigInt(receipt.rc_used) }; } catch (e) { up = { ok: false, error: String(e.message).slice(0, 300) }; }
+check("ticket", `big tx (${code.length} B contract upload) sponsored via ticket with the helper's tight limit`, up.ok, up.error || `rc ${up.rc} of limit ${upLimit} (${(Number(up.rc) / Number(upLimit) * 100).toFixed(1)}% used)`); if (up.ok) cost(`ticket upload of ${code.length} B contract`, up.rc);
 const tk = await read(sta(), "get_ticket", { payee: U2 }); const used = BigInt(tk.ticket?.mana || 0) - BigInt(tk.ticket?.remaining || 0);
 note(`ticket after upload: mana ${tk.ticket?.mana} remaining ${tk.ticket?.remaining} (charged = rc_used)`);
 const ob0 = await tbal(OWN), bb1 = await tbal(BUY);
@@ -305,18 +355,53 @@ const ct3 = await send(sta("user1"), "cancel_big_upload", { buyer: U1, payee: SP
 const ref3 = (await tbal(U1)) - ub0;
 check("ticket", "0 used, cancelled at once: the 5% fee floor applies (refund exactly 95%)", ct3.ok && ref3 === tprice * 9500n / 10000n, `refund ${ref3} of ${tprice}`);
 const fee = await admin("set_config", { config: { ...cfg2, new_pct: 100, ticket_fee_bp: 2001 } });
-check("ticket", "ticket_fee_bp 2001 (> 20%) refused", !fee.ok, fee.error || (fee.reverted ? "reverted" : ""));
+check("ticket", "raising the ticket fee via set_config refused (council only, max 20%)", !fee.ok, errOf(fee));
+
+
+// ---------------------------------------------------------------- 8b. connected apps: one-step connect / list / disconnect
+{ const c = new Contract({ id: A("app3"), abi: abiA, provider, signer: S("app3"), bytecode: wasm("../contracts/testapp/build/release/contract.wasm") });
+  try { const { transaction } = await c.deploy({ payer: FUN, payee: A("app3"), rcLimit: String(rcFor(wasm("../contracts/testapp/build/release/contract.wasm").length)), beforeSend: coSign("funder") }); await transaction.wait("byBlock", 120000); } catch (e) { note("deploy app3: " + String(e.message).slice(0, 150)); } }
+const APP3 = A("app3");
+{ const x = await admin("connect_app", { contract_id: APP3, mana_per_day: String(M), strict: false }); check("connect", "connect_app: a new app gets 1 Mana/day in one step", x.ok, errOf(x)); }
+{ const L = await read(sta(), "list_connected"); const f = (L.free_apps || []).find((a) => a.contract_id === APP3);
+  check("connect", "list_connected shows it with its daily Mana", !!f && BigInt(f.mana_per_day || 0) === M, JSON.stringify({ free: (L.free_apps || []).length, paid: (L.paid || []).length, sellable: L.sellable, sold: L.sold }));
+  note(`list_connected: ${(L.free_apps || []).length} free apps, ${(L.paid || []).length} paid allowances, daily budget ${L.daily_budget}, reserved ${L.reserved}, sellable ${L.sellable}, sold ${L.sold}`); }
+{ const x = await send(C(APP3, abiA, "player3"), "play", { user: A("player3") }, sponsored(A("player3"), L)); check("connect", "its users play free right away", x.ok, x.error || `rc ${x.rc}`); }
+{ const x = await admin("disconnect_app", { contract_id: APP3 }); check("connect", "disconnect_app in one step", x.ok, errOf(x)); }
+{ const x = await send(C(APP3, abiA, "player3"), "play", { user: A("player3") }, sponsored(A("player3"), L)); check("connect", "after disconnect its users are no longer sponsored", refusedNot104(x), x.error || "ACCEPTED"); }
+
+// ---------------------------------------------------------------- 8c. audit #1: approved upgrade, then council withdrawal (also returns the test KOIN)
+{ const x = await uploadTo("funder", wasm("../contracts/testapp/build/release/contract.wasm")); check("upgrade", "uploading code the council did not approve is refused", refusedNot104(x), x.error || "ACCEPTED"); }
+{ const x = await uploadTo("funder", stCode, false); check("upgrade", "the approved code without the three overrides is refused", refusedNot104(x), x.error || "ACCEPTED"); }
+{ const x = await uploadTo("funder", stCode); check("upgrade", "the approved code, after the wait, uploads WITHOUT the station key", x.ok, x.error || ""); }
+{ const x = await uploadTo("funder", stCode); check("upgrade", "…and only once", refusedNot104(x), x.error || "ACCEPTED"); }
+// Cleanup doubles as the withdrawal test: free the budget, lower koin_amount, then 2 of 3 + 70 s to take KOIN out.
+await admin("set_app", { app: 1, value: { reserved_mana: "0", active: false } });
+await admin("set_app", { app: 2, value: { reserved_mana: "0", active: false } });
+{ const x = await admin("set_config", { config: { ...cfg2, koin_amount: String(10n * M) } }); check("withdraw", "operator lowers koin_amount to 10 (allowed: it backs what is sold)", x.ok, errOf(x)); }
+const stBal = await kbal(ST), stMana = await rc(ST);
+let wAmt = stBal - 10n * M - M; if (stMana - M < wAmt) wAmt = stMana - M;
+const W = await cmSend(2, "propose", { signer: A(council(2)), action: { kind: 2, to: FUN, amount: String(wAmt) } });
+const wId = Number((await read(sta(), "list_proposals")).proposals?.slice(-1)[0]?.id || 0);
+{ const x = await send(sta("player3"), "execute", { id: wId }, { payer: FUN, payee: FUN, cosigner: "funder", rcLimit: M }); check("withdraw", "1 of 2 approvals: execute refused", W.ok && refusedNot104(x), x.error || W.error || "ACCEPTED"); }
+await cmSend(3, "approve", { signer: A(council(3)), id: wId });
+{ const x = await send(sta("player3"), "execute", { id: wId }, { payer: FUN, payee: FUN, cosigner: "funder", rcLimit: M }); check("withdraw", "2 of 2 but inside the 70 s wait: refused", refusedNot104(x), x.error || "ACCEPTED"); }
+await sleep(75_000);
+{ const f0 = await kbal(FUN);
+  const e = await send(new Contract({ id: ST, abi: abiS, provider, signer: S("funder") }), "execute", { id: wId }, { rcLimit: M });
+  const f1 = await kbal(FUN);
+  check("withdraw", "after the wait anyone executes: KOIN goes to the approved address", e.ok && f1 >= f0 + wAmt - M, e.error || `${Number(wAmt) / 1e8} tKOIN back to the funder`); }
 
 // ---------------------------------------------------------------- 9. invariants, KOIN untouched, events summary
 const tot = (await read(sta(), "get_escrow_totals", { token: TOK })).totals || {};
 const held = BigInt(tot.held || 0), stTok = await tbal(ST);
 check("money", "escrow held == station tUSDT balance; collected == held + refunded + released", held === stTok && BigInt(tot.collected || 0) === held + BigInt(tot.refunded || 0) + BigInt(tot.released || 0), JSON.stringify(tot) + ` station balance ${stTok}`);
-const koinSt1 = await kbal(ST);
-check("money", "station KOIN balance unchanged through all escrow/refund flows (no KOIN refund path)", koinSt1 === koinSt0, `${koinSt0} → ${koinSt1}`);
+check("money", "station KOIN moved only by the council withdrawal (escrow and refunds never touch KOIN)", stBal === koinSt0, `before withdrawal ${koinSt0} → ${stBal}`);
 cost("station Mana at end", await rc(ST));
 // Sweep the fresh accounts' leftover tKOIN back to the funder (best effort; each keeps a little Mana for the fee).
 let swept = 0n;
 for (const r of FRESH) {
+  if (r === "station") continue;                                         // locked by design: its KOIN left via the council withdrawal
   const bal = await kbal(A(r)), mana = await rc(A(r)); let amt = (bal < mana ? bal : mana) - M; if (amt <= 0n) continue;
   const x = await send(koinC(r), "transfer", { from: A(r), to: FUN, value: String(amt) }, { rcLimit: M / 2n });
   if (x.ok) swept += amt; else note(`sweep ${r} ${A(r).slice(0, 6)}…: ${x.error || "reverted"}`);
