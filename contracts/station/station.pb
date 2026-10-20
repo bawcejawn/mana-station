@@ -1,5 +1,5 @@
 
-Õa
+Ûa
 assembly/proto/station.protostationkoinos/options.proto"Ö
 config_object
 owner (B€µRowner
@@ -166,10 +166,10 @@ hard_floor (B0R	hardFloor"Ý
 
 exempt_ids (B€µR	exemptIds%
 open_proposals (RopenProposals#
-next_proposal (RnextProposal"ú
+next_proposal (RnextProposal"€
 guarded_action
-kind (Rkind
-hash (Rhash
+kind (Rkind
+hash (B€µRhash
 to (B€µRto
 amount (B0Ramount
 token (B€µRtoken

@@ -267,7 +267,7 @@ const nd = [
   ["mock token transfer (non-designated contract)", () => send(tok("user2"), "transfer", { from: U2, to: U1, value: "0" }, sponsored(U2, L))],
   ["KOIN transfer (non-designated contract)", () => send(koinC("user2"), "transfer", { from: U2, to: U1, value: "1" }, sponsored(U2, L))],
   ["2 ops: Stories play + token transfer (mixed targets)", () => sendOps("user2", [[app("user2"), "play", { user: U2 }], [tok("user2"), "transfer", { from: U2, to: U1, value: "0" }]], sponsored(U2, L))],
-  ["upload_contract with no ticket", async () => { try { const c = new Contract({ id: U2, abi: abiA, provider, signer: S("user2"), bytecode: wasm("../contracts/testapp/build/release/contract.wasm") }); const { transaction } = await c.deploy({ payer: ST, payee: U2, rcLimit: String(L) }); await transaction.wait("byBlock", 60000); return { ok: true }; } catch (e) { return { ok: false, error: String(e.message).slice(0, 200) }; } }],
+  ["upload_contract with no ticket", async () => { try { const c = new Contract({ id: U2, abi: abiA, provider, signer: S("user2"), bytecode: wasm("../contracts/testapp/build/release/contract.wasm") }); const { transaction } = await c.deploy({ payer: ST, payee: U2, rcLimit: String(rcFor(wasm("../contracts/testapp/build/release/contract.wasm").length)) }); await transaction.wait("byBlock", 60000); return { ok: true }; } catch (e) { return { ok: false, error: String(e.message).slice(0, 200) }; } }],
 ];
 for (const [name, fn] of nd) { const x = await fn(); check("designated", `refused: ${name}`, !x.ok, x.error || (x.reverted ? "included+reverted" : "ACCEPTED")); }
 check("designated", "refusals cost the station 0 Mana (Mana did not drop)", (await rc(ST)) >= m0, `${m0} → ${await rc(ST)}`);

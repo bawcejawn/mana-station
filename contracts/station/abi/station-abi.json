@@ -1053,7 +1053,10 @@
                             },
                             "hash": {
                                 "type": "bytes",
-                                "id": 2
+                                "id": 2,
+                                "options": {
+                                    "(koinos.btype)": "HEX"
+                                }
                             },
                             "to": {
                                 "type": "bytes",

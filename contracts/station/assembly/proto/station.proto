@@ -207,7 +207,7 @@ message registry_object {
 // 6 set the treasury (to), 7 set the ticket fee (fee_bp), 8 set the owner (to).
 message guarded_action {
   uint32 kind = 1;
-  bytes hash = 2;
+  bytes hash = 2 [(koinos.btype) = HEX];               // "0x1220…" in tools (koilib hex encoding)
   bytes to = 3 [(koinos.btype) = ADDRESS];
   uint64 amount = 4 [jstype = JS_STRING];
   bytes token = 5 [(koinos.btype) = CONTRACT_ID];
