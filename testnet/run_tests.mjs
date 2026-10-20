@@ -100,7 +100,7 @@ const meta = await provider.invokeGetContractMetadata(ST).catch(() => null);
 if (meta?.value?.hash) note(`station account already has a contract (hash ${meta.value.hash}): a prior run (ours or another assistant's, e.g. Clover) touched it`);
 
 // ---------------------------------------------------------------- 0b. funding (first: init checks the station's KOIN balance)
-const want = { [ST]: 200n, [BUY]: 20n, [U1]: 8n, [U2]: 8n, [OWN]: 10n, [SP1]: 3n, [SP2]: 3n }; // station >= its koin_amount (150)
+const want = { [ST]: 160n, [BUY]: 20n, [U1]: 8n, [U2]: 8n, [OWN]: 10n, [SP1]: 3n, [SP2]: 3n }; // station >= its koin_amount (150)
 const RESERVE = 5n * M;                                    // the funder keeps this much Mana for the uploads and mints it pays
 // Preflight (Oct 20): fund nobody unless the funder can fund everyone. A run that stops halfway leaves tKOIN in fresh
 // throwaway accounts whose keys are gone.
