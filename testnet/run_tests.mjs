@@ -402,6 +402,8 @@ const APP3 = A("app3");
 }
 // ---------------------------------------------------------------- 8b3. free checkout: a wallet with NO Mana buys and cancels its own pass
 { const P3 = A("player3");
+  // the passes above still hold today's sold capacity (a cancel runs to the end of the day): make room for 1 more Mana
+  { const x = await admin("set_app", { app: 1, value: { reserved_mana: String(B - 4n * L - 5n * AU), active: true } }); check("checkout", "owner frees 2 Mana a day of capacity for the next sale", x.ok, errOf(x)); }
   let x = await send(tok("token"), "mint", { to: P3, value: String(10n * M) }, { payer: FUN, payee: TOK, cosigner: "funder" });
   check("checkout", "mint 10 tUSDT to player3 (a wallet with no KOIN and no Mana)", x.ok, x.error || "");
   note(`player3 own Mana: ${await rc(P3)}`);
@@ -438,9 +440,11 @@ const APP3 = A("app3");
 // Cleanup doubles as the withdrawal test: free the budget, lower koin_amount, then 2 of 3 + 70 s to take KOIN out.
 await admin("set_app", { app: 1, value: { reserved_mana: "0", active: false } });
 await admin("set_app", { app: 2, value: { reserved_mana: "0", active: false } });
-{ const x = await admin("set_config", { config: { ...cfg2, koin_amount: String(10n * M) } }); check("withdraw", "operator lowers koin_amount to 10 (allowed: it backs what is sold)", x.ok, errOf(x)); }
+// koin_amount must keep backing what is still sold today (cancelled terms run to the end of the day): 5x sold, min 10.
+const soldNow = BigInt((await read(sta(), "list_connected")).sold || 0); const keepK = soldNow * 5n + M > 10n * M ? soldNow * 5n + M : 10n * M;
+{ const x = await admin("set_config", { config: { ...cfg2, koin_amount: String(keepK) } }); check("withdraw", `operator lowers koin_amount to ${Number(keepK) / 1e8} (allowed: it still backs what is sold)`, x.ok, errOf(x)); }
 const stBal = await kbal(ST), stMana = await rc(ST);
-let wAmt = stBal - 10n * M - M; if (stMana - M < wAmt) wAmt = stMana - M;
+let wAmt = stBal - keepK - M; if (stMana - M < wAmt) wAmt = stMana - M;
 const W = await cmSend(2, "propose", { signer: A(council(2)), action: { kind: 2, to: FUN, amount: String(wAmt) } });
 const wId = Number((await read(sta(), "list_proposals")).proposals?.slice(-1)[0]?.id || 0);
 { const x = await send(sta("player3"), "execute", { id: wId }, { payer: FUN, payee: FUN, cosigner: "funder", rcLimit: M }); check("withdraw", "1 of 2 approvals: execute refused", W.ok && refusedNot104(x), x.error || W.error || "ACCEPTED"); }

@@ -147,6 +147,31 @@ if (cmd === "sweep") {                      // sweep <run id>: return a test run
   log(`returned ${Number(total) / 1e8} tKOIN; funder now holds ${Number(await kbal(FUN)) / 1e8}`);
 }
 
+if (cmd === "recover") {                    // recover <run id>: take a finished test run's station KOIN back to the funder
+  const run = process.argv[3]; if (!/^[0-9]+$/.test(run || "")) throw new Error("usage: recover <run id>");
+  const dk = (r) => { const k = new Signer({ privateKey: crypto.createHash("sha256").update("mana-station-run/" + run + "/" + r + "/" + K.funder.wif).digest("hex") }); k.provider = provider; return k; };
+  const RS = dk("station").getAddress(); const own = Signer.fromWif(K.owner.wif); own.provider = provider;
+  const c0 = (signer) => new Contract({ id: RS, abi: abiS, provider, signer });
+  const st = (await c0().functions.get_status({})).result || {}; const c = st.config || {};
+  if (c.owner !== own.getAddress()) throw new Error("that run's station has another owner");
+  const viaFunder = (signer, fn, args) => send(c0(signer), fn, args, { payer: FUN, payee: FUN, cosigner: "funder", rcLimit: M });
+  const bal = await kbal(RS); log(`run station ${RS} holds ${Number(bal) / 1e8} tKOIN`);
+  // what is still sold must stay backed: keep koin_amount at 5x the sold Mana per day (20% budget), at least 1 tKOIN
+  const L = (await c0().functions.list_connected({})).result || {}; const sold = BigInt(L.sold || 0);
+  const keep = sold * 5n + M > M ? sold * 5n + M : M;
+  ok(`owner lowers koin_amount to ${Number(keep) / 1e8} tKOIN`, await viaFunder(own, "set_config", { config: { ...c, koin_amount: String(keep) } }));
+  const mem = ["council1", "council2", "council3"].filter((r) => (c.council || []).includes(dk(r).getAddress()));
+  if (mem.length < 2) throw new Error("fewer than 2 of that run's council keys are still on its council");
+  const amount = (await kbal(RS)) - keep - M / 10n;
+  const [m1, m2] = mem.map(dk);
+  ok(`propose returning ${Number(amount) / 1e8} tKOIN`, await viaFunder(m1, "propose", { signer: m1.getAddress(), action: { kind: 2, to: FUN, amount: String(amount) } }));
+  const P = (await c0().functions.list_proposals({})).result?.proposals || []; const id = P.filter((p) => p.proposer === m1.getAddress()).slice(-1)[0]?.id;
+  ok(`approve #${id}`, await viaFunder(m2, "approve", { signer: m2.getAddress(), id }));
+  await sleep(Number(c.guard_delay_ms) + 15000);
+  ok(`execute #${id}`, await send(c0(KEY.funder), "execute", { id }, { rcLimit: M }));
+  log(`funder now holds ${Number(await kbal(FUN)) / 1e8} tKOIN`);
+}
+
 if (cmd === "traffic") {
   const n = Number(process.argv[3] || 6);
   for (let i = 0; i < n; i++) {
