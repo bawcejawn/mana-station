@@ -48,7 +48,17 @@ jobs:
         if: ${{ inputs.run_testnet == 'true' }}
         env:
           RPC: https://harbinger-api.koinos.io
-        run: node testnet/run_tests.mjs
+        run: |
+          set -o pipefail
+          node testnet/run_tests.mjs 2>&1 | tee testnet/run.log
+      # Surface the outcome as annotations too (readable via the API when raw logs aren't reachable).
+      # The script never prints keys; WIFs are also masked above.
+      - name: Report results as annotations
+        if: always()
+        run: |
+          enc() { sed -e ':a;N;$!ba' -e 's/%/%25/g' -e 's/\r//g' -e 's/\n/%0A/g'; }
+          if [ -f testnet/results.md ]; then echo "::notice title=testnet results::$(head -c 60000 testnet/results.md | enc)"; fi
+          if [ -f testnet/run.log ]; then echo "::warning title=run_tests last 60 lines::$(tail -n 60 testnet/run.log | enc)"; fi
       - name: Remove keys
         if: always()
         run: rm -f testnet/keys.testnet.json
@@ -59,4 +69,5 @@ jobs:
           path: |
             testnet/results.json
             testnet/results.md
+            testnet/run.log
           retention-days: 7
