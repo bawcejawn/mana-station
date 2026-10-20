@@ -36,14 +36,17 @@ jobs:
           echo "MOCK_STABLE=$(node -p 'require("./testnet/keys.testnet.json").token.address')" >> "$GITHUB_ENV"
       - name: Build testnet station (VUSDT = mock token), then mainnet build + check
         working-directory: contracts/station
+        # The ABI generator occasionally fails to read its input pipe (EAGAIN); retry each build up to 3 times.
         run: |
-          npm run build:testnet
-          npm run build
+          retry() { for i in 1 2 3; do "$@" && return 0; echo "::warning::'$*' failed (attempt $i), retrying"; sleep 2; done; return 1; }
+          retry npm run build:testnet
+          retry npm run build
           npm run check:mainnet
       - name: Build testapp and mock token
         run: |
-          (cd contracts/testapp && npm run build)
-          (cd contracts/mocktoken && npm run build)
+          retry() { for i in 1 2 3; do "$@" && return 0; echo "::warning::'$*' failed (attempt $i), retrying"; sleep 2; done; return 1; }
+          (cd contracts/testapp && retry npm run build)
+          (cd contracts/mocktoken && retry npm run build)
       - name: Harbinger scenarios
         if: ${{ inputs.run_testnet == 'true' }}
         env:
