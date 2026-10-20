@@ -1008,6 +1008,20 @@ describe("audit 2026-10-19: attacks replayed (branch fix/squat-freeze-stall)", (
     signedBy([B2]); s.buy_big_upload(new station.buy_big_upload_arguments(B2, user(44), 50 * M, USDT, 1000 * USD, false)); signedBy([]); // other wallets unaffected
     inv(s, USDT);
   });
+  it("testnet find: before init, the station key can still approve the station's own txs (so init can't get stuck); nothing else is paid", () => {
+    MockVM.reset(); System.setSystemBufferSize(256 * 1024);
+    MockVM.setContractId(STATION); MockVM.setContractArguments(STATION); MockVM.setEntryPoint(0);
+    MockVM.setCaller(new chain.caller_data(new Uint8Array(0), chain.privilege.user_mode));
+    MockVM.setContractMetadata(new chain.contract_metadata_object(new Uint8Array(0), false, false, false, true));
+    MockVM.setHeadInfo(new chain.head_info(null, 0, 1)); at(T0); testSetMana(1000 * M); testSetBalance(1000 * M);
+    const s = new Station();                                                     // uploaded, not initialized
+    tx(STATION, 2 * M, [op(STATION, 0x12345678)]);
+    signedBy([STATION]); expect(ok(s)).toBe(true);                               // the station's own tx (e.g. init) is approved
+    signedBy([]); expect(ok(s)).toBe(false);                                     // …only with the station key
+    tx(U1, 2 * M, [op(KNODE, EP_PLAY)]); expect(ok(s)).toBe(false);              // nobody else is sponsored before init
+    signedBy([STATION]); s.init(new station.init_arguments(cfg())); signedBy([]);
+    expect(s.get_status(new station.get_status_arguments()).config!.owner).not.toBeNull();
+  });
   it("#8 a stranger closing an expired ticket late doesn't extend the buyer's wait", () => {
     const s = setup(); const T = NOW;
     signedBy([BUYER]); s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U1, 50 * M, USDT, 1000 * USD, false)); signedBy([]);

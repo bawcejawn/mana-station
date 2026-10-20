@@ -385,15 +385,18 @@ export class Station {
 
   sponsorOk(): bool {
     const c = this.config.get()!;
-    if (!isAddress(c.owner)) return false;
     const rc = System.getTransactionField("header.rc_limit")!.uint64_value;
     const pf = System.getTransactionField("header.payee");
     const payee = pf == null ? new Uint8Array(0) : pf.bytes_value;
     const mana = this.mana();
     if (rc > mana) return false;
+    // The station's OWN transactions (payee = the station) need only the station key, and must work BEFORE init:
+    // found on testnet 2026-10-20 that checking "initialized?" first refused every station tx after upload, so init
+    // itself could never be approved and a fresh station was stuck.
     if (payee.length == 0 || Arrays.equal(payee, this.contractId)) {
       return System.checkAuthority(authority.authorization_type.contract_call, this.contractId); // station key only
     }
+    if (!isAddress(c.owner)) return false;                              // everything else needs an initialized station
     // The SDK's system-call buffer is 1 KiB by default: reading the operations of a bigger tx (a contract upload, long
     // args) would fail. Enlarge it; a big-upload ticket holder may send a whole contract (UNVERIFIED max tx size:
     // measure on testnet).

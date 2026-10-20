@@ -92,7 +92,9 @@ async function deploy(role, path, abi, extra = {}) {
   if (have === want) return { ok: true, rc: 0n, skipped: true };
   const c = new Contract({ id: A(role), abi, provider, signer: S(role), bytecode: wasm(path) });
   // The funder pays every upload (an uninitialized station refuses to pay for anything, by design).
-  const pay = { payer: FUN, payee: A(role), beforeSend: coSign("funder") };
+  // For the station the funder is also the payee (its nonce): a station contract already on chain decides whether the
+  // station's own txs are approved, and the pre-fix version refused them before init (testnet find, Oct 20).
+  const pay = { payer: FUN, payee: role === "station" ? FUN : A(role), beforeSend: coSign("funder") };
   try {
     const { transaction, receipt } = await c.deploy({ ...pay, rcLimit: String(rcFor(wasm(path).length)), ...extra });
     await transaction.wait("byBlock", 120000); return { ok: !receipt.reverted, rc: BigInt(receipt.rc_used) };
@@ -125,7 +127,7 @@ const base = { owner: OWN, paused: false, koin_amount: String(koinAmt), refill_b
   max_allowances: 4, max_days: "30", buffer_bp: 0, alert_mana: "0", ticket_fee_bp: 0 };
 const st0 = await read(sta(), "get_status").catch(() => ({}));
 if (st0.config?.owner) note(`station already initialized (owner ${st0.config.owner}); reconfiguring with set_config`);
-else { const x = await send(sta("station"), "init", { config: base }, { payer: FUN, payee: ST, cosigner: "funder", rcLimit: 3n * M }); check("init", "init (station key, funder pays)", x.ok, x.error || (x.reverted ? "reverted" : "")); }
+else { const x = await send(sta("station"), "init", { config: base }, { payer: FUN, payee: FUN, cosigner: "funder", rcLimit: 3n * M }); /* station key signs the call; funder pays and is the payee */ check("init", "init (station key, funder pays)", x.ok, x.error || (x.reverted ? "reverted" : "")); }
 if (st0.config?.owner) { const x = await admin("set_config", { config: base }); check("init", "set_config provisional", x.ok, x.error || (x.reverted ? "reverted" : "")); }
 const errOf = (x) => x.error || (x.reverted ? "reverted" : "") || (x.firstError ? `sponsored path: ${x.firstError}` : "");
 let r;
