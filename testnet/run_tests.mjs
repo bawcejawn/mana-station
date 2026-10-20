@@ -80,7 +80,7 @@ const meta = await provider.invokeGetContractMetadata(ST).catch(() => null);
 if (meta?.value?.hash) note(`station account already has a contract (hash ${meta.value.hash}): a prior run (ours or another assistant's, e.g. Clover) touched it`);
 
 // ---------------------------------------------------------------- 1. funding (before deploys: KOIN transfers need Mana)
-const want = { [ST]: 15n, [BUY]: 2n, [U1]: 2n, [OWN]: 1n };
+const want = { [ST]: 30n, [BUY]: 2n, [U1]: 2n, [OWN]: 1n }; // station holds >= its configured koin_amount (init refuses more)
 for (const [to, amt] of Object.entries(want)) {
   const have = await kbal(to); const need = amt * M - have;
   if (need > M / 10n) check("fund", `fund ${to.slice(0, 6)}… to ${amt} tKOIN`, (await send(koinC("funder"), "transfer", { from: FUN, to, value: String(need) }, { rcLimit: 2n * M })).ok, `${Number(need) / 1e8}`);
@@ -94,9 +94,15 @@ const LIM = (await provider.call("chain.get_resource_limits", {})).resource_limi
 const rcFor = (bytes) => (BigInt(bytes) * (BigInt(LIM.disk_storage_cost) + BigInt(LIM.network_bandwidth_cost)) + M) * 3n / 2n;
 note(`resource prices: disk ${LIM.disk_storage_cost}/B, network ${LIM.network_bandwidth_cost}/B, compute ${LIM.compute_bandwidth_cost}/tick; funder Mana now ${Number(await rc(FUN)) / 1e8}`);
 async function deploy(role, path, abi, extra = {}) {
+  // Skip when the chain already has exactly this bytecode (hash = 0x1220 + sha256), so reruns don't spend Mana again.
+  const want = "0x1220" + crypto.createHash("sha256").update(wasm(path)).digest("hex");
+  const have = (await provider.invokeGetContractMetadata(A(role)).catch(() => null))?.value?.hash;
+  if (have === want) return { ok: true, rc: 0n, skipped: true };
   const c = new Contract({ id: A(role), abi, provider, signer: S(role), bytecode: wasm(path) });
+  // The station pays its own upload from its KOIN; the others are paid by the funder.
+  const pay = role === "station" ? {} : { payer: FUN, payee: A(role), beforeSend: coSign("funder") };
   try {
-    const { transaction, receipt } = await c.deploy({ payer: FUN, payee: A(role), rcLimit: String(rcFor(wasm(path).length)), beforeSend: coSign("funder"), ...extra });
+    const { transaction, receipt } = await c.deploy({ ...pay, rcLimit: String(rcFor(wasm(path).length)), ...extra });
     await transaction.wait("byBlock", 120000); return { ok: !receipt.reverted, rc: BigInt(receipt.rc_used) };
   } catch (e) { return { ok: false, error: String(e?.message || e).slice(0, 300) }; }
 }
@@ -104,7 +110,7 @@ for (const [role, path, abi, extra] of [["token", "../contracts/mocktoken/build/
   ["app", "../contracts/testapp/build/release/contract.wasm", abiA, {}],
   ["station", "../contracts/station/build/testnet/contract.wasm", abiS, { authorizesTransactionApplication: true }]]) {
   const r = await deploy(role, path, abi, extra);
-  check("deploy", `${role} (${wasm(path).length} B)`, r.ok, r.error || ""); if (r.ok) cost(`upload ${role} (${wasm(path).length} bytes)`, r.rc);
+  check("deploy", `${role} (${wasm(path).length} B)`, r.ok, r.skipped ? "already on chain (same bytecode)" : (r.error || "")); if (r.ok && !r.skipped) cost(`upload ${role} (${wasm(path).length} bytes)`, r.rc);
 }
 const stMeta = await provider.invokeGetContractMetadata(ST).catch(() => null);
 check("deploy", "station: only authorizes_transaction_application", stMeta?.value?.authorizes_transaction_application && !stMeta?.value?.authorizes_call_contract && !stMeta?.value?.authorizes_upload_contract, JSON.stringify(stMeta?.value || {}).slice(0, 200));
@@ -118,11 +124,12 @@ const base = { owner: OWN, paused: false, koin_amount: String(koinAmt), refill_b
   max_allowances: 4, max_days: "30", buffer_bp: 0, alert_mana: "0", ticket_fee_bp: 0 };
 const st0 = await read(sta(), "get_status").catch(() => ({}));
 if (st0.config?.owner) note(`station already initialized (owner ${st0.config.owner}); reconfiguring with set_config`);
-else check("init", "init (station key, funder pays)", (await send(sta("station"), "init", { config: base }, { payer: FUN, payee: ST, cosigner: "funder", rcLimit: 3n * M })).ok);
-if (st0.config?.owner) check("init", "set_config provisional", (await admin("set_config", { config: base })).ok);
+else { const x = await send(sta("station"), "init", { config: base }, { payer: FUN, payee: ST, cosigner: "funder", rcLimit: 3n * M }); check("init", "init (station key, funder pays)", x.ok, x.error || (x.reverted ? "reverted" : "")); }
+if (st0.config?.owner) { const x = await admin("set_config", { config: base }); check("init", "set_config provisional", x.ok, x.error || (x.reverted ? "reverted" : "")); }
+const errOf = (x) => x.error || (x.reverted ? "reverted" : "") || (x.firstError ? `sponsored path: ${x.firstError}` : "");
 let r;
-r = await admin("set_app", { app: 1, value: { reserved_mana: String(3n * M), active: true } }); check("init", "set_app 1 (measurement app)", r.ok, r.viaSelf ? "owner self-paid" : "station-sponsored owner path");
-r = await admin("set_app", { app: 2, value: { reserved_mana: String(M / 2n), active: true } }); check("init", "set_app 2 (Stories)", r.ok);
+r = await admin("set_app", { app: 1, value: { reserved_mana: String(3n * M), active: true } }); check("init", "set_app 1 (measurement app)", r.ok, (r.viaSelf ? "owner self-paid " : "station-sponsored owner path ") + errOf(r));
+r = await admin("set_app", { app: 2, value: { reserved_mana: String(M / 2n), active: true } }); check("init", "set_app 2 (Stories)", r.ok, errOf(r));
 check("init", "set_exempt testapp → app 1, strict", (await admin("set_exempt", { contract_id: APP, value: { app: 1, strict: true } })).ok);
 for (const fn of ["play", "heavy", "boom"]) check("init", `set_entry ${fn}`, (await admin("set_entry", { contract_id: APP, entry_point: ep(abiA, fn), value: { app: 1, cap: String(2n * M), max_args: 64 } })).ok);
 check("init", "set_price mock stablecoin (testnet VUSDT)", (await admin("set_price", { token: TOK, value: { active: true, max_per_purchase: String(1000n * M), price_1d: "3000000", price_7d: "20000000", price_30d: "75000000", big_per_1000: "5000000", big_min_mana: String(M / 10n) } })).ok);
@@ -149,7 +156,8 @@ check("measure", "allowlisted entry that reverts is included and charged to the 
 
 // ---------------------------------------------------------------- 5. Stories app (app 2): spam, new-user pool, buffer
 const H = sh.ok ? ceil11(sh.rc) : 2n * M;
-const koin2 = 60n * L > koinAmt ? 60n * L : koinAmt; const B = koin2 * 2000n / 10000n;  // budget ≥ 12L
+const stKoin = await kbal(ST); let koin2 = 60n * L > koinAmt ? 60n * L : koinAmt; if (koin2 > stKoin) koin2 = stKoin; const B = koin2 * 2000n / 10000n; // budget ≥ 12L, never above the station's real KOIN
+if (B < 7n * L) note(`budget ${B} < 7L (${7n * L}): the Stories reservation checks below will fail; fund the station with more tKOIN`);
 const cfg2 = { ...base, koin_amount: String(koin2), hard_max: String(2n * M > H ? 2n * M : H), per_min: 3, cooldown_ms: "600000", new_actions: 10, new_mana: String(30n * L), new_pct: 50, buffer_bp: 5000 };
 check("stories", "set_config: per_min 3, 10 min cooldown, new-user pool 50%, buffer 50%", (await admin("set_config", { config: cfg2 })).ok);
 check("stories", "set_app 2 (Stories) reserved 4L", (await admin("set_app", { app: 2, value: { reserved_mana: String(4n * L), active: true } })).ok);

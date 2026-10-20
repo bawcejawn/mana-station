@@ -166,7 +166,7 @@ export class Station {
     }
   }
   /** Where releases go: the treasury if set (never the station), else Carl's owner wallet. */
-  treasury(c: station.config_object): Uint8Array { return isAddress(c.treasury) ? c.treasury! : c.owner!; }
+  treasury(c: station.config_object): Uint8Array { return isAddress(c.treasury) ? c.treasury! : (isAddress(c.owner) ? c.owner! : new Uint8Array(0)); } // empty before init (get_status no longer traps)
   /** The escrow clock: frozen at paused_at while the station is paused. */
   clock(c: station.config_object, now: u64): u64 { const b = this.big.get()!; return c.paused && b.paused_at > 0 ? b.paused_at : now; }
   newPurchase(kind: u32, buyer: Uint8Array, token: Uint8Array, amount: u64, start: u64, end: u64): station.escrow_object {
