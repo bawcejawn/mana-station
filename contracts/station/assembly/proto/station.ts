@@ -129,6 +129,11 @@ export namespace station {
         writer.uint32(208);
         writer.uint32(message.ticket_fee_bp);
       }
+
+      if (message.max_per_buyer != 0) {
+        writer.uint32(224);
+        writer.uint32(message.max_per_buyer);
+      }
     }
 
     static decode(reader: Reader, length: i32): config_object {
@@ -238,6 +243,10 @@ export namespace station {
             message.ticket_fee_bp = reader.uint32();
             break;
 
+          case 28:
+            message.max_per_buyer = reader.uint32();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -272,6 +281,7 @@ export namespace station {
     buffer_bp: u32;
     alert_mana: u64;
     ticket_fee_bp: u32;
+    max_per_buyer: u32;
 
     constructor(
       owner: Uint8Array | null = null,
@@ -298,7 +308,8 @@ export namespace station {
       treasury: Uint8Array | null = null,
       buffer_bp: u32 = 0,
       alert_mana: u64 = 0,
-      ticket_fee_bp: u32 = 0
+      ticket_fee_bp: u32 = 0,
+      max_per_buyer: u32 = 0
     ) {
       this.owner = owner;
       this.paused = paused;
@@ -325,6 +336,7 @@ export namespace station {
       this.buffer_bp = buffer_bp;
       this.alert_mana = alert_mana;
       this.ticket_fee_bp = ticket_fee_bp;
+      this.max_per_buyer = max_per_buyer;
     }
   }
 
@@ -791,6 +803,11 @@ export namespace station {
         writer.uint32(80);
         writer.uint64(message.big_min_mana);
       }
+
+      if (message.min_purchase != 0) {
+        writer.uint32(88);
+        writer.uint64(message.min_purchase);
+      }
     }
 
     static decode(reader: Reader, length: i32): price_object {
@@ -828,6 +845,10 @@ export namespace station {
             message.big_min_mana = reader.uint64();
             break;
 
+          case 11:
+            message.min_purchase = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -844,6 +865,7 @@ export namespace station {
     price_30d: u64;
     big_per_1000: u64;
     big_min_mana: u64;
+    min_purchase: u64;
 
     constructor(
       active: bool = false,
@@ -852,7 +874,8 @@ export namespace station {
       price_7d: u64 = 0,
       price_30d: u64 = 0,
       big_per_1000: u64 = 0,
-      big_min_mana: u64 = 0
+      big_min_mana: u64 = 0,
+      min_purchase: u64 = 0
     ) {
       this.active = active;
       this.max_per_purchase = max_per_purchase;
@@ -861,6 +884,7 @@ export namespace station {
       this.price_30d = price_30d;
       this.big_per_1000 = big_per_1000;
       this.big_min_mana = big_min_mana;
+      this.min_purchase = min_purchase;
     }
   }
 

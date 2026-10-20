@@ -195,9 +195,11 @@ check("escrow", "quote above the sellable slice: not available (reservations pro
 const q = await read(sta(), "quote_allowance", { token: TOK, mana_per_day: String(2n * L), days: "7" });
 check("escrow", "quote 2L/day × 7 d available, refundable, no auto-renew", q.available && q.refundable && !q.auto_renew, `price ${q.price}`);
 const price = BigInt(q.price || 0);
-const buyA = (mpd) => sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 2n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 1, target: PAYAPP, mana_per_day: String(mpd), days: "7", token: TOK, max_price: String(price * 2n) }]], { rcLimit: 3n * M });
-const bigBuy = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 4n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 1, target: PAYAPP, mana_per_day: String(4n * L), days: "7", token: TOK, max_price: String(price * 4n) }]], { rcLimit: 3n * M });
+const buyA = (mpd, appSigns = true) => sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 2n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 1, target: PAYAPP, mana_per_day: String(mpd), days: "7", token: TOK, max_price: String(price * 2n) }]], { rcLimit: 3n * M, cosigner: appSigns ? "spam2" : undefined }); // audit #3: the app co-signs
+const bigBuy = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 4n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 1, target: PAYAPP, mana_per_day: String(4n * L), days: "7", token: TOK, max_price: String(price * 4n) }]], { rcLimit: 3n * M, cosigner: "spam2" });
 check("escrow", "buy_allowance above the sellable slice refused", !bigBuy.ok, bigBuy.error || "");
+const noSig = await buyA(2n * L, false);
+check("escrow", "audit #3: buy_allowance without the target app's signature refused (no squatting someone else's app)", !noSig.ok, noSig.error || "");
 const ba = await buyA(2n * L);
 check("escrow", "buy_allowance 2L/day × 7 d (approve + pull in one tx), allowance_bought event", ba.ok && ba.events.includes("station.allowance_bought"), ba.error || `rc ${ba.rc} events ${ba.events}`); if (ba.ok) cost("buy_allowance tx (approve + buy)", ba.rc);
 const aid = 1;
@@ -231,7 +233,7 @@ const stT = await read(sta(), "get_status"); const mana = BigInt(stT.mana), bigF
 let T = 5n * M; if (mana - bigFloor - M < T) T = mana - bigFloor - M; T = T / 1_000_000n * 1_000_000n;
 note(`ticket size T = ${fmt(T)} (station mana ${fmt(mana)}, big floor ${fmt(bigFloor)})`);
 const qb = await read(sta(), "quote_big_upload", { token: TOK, mana: String(T) }); const tprice = BigInt(qb.price || 0);
-check("ticket", "quote_big_upload available, refundable; terms mention the 5% fee and stablecoin-only refunds", qb.available && /5%/.test(qb.terms || "") && /never in Mana or KOIN/.test(qb.terms || ""), `price ${tprice} reason ${qb.reason || ""}`);
+check("ticket", "quote_big_upload available, refundable; terms describe the 24 h lock, the 5% fee and stablecoin-only refunds", qb.available && /24-hour/.test(qb.terms || "") && /5%/.test(qb.terms || "") && /never in Mana or KOIN/.test(qb.terms || ""), `price ${tprice} reason ${qb.reason || ""}`);
 const buyT = (who, payee) => sendOps(who, [[tok(who), "approve", { owner: A(who), spender: ST, value: String(tprice) }], [sta(who), "buy_big_upload", { buyer: A(who), payee, mana: String(T), token: TOK, max_price: String(tprice), allow_upload: true }]], { rcLimit: 3n * M });
 const t1 = await buyT("buyer", U2);
 check("ticket", "buyer buys a ticket for user2 (big_upload_bought event)", t1.ok && t1.events.includes("station.big_upload_bought"), t1.error || t1.events); if (t1.ok) cost("buy_big_upload tx (approve + buy)", t1.rc);
@@ -244,19 +246,21 @@ note(`ticket after upload: mana ${tk.ticket?.mana} remaining ${tk.ticket?.remain
 const ob0 = await tbal(OWN), bb1 = await tbal(BUY);
 const ct = await send(sta("buyer"), "cancel_big_upload", { buyer: BUY, payee: U2 }, { rcLimit: 3n * M });
 const ref1 = (await tbal(BUY)) - bb1, rel1 = (await tbal(OWN)) - ob0;
-const keepFee = tprice - tprice * 9500n / 10000n, usedShare = T > 0n ? tprice - tprice * (T - used) / T : 0n;
-const expRef1 = tprice - (keepFee > usedShare ? keepFee : usedShare);
-check("ticket", "cancel: refund = paid − max(5%, used share), rest released to Carl (owner wallet), refund in tUSDT only", ct.ok && ref1 === expRef1 && ref1 + rel1 === tprice, `paid ${tprice} used ${used}/${T} refund ${ref1} (exp ${expRef1}) released ${rel1} events ${ct.events} ${ct.error || ""}`);
+// Time-based refund (Carl, 8:19 PM): min(time left share, 95% fee floor, unused-Mana share). This runs a few minutes
+// into a 24 h lock, so the time share (> 99%) is above the 95% floor and the expected refund is min(95%, unused share).
+const fee95 = tprice * 9500n / 10000n, unusedShare = T > 0n ? tprice * (T - used) / T : 0n;
+const expRef1 = fee95 < unusedShare ? fee95 : unusedShare;
+check("ticket", "cancel minutes into the 24 h lock: refund = min(95%, unused-Mana share), rest released to the owner wallet, refund in tUSDT only", ct.ok && ref1 === expRef1 && ref1 + rel1 === tprice, `paid ${tprice} used ${used}/${T} refund ${ref1} (exp ${expRef1}) released ${rel1} events ${ct.events} ${ct.error || ""}`);
 const debt = BigInt((await read(sta(), "get_status")).big_debt || 0);
 check("ticket", "unused ticket Mana returned to the pool (only used Mana stays as debt)", debt <= used, `big_debt ${debt}, used ${used}`);
 const t2 = await buyT("buyer", SP1);
-check("ticket", "anti-spam: the refunded buyer must wait 24 h before another ticket", !t2.ok, t2.error || "");
+check("ticket", "anti-spam: one ticket per buyer per 24 h (counted from the purchase)", !t2.ok, t2.error || "");
 const t3 = await buyT("user1", SP1);
-check("ticket", "another buyer can buy at once (station-wide wait restored)", t3.ok, t3.error || "");
+check("ticket", "audit #2: another buyer can buy at once (the wait is per buyer, never station-wide)", t3.ok, t3.error || "");
 const ub0 = await tbal(U1);
 const ct3 = await send(sta("user1"), "cancel_big_upload", { buyer: U1, payee: SP1 }, { rcLimit: 3n * M });
 const ref3 = (await tbal(U1)) - ub0;
-check("ticket", "0 used: refund exactly 95%", ct3.ok && ref3 === tprice * 9500n / 10000n, `refund ${ref3} of ${tprice}`);
+check("ticket", "0 used, cancelled at once: the 5% fee floor applies (refund exactly 95%)", ct3.ok && ref3 === tprice * 9500n / 10000n, `refund ${ref3} of ${tprice}`);
 const fee = await admin("set_config", { config: { ...cfg2, new_pct: 100, ticket_fee_bp: 2001 } });
 check("ticket", "ticket_fee_bp 2001 (> 20%) refused", !fee.ok, fee.error || (fee.reverted ? "reverted" : ""));
 

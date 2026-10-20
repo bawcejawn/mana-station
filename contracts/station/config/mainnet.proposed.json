@@ -24,7 +24,8 @@
     "max_days": "90",
     "treasury": "empty = release destination is the owner wallet (DECIDED by Carl 5:18 PM; since 7:47 PM payments are escrowed first). Owner-changeable to another external wallet; the station's own id is refused",
     "buffer_bp": 2000,
-    "alert_mana": "1500000000000"
+    "alert_mana": "1500000000000",
+    "max_per_buyer": 5
   },
   "_derived_at_30k": {
     "daily_budget": "6,000 Mana (20% of koin_amount)",
@@ -66,7 +67,8 @@
       "big_per_1000": "5000000",
       "big_min_mana": "500000000000",
       "max_per_purchase": "50000000000",
-      "_max": "500 vUSDT (DECIDED by Carl 7:32 PM)"
+      "_max": "500 vUSDT (DECIDED by Carl 7:32 PM)",
+      "min_purchase": "100000000"
     },
     "vUSDC 1N8iYrYEJdCVK1rhbqv3qZUzHcpoeKmFnj": {
       "active": true,
@@ -76,12 +78,14 @@
       "big_per_1000": "5000000",
       "big_min_mana": "500000000000",
       "max_per_purchase": "10000000000",
-      "_max": "100 vUSDC: lower on purpose because vUSDC liquidity on Koinos is thinner (stablecoins.md); DECIDED by Carl 7:32 PM"
+      "_max": "100 vUSDC: lower on purpose because vUSDC liquidity on Koinos is thinner (stablecoins.md); DECIDED by Carl 7:32 PM",
+      "min_purchase": "100000000"
     },
     "_units": "token base units, 8 decimals. Allowance prices are per 1,000 Mana/day for the whole term ($0.03 / $0.20 / $0.75); big upload $0.05 per 1,000 Mana, minimum 5,000 Mana = 25,000,000 ($0.25). Price = ceil(whole Mana \u00d7 tier / 1,000)",
     "_source": "Carl approved via Orchestrator 2026-10-19 17:11 UTC; monetization_legal.md \u00a78b (introductory; may increase for new purchases)",
     "_rules": "durations only 1, 7, 30 days (others refused). Price changes apply to new purchases and renewals only; each allowance/ticket stores token, tier price and amount paid. Renewal is charged at the price current at renewal time. No auto-renew: renew needs the payer's own signature",
-    "rejected": "Chainge USDT 19WrWze3XAoMa3Mwqys4rJMP6emZX2wfpH (set_price refuses it)"
+    "rejected": "Chainge USDT 19WrWze3XAoMa3Mwqys4rJMP6emZX2wfpH (set_price refuses it)",
+    "_min_purchase": "Audit #3 (PROPOSED default, owner-adjustable): every purchase costs at least 1 token ($1). Stops filling all allowance slots for fractions of a cent."
   },
   "_big_upload_limits": {
     "status": "DECIDED by Carl (7:32 PM): approved as proposed; all owner-adjustable via set_config",
@@ -90,7 +94,8 @@
     "big_max_debt": "6,000 Mana outstanding",
     "scaling": "debt is repaid at the sellable slice's rate: 6,000 takes 6,000 / sellable days (e.g. 40k KOIN \u2192 2,000/day \u2192 3 days). Suggested rule: big_max_debt \u2248 3 \u00d7 sellable/day, week cap \u2248 2 \u00d7 big_max; re-set when koin_amount changes",
     "at_30k": "unavailable: sellable slice is 0 (quote reason 'no repayment capacity')",
-    "big_ticket_ms": "24 h (DECIDED 8:02 PM; 0 also means 24 h); owner-adjustable"
+    "big_ticket_ms": "24 h (DECIDED 8:02 PM; 0 also means 24 h); owner-adjustable",
+    "big_cooldown_ms": "24 h between purchases PER BUYER, counted from the purchase (audit #2: was station-wide, which let one buyer block everyone)"
   },
   "_buffer": {
     "status": "DECIDED by Carl (5:22 PM)",
@@ -101,9 +106,9 @@
     "no_reservation_projects": "exempt projects with app 0 still use only the unsold sellable slice (0 at 30k)"
   },
   "_terms": {
-    "status": "DECIDED by Carl (7:47 PM): escrow + pro-rata refunds (supersedes the 7:32 PM no-refund rule)",
-    "allowance": "Prepaid Mana for one app contract: the station only sponsors transactions whose every operation calls that app (no other contracts, no token transfers). Your payment is held in the station's escrow until the term ends, then released to the operator. Cancel any time: unused whole days are refunded (the current day counts as used, so 1 day is the minimum charge). If the operator pauses the station, paused time is credited: your term is extended by the pause. No auto-renew: service stops at expiry unless you renew, at the price current then. Daily, 7-day and 30-day offers: buy only what you need. Non-transferable; not redeemable for crypto or cash except these refunds. Introductory prices may increase for new purchases. A buyer may be suspended for abuse, sanctions or AUP reasons; suspended time is not extended, and the operator may refund unused days (never to a sanctioned party).",
-    "big_upload": "Prepaid one-time big upload, paid in vUSDT or vUSDC and held in the station's escrow. Cancel any time, or let it expire: you get back the unused share of what you paid, minus a 5% fee that is always kept (the station keeps the larger of 5% or the share you used). Refunds are only in the stablecoin you paid, never in Mana or KOIN; unused Mana returns to the station's pool. After a refund, the same buyer waits one cooldown period before buying another ticket. Tickets last 24 hours and only sponsor uploading or calling the payee's own app contract. Paused time extends the ticket. No auto-renew. Non-transferable; not redeemable for crypto or cash except these refunds. A buyer may be suspended for abuse, sanctions or AUP reasons; the operator may refund unused value (never to a sanctioned party).",
+    "status": "DRAFT rewritten 2026-10-19 (audit #1/#6 + Carl 8:19 PM ticket model) to promise only what the code does; legal review pending",
+    "allowance": "DRAFT, pending legal review. Prepaid Mana for one app contract. The station sponsors a transaction only when every top-level operation in it calls that app; what the app does internally when called is up to the app. The app's own key must approve the purchase. Per-user anti-spam limits apply to each of the app's users. Payment is held at the station's address until the term ends, then released to the operator. Until the station's planned permission upgrade, that address is controlled by the operator's key: this is operator custody, not trustless escrow. Each purchase costs at least the minimum charge shown in the quote. Cancel any time: unused whole days are refunded (the current day counts as used, so 1 day is the minimum charge). If the operator pauses the station, paused time is credited: your term is extended by the pause. No auto-renew: service stops at expiry unless you renew, at the price current then. 1-, 7- and 30-day terms only. Non-transferable; not redeemable for crypto or cash except these refunds. Introductory prices may increase for new purchases. A buyer may be suspended for abuse, sanctions or AUP reasons; suspended time is not extended, and the operator may refund unused days (never to a sanctioned party).",
+    "big_upload": "DRAFT, pending legal review. Prepaid big upload: the station locks the Mana you buy for you for one full 24-hour period, at the full price, whether you use it or not. Paid in vUSDT or vUSDC and held at the station's address (operator custody until the planned permission upgrade, not trustless escrow). If the lock runs its full period, nothing is refunded. If you end it early, you get back the unexpired share of the price, decreasing in a straight line over the 24 hours, minus a fee that is always kept (currently 5%), and never more than the share of Mana you have not used. Each purchase costs at least the minimum charge shown in the quote. Refunds are only in the stablecoin you paid, never in Mana or KOIN. Each buyer can buy one ticket per cooldown period (default 24 hours). Tickets only sponsor uploading or calling the payee's own contract, and only while the station's reserve is above its safety floor. Paused time extends the lock. No auto-renew. Non-transferable; not redeemable for crypto or cash except these refunds. A buyer may be suspended for abuse, sanctions or AUP reasons; the operator may refund the unexpired share (never to a sanctioned party).",
     "where": "quote_allowance / quote_big_upload (terms, refundable=true, auto_renew=false) and every purchase_event"
   },
   "_suspend": {
@@ -122,14 +127,19 @@
     "status": "DECIDED by Carl (7:47 PM)",
     "payments": "pulled into the station's own escrow (per purchase: token, amount, start, end, days, per-day rate)",
     "buyer_cancel": "cancel_allowance: unused WHOLE days refunded; the current day counts as used (1-day minimum); service runs to the end of the paid day. Future renewed terms refunded in full",
-    "ticket_fee": "DECIDED by Carl (8:10 PM): on cancel/expiry the buyer is charged max(ticket_fee_bp of paid, pro-rata used share); default 500 = 5%, owner-adjustable, max 2000 = 20%. Fee rounds up, refund down (< 1 base unit in Carl's favour). Retained fee goes to Carl via normal release. owner_refund: no fee. Refunds only ever in the stablecoin paid (vUSDT/vUSDC; set_price refuses any other token), never Mana or KOIN; unused Mana returns to the pool counters. Allowances: no fee, 1-day minimum (= 100% of 1 d, ~14.3% of 7 d, ~3.3% of 30 d)",
+    "ticket_fee": "SUPERSEDED by the 24 h lock model (Carl, Oct 19 8:19 PM): a ticket locks its Mana for a full 24 h at the full price, used or not. Early end refunds floor(paid \u00d7 time left / lock length), straight-line, never more than paid \u2212 ticket_fee_bp (default 5%, max 20%, fee rounded up) and never more than the unused-Mana share (used Mana is always paid for). Full lock = no refund. owner_refund: same time share with no fee, and lifts the buyer's wait",
     "tickets": "SUPERSEDED 8:10 PM by ticket_fee. Was (7:59 PM): no minimum charge. cancel_big_upload or expiry (close_ticket, anyone): unused Mana refunded in full, exactly pro rata = floor(paid \u00d7 unused Mana / ticket Mana) in base units (< 1 token unit in Carl's favour); earned part released at settlement",
     "release": "release(purchase_id): anyone, only after the term ends, exactly once, to the treasury (owner wallet by default; the station itself is refused). No early release, no owner withdrawal of escrow",
     "rounding": "refund = floor(amount \u00d7 unused / total): rounds down by < 1 base unit (1e-8 token) in Carl's favour; refund + release always equals the amount paid",
     "pause": "paused time is credited: the escrow clock stops while paused and every running/upcoming term, allowance and ticket is extended by the pause on unpause",
     "suspension": "owner_refund refunds unused days/Mana (no minimum charge) for buyers not at fault (reason 4) or by owner choice for abuse/AUP; sanctions (reason 2): refund AND release frozen until legal review (reclassify a false match to reason 4)",
     "invariant": "per token: station balance == held == collected \u2212 refunded \u2212 released",
-    "ticket_anti_spam": "fee-free (Carl, 8:02 PM): on cancel/refund/expiry the UNUSED Mana is released from the outstanding and weekly counters (only used Mana counts toward the 12,000/week), and the station-wide 24 h purchase wait reverts to the previous purchase; the refunded buyer still waits 24 h; ticket life 24 h. Counters are clamped at 0 and freed once (the ticket is removed at settlement)"
+    "ticket_anti_spam": "Audit #2: one ticket per buyer per big_cooldown_ms (24 h) from purchase; no station-wide wait. Unused Mana is still released from the outstanding and weekly counters at settlement. Holding a ticket now costs its full price",
+    "auto_close": "Audit #4: every buy_allowance / renew / buy_big_upload first closes up to 8 finished purchases (ended terms, expired or used-up tickets), so the open list (cap 128) can't fill up. Suspended buyers' purchases are skipped"
   },
-  "_only_paying_apps": "DECIDED by Carl (Oct 19, 9:09 PM): sponsorship only when every op calls ONE contract that is a fee-exempt Carl app (Knode/Stories) or holds an active paid app allowance (kind 1); Mana from that app's allowance. Account allowances (kind 2) removed. KOIN and stablecoin contracts can never be allowance targets. Mixed targets refused. Tickets: payee's own contract only."
+  "_only_paying_apps": "DECIDED by Carl (Oct 19, 9:09 PM): sponsorship only when every op calls ONE contract that is a fee-exempt Carl app (Knode/Stories) or holds an active paid app allowance (kind 1); Mana from that app's allowance. Account allowances (kind 2) removed. KOIN and stablecoin contracts can never be allowance targets. Mixed targets refused. Tickets: payee's own contract only.",
+  "_audit_2026_10_19": {
+    "fixed_on_branch": "fix/squat-freeze-stall: #2 debt never pauses paid allowances + per-buyer ticket wait + 24 h lock model; #3 target app must co-sign, min charge, max_per_buyer; #4 auto-close; #7 no-oversell guard",
+    "OPEN_BEFORE_MAINNET": "#1 the station key still holds every permission except transaction_application (it can move KOIN and escrowed stablecoins and re-upload code). Permission takeover + multisig owner + time delay to be designed and testnet-validated first. #5 app co-signing for sponsored txs (sybil drain)."
+  }
 }

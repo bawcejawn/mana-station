@@ -559,3 +559,30 @@ Release wasm: 58,724 bytes; ABI 30 methods.
 3. Testnet: still blocked by the box's egress allowlist (TLS cut for harbinger-api / harbinger-rest; mainnet passes). The host allowlist must add both. Verify `authorize` events, cost and the Kondor "Optimize mana" margin there before mainnet.
 
 Sources for this section: Koinos payer/authorize, Mana and disk-delta facts as cited in §1 and §7. The 4:37 PM rules come from Carl's answers. Station.ts and Station.spec.ts are local code, not deployed.
+
+## Audit fixes, Oct 19 2026 (branch `fix/squat-freeze-stall`)
+Source: the security audit of Oct 19 (findings #1–#8). Decided by Carl the same evening. Simulated chain only; testnet rehearsal is next.
+
+**#2 One cheap ticket could freeze every paying customer (was critical).** Buying a ticket booked its full size as debt, any debt switched off every paid allowance, and each purchase started a 24 h wait for every other buyer. About $0.0125 bought a day-long outage.
+- Debt no longer touches paid allowances (Route B). The reserve is still protected by the live floor checks: big uploads (`bigOk`) and buffers (Route A) never take Mana below admin_min + one day's budget. Debt now only gates new big-upload sales and unreserved exempt projects (app 0).
+- The wait between ticket purchases is **per buyer**, counted from the purchase (`ticketCd`). The station-wide `last_buy` wait is gone, and so is the refund-triggered cooldown. That also fixes #8: a stranger closing an expired ticket late can no longer extend the buyer's wait.
+- **Ticket model (Carl, 8:19 PM):** a ticket locks its Mana for one full 24 h period at the full price, used or not. Ending early refunds `floor(paid × time left / lock)` on a straight line, capped at paid − fee (default 5%) and at the unused-Mana share. That second cap keeps "burn the ticket in an hour, cancel, get 95% back" impossible; flagged for Carl's review. A full lock refunds nothing. Owner refunds use the same time share with no fee and lift the buyer's wait. Holding a ticket to block capacity now costs its full price.
+
+**#3 All sales could be locked for ~$0.0015/day, and anyone could claim another developer's app (was critical).**
+- `buy_allowance` requires `check_authority(contract_call, target)`. The app's key (or its own authorize) must sign the purchase.
+- `price_object.min_purchase`: every allowance term and ticket costs at least this (proposed $1).
+- `config.max_per_buyer` (0 = 5): open allowances per buyer.
+
+**#4 Sales stopped by themselves (high).** Purchases only left the open list (cap 128) when someone called `release()`. Now `buy_allowance`, `renew` and `buy_big_upload` first close up to 8 finished purchases (`sweep`): ended terms are released, and expired or used-up tickets are settled. Suspended buyers are skipped. Cost: up to 128 storage reads plus a few token transfers, paid by the buyer's tx. Measure on testnet.
+
+**#7 Oversell guard.** `set_config` and `set_app` refuse any change that leaves sold allowances above the new sellable capacity.
+
+**#6 Terms.** `ALLOWANCE_TERMS` / `BIG_TERMS` were rewritten to promise only what the code does: operator custody (not trustless escrow) until the permission takeover, top-level-call scope, co-signing, the minimum charge, per-user limits, and the lock model. They are marked DRAFT pending legal review.
+
+**Tests: 53/53 pass** (45 existing, some updated for the new rules, plus 8 attack replays). Mutation check, each fix undone alone, all caught: debt pausing paid allowances → 2 fail; no target signature → 1; no minimum charge → 1; no per-buyer cap → 1; no sweep → 1; no oversell guard → 1; no fee floor → 4; no used-Mana cap → 2; station-wide wait restored → 8. Test note: the MockVM key-store quirk (bytes ≥ 0x80) caps the #4 replay at 120 purchases.
+
+**Still open before any mainnet:**
+- #1: the station key keeps every permission except transaction_application, so it can move KOIN and escrowed stablecoins and re-upload code. The permission takeover, multisig owner and time delay need their own design plus a testnet validation.
+- #5: app co-signing of sponsored txs (sybil drain).
+- #8 (mempool reservation) and the authorize-event check: testnet items.
+- Residual: a buyer who pays the full price can still hold big-upload capacity for 24 h. That is now a paid choice, not a cheap attack.

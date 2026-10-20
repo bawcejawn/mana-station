@@ -1,6 +1,6 @@
 
-¹L
-assembly/proto/station.protostationkoinos/options.proto"Ä
+ŠM
+assembly/proto/station.protostationkoinos/options.proto"î
 config_object
 owner (B€µRowner
 paused (Rpaused#
@@ -34,7 +34,8 @@ bigMaxDebt&
 	buffer_bp (RbufferBp!
 
 alert_mana (B0R	alertMana"
-ticket_fee_bp (RticketFeeBpJ"•
+ticket_fee_bp (RticketFeeBp"
+max_per_buyer (RmaxPerBuyerJJ"•
 
 app_object'
 reserved_mana (B0RreservedMana
@@ -68,7 +69,7 @@ last_block (B0R	lastBlock
 minute (B0Rminute
 n_min (RnMin)
 cooldown_until (B0RcooldownUntil(
-day (2.station.window_objectRday"‘
+day (2.station.window_objectRday"¸
 price_object
 active (Ractive,
 max_per_purchase (B0RmaxPerPurchase
@@ -79,7 +80,8 @@ last_block (B0R	lastBlock
 bigPer1000$
 big_min_mana
  (B0R
-bigMinManaJJJ"½
+bigMinMana%
+min_purchase (B0RminPurchaseJJJ"½
 allowance_object
 id (Rid
 buyer (B€µRbuyer
