@@ -88,10 +88,15 @@ for (const [to, amt] of Object.entries(want)) {
 await sleep(4000);
 
 // ---------------------------------------------------------------- 2. deploys (paid by the funder)
+// Upload rc limit sized from the chain's real resource prices (bytes × (disk + network) cost, + 1 Mana for compute), × 1.5.
+// A flat 30 Mana was refused ("insufficient pending account resources") once the funder had sent KOIN out.
+const LIM = (await provider.call("chain.get_resource_limits", {})).resource_limit_data;
+const rcFor = (bytes) => (BigInt(bytes) * (BigInt(LIM.disk_storage_cost) + BigInt(LIM.network_bandwidth_cost)) + M) * 3n / 2n;
+note(`resource prices: disk ${LIM.disk_storage_cost}/B, network ${LIM.network_bandwidth_cost}/B, compute ${LIM.compute_bandwidth_cost}/tick; funder Mana now ${Number(await rc(FUN)) / 1e8}`);
 async function deploy(role, path, abi, extra = {}) {
   const c = new Contract({ id: A(role), abi, provider, signer: S(role), bytecode: wasm(path) });
   try {
-    const { transaction, receipt } = await c.deploy({ payer: FUN, payee: A(role), rcLimit: String(30n * M), beforeSend: coSign("funder"), ...extra });
+    const { transaction, receipt } = await c.deploy({ payer: FUN, payee: A(role), rcLimit: String(rcFor(wasm(path).length)), beforeSend: coSign("funder"), ...extra });
     await transaction.wait("byBlock", 120000); return { ok: !receipt.reverted, rc: BigInt(receipt.rc_used) };
   } catch (e) { return { ok: false, error: String(e?.message || e).slice(0, 300) }; }
 }
@@ -103,6 +108,7 @@ for (const [role, path, abi, extra] of [["token", "../contracts/mocktoken/build/
 }
 const stMeta = await provider.invokeGetContractMetadata(ST).catch(() => null);
 check("deploy", "station: only authorizes_transaction_application", stMeta?.value?.authorizes_transaction_application && !stMeta?.value?.authorizes_call_contract && !stMeta?.value?.authorizes_upload_contract, JSON.stringify(stMeta?.value || {}).slice(0, 200));
+if (!stMeta?.value?.hash) { note("station contract is not on chain, so nothing after the deploy step can run: stopping"); save(); process.exit(1); }
 
 // ---------------------------------------------------------------- 3. init (provisional config for the measurements)
 const koinAmt = 20n * M;                 // configured capacity → daily budget 4 Mana (20%)
@@ -184,7 +190,7 @@ const koinSt0 = await kbal(ST);
 // paying app for route B: the testapp bytecode uploaded to spam2's address by spam2 itself (funder pays). Not exempt.
 const PAYAPP = SP2;
 { const c = new Contract({ id: SP2, abi: abiA, provider, signer: S("spam2"), bytecode: wasm("../contracts/testapp/build/release/contract.wasm") });
-  try { const { transaction } = await c.deploy({ payer: FUN, payee: SP2, rcLimit: String(15n * M), beforeSend: coSign("funder") }); await transaction.wait("byBlock", 120000); check("escrow", "deploy paying app (non-exempt testapp copy)", true); }
+  try { const { transaction } = await c.deploy({ payer: FUN, payee: SP2, rcLimit: String(rcFor(wasm("../contracts/testapp/build/release/contract.wasm").length)), beforeSend: coSign("funder") }); await transaction.wait("byBlock", 120000); check("escrow", "deploy paying app (non-exempt testapp copy)", true); }
   catch (e) { check("escrow", "deploy paying app (non-exempt testapp copy)", false, String(e.message).slice(0, 200)); } }
 const unpaid = await send(C(PAYAPP, abiA, "user1"), "play", { user: U1 }, sponsored(U1, L));
 check("designated", "app without a paid allowance refused", !unpaid.ok, unpaid.error || "");
