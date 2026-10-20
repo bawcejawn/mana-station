@@ -23,7 +23,7 @@ const save = () => fs.writeFileSync(OUT, JSON.stringify(R, (k, v) => (typeof v =
 // A refusal for low wallet Mana ("insufficient pending account resources", code 104) means the station never saw the tx:
 // such a "refused" check proves nothing, so it is recorded as an INCONCLUSIVE failure, never a pass.
 const check = (area, name, pass, detail = "") => {
-  if (pass && /"code":104|insufficient pending account resources/.test(String(detail))) { pass = false; detail = "INCONCLUSIVE (wallet low on Mana, the station never saw it): " + detail; } R.checks.push({ area, name, pass: !!pass, detail: String(detail) }); console.log(`${pass ? "PASS" : "FAIL"} [${area}] ${name} ${detail}`); save(); return !!pass; };
+  if (pass && /"code":104|insufficient pending account resources|insufficient rc/.test(String(detail))) { pass = false; detail = "INCONCLUSIVE (Mana or rc limit too low, the station never decided): " + detail; } R.checks.push({ area, name, pass: !!pass, detail: String(detail) }); console.log(`${pass ? "PASS" : "FAIL"} [${area}] ${name} ${detail}`); save(); return !!pass; };
 const cost = (k, v) => { R.costs[k] = v; console.log(`COST ${k} = ${fmt(v)}`); save(); };
 const note = (s) => { R.notes.push(s); console.log("NOTE " + s); save(); };
 
@@ -169,6 +169,8 @@ cost("L = rc_limit used for every Stories play (1.1x sponsored play, rounded up)
 const kon = await send(app("user1"), "play", { user: U1 }, sponsored(U1, ceil11(sp.rc || 1n)));
 check("measure", "sponsored play at exactly 1.1x measured rc (Kondor margin) is accepted and fits", kon.ok, kon.ok ? `used ${kon.rc} of limit ${ceil11(sp.rc || 1n)} (${(Number(kon.rc) / Number(ceil11(sp.rc || 1n)) * 100).toFixed(1)}%)` : kon.error);
 const bm = await send(app("user1"), "boom", {}, sponsored(U1, L));
+const ctl = await send(app("user1"), "play", { user: U1 }, sponsored(U1, L)); // control: same user, same limit, a call that succeeds
+note(`boom control: a normal sponsored play right after boom was ${ctl.ok ? "ACCEPTED (so a boom refusal is specific to the reverting call)" : "refused too: " + (ctl.error || "")}`);
 check("measure", "allowlisted entry that reverts is included and charged to the station", bm.reverted === true || (!bm.ok && !bm.error), bm.error || `rc ${bm.rc}`); if (bm.rc) cost("boom (reverted, charged)", bm.rc);
 
 // ---------------------------------------------------------------- 5. Stories app (app 2): spam, new-user pool, buffer
@@ -177,8 +179,9 @@ const stKoin = await kbal(ST); let koin2 = 60n * L > koinAmt ? 60n * L : koinAmt
 if (B < 7n * L) note(`budget ${B} < 7L (${7n * L}): the Stories reservation checks below will fail; fund the station with more tKOIN`);
 const cfg2 = { ...base, koin_amount: String(koin2), hard_max: String(2n * M > H ? 2n * M : H), per_min: 3, cooldown_ms: "600000", new_actions: 10, new_mana: String(30n * L), new_pct: 50, buffer_bp: 5000 };
 check("stories", "set_config: per_min 3, 10 min cooldown, new-user pool 50%, buffer 50%", (await admin("set_config", { config: cfg2 })).ok);
-check("stories", "set_app 2 (Stories) reserved 4L", (await admin("set_app", { app: 2, value: { reserved_mana: String(4n * L), active: true } })).ok);
-check("stories", "set_app 1 reserved so that sellable = 3L", (await admin("set_app", { app: 1, value: { reserved_mana: String(B - 7n * L), active: true } })).ok);
+{ const x = await admin("set_app", { app: 2, value: { reserved_mana: String(4n * L), active: true } }); check("stories", "set_app 2 (Stories) reserved 4L", x.ok, errOf(x)); }
+const AU = M;                            // allowance unit: the contract sells at least 1 Mana/day, so test allowances are sized in whole Mana
+{ const x = await admin("set_app", { app: 1, value: { reserved_mana: String(B - 4n * L - 3n * AU), active: true } }); check("stories", "set_app 1 reserved so that sellable = 3 Mana", x.ok, errOf(x)); }
 check("stories", "set_exempt testapp → app 2 (Stories), strict", (await admin("set_exempt", { contract_id: APP, value: { app: 2, strict: true } })).ok);
 check("stories", "set_entry play cap = L", (await admin("set_entry", { contract_id: APP, entry_point: ep(abiA, "play"), value: { app: 2, cap: String(L), max_args: 64 } })).ok);
 const appInfo = await read(sta(), "get_app", { app: 2 }); note(`Stories allowance ${appInfo.allowance} used ${appInfo.used_24h} (limit with 50% buffer = 6L = ${6n * L}; new-user pool 50% = 3L)`);
@@ -220,26 +223,26 @@ const PAYAPP = SP2;
 const unpaid = await send(C(PAYAPP, abiA, "user1"), "play", { user: U1 }, sponsored(U1, L));
 check("designated", "app without a paid allowance refused", !unpaid.ok, unpaid.error || "");
 // ---------------------------------------------------------------- 7. escrow: allowance purchase / reservation refusal / suspend / cancel
-for (const to of [BUY, U1]) { const x = await send(tok("token"), "mint", { to, value: String(1000n * M) }, { payer: FUN, payee: TOK, cosigner: "funder" }); check("escrow", `mint 1,000 tUSDT to ${to.slice(0, 6)}…`, x.ok, x.error || (x.reverted ? "reverted: " + JSON.stringify(x.logs || []) : "")); }
-const stE = await read(sta(), "get_status"); note(`sold_capacity ${stE.sold_capacity} (expected 3L = ${3n * L})`);
-const qBig = await read(sta(), "quote_allowance", { token: TOK, mana_per_day: String(4n * L), days: "7" });
+for (const to of [BUY, U1]) { let x = await send(tok("token"), "mint", { to, value: String(1000n * M) }, { payer: FUN, payee: TOK, cosigner: "funder" }); if (!x.ok && /not mined/.test(x.error || "")) x = await send(tok("token"), "mint", { to, value: String(1000n * M) }, { payer: FUN, payee: TOK, cosigner: "funder" }); check("escrow", `mint 1,000 tUSDT to ${to.slice(0, 6)}…`, x.ok, x.error || (x.reverted ? "reverted: " + JSON.stringify(x.logs || []) : "")); }
+const stE = await read(sta(), "get_status"); note(`sold_capacity ${stE.sold_capacity} (expected 3 Mana = ${3n * AU})`);
+const qBig = await read(sta(), "quote_allowance", { token: TOK, mana_per_day: String(4n * AU), days: "7" });
 check("escrow", "quote above the sellable slice: not available (reservations protected)", !qBig.available, qBig.reason || JSON.stringify(qBig));
-const q = await read(sta(), "quote_allowance", { token: TOK, mana_per_day: String(2n * L), days: "7" });
-check("escrow", "quote 2L/day × 7 d available, refundable, no auto-renew", q.available && q.refundable && !q.auto_renew, `price ${q.price}`);
+const q = await read(sta(), "quote_allowance", { token: TOK, mana_per_day: String(2n * AU), days: "7" });
+check("escrow", "quote 2 Mana/day × 7 d available, refundable, no auto-renew", q.available && q.refundable && !q.auto_renew, `price ${q.price}`);
 const price = BigInt(q.price || 0);
 const buyA = (mpd, appSigns = true) => sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 2n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 1, target: PAYAPP, mana_per_day: String(mpd), days: "7", token: TOK, max_price: String(price * 2n) }]], { rcLimit: 3n * M, cosigner: appSigns ? "spam2" : undefined }); // audit #3: the app co-signs
-const bigBuy = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 4n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 1, target: PAYAPP, mana_per_day: String(4n * L), days: "7", token: TOK, max_price: String(price * 4n) }]], { rcLimit: 3n * M, cosigner: "spam2" });
+const bigBuy = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 4n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 1, target: PAYAPP, mana_per_day: String(4n * AU), days: "7", token: TOK, max_price: String(price * 4n) }]], { rcLimit: 3n * M, cosigner: "spam2" });
 check("escrow", "buy_allowance above the sellable slice refused", !bigBuy.ok, bigBuy.error || "");
-const noSig = await buyA(2n * L, false);
+const noSig = await buyA(2n * AU, false);
 check("escrow", "audit #3: buy_allowance without the target app's signature refused (no squatting someone else's app)", !noSig.ok, noSig.error || "");
-const ba = await buyA(2n * L);
-check("escrow", "buy_allowance 2L/day × 7 d (approve + pull in one tx), allowance_bought event", ba.ok && ba.events.includes("station.allowance_bought"), ba.error || `rc ${ba.rc} events ${ba.events}`); if (ba.ok) cost("buy_allowance tx (approve + buy)", ba.rc);
+const ba = await buyA(2n * AU);
+check("escrow", "buy_allowance 2 Mana/day × 7 d (approve + pull in one tx), allowance_bought event", ba.ok && ba.events.includes("station.allowance_bought"), ba.error || `rc ${ba.rc} events ${ba.events}`); if (ba.ok) cost("buy_allowance tx (approve + buy)", ba.rc);
 const aid = 1;
 const xfer = () => send(C(PAYAPP, abiA, "user1"), "play", { user: U1 }, sponsored(U1, L));
 const b1 = await xfer(); check("escrow", "paying app (app allowance): its users' txs sponsored from its allowance", b1.ok, b1.error || `rc ${b1.rc}`); if (b1.ok) cost("play on paying app, sponsored by its allowance", b1.rc);
-const acc = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 2n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 2, target: U1, mana_per_day: String(2n * L), days: "7", token: TOK, max_price: String(price * 2n) }]], { rcLimit: 3n * M });
+const acc = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 2n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 2, target: U1, mana_per_day: String(2n * AU), days: "7", token: TOK, max_price: String(price * 2n) }]], { rcLimit: 3n * M });
 check("designated", "account allowance (kind 2) refused (Carl, 9:09 PM)", !acc.ok, acc.error || "");
-const tokT = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 2n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 1, target: TOK, mana_per_day: String(L), days: "7", token: TOK, max_price: String(price * 2n) }]], { rcLimit: 3n * M });
+const tokT = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 2n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 1, target: TOK, mana_per_day: String(AU), days: "7", token: TOK, max_price: String(price * 2n) }]], { rcLimit: 3n * M });
 check("designated", "allowance targeting a token contract refused", !tokT.ok, tokT.error || "");
 const tr = await send(tok("user1"), "transfer", { from: U1, to: U2, value: "1" }, sponsored(U1, L));
 check("designated", "token transfer by a paying app's user still refused", !tr.ok, tr.error || "");
