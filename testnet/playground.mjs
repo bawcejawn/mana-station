@@ -5,6 +5,7 @@
 //   node testnet/playground.mjs handover <owner> <c1> <c2> <c3>  make these wallets the owner and the council
 //   node testnet/playground.mjs traffic [n]                    n sponsored plays from fresh players (default 6)
 //   node testnet/playground.mjs mint <address> [amount]        test stablecoin (tUSDT) to try paid allowances
+//   node testnet/playground.mjs fund <koin> <usdt> <address…>   test KOIN (for Mana) and tUSDT to each address
 //
 // Keys: the playground's own accounts are DERIVED from the funder key in TESTNET_KEYS (sha256 of a label + the key),
 // so every run gets the same accounts with nothing new to store. They are never printed. Testnet only: the script
@@ -106,6 +107,16 @@ if (cmd === "traffic") {
     const p = new Signer({ privateKey: crypto.randomBytes(32).toString("hex") }); p.provider = provider;
     const x = await send(new Contract({ id: DEMO, abi: abiA, provider, signer: p }), "play", { user: p.getAddress() }, { payer: ST, payee: p.getAddress(), rcLimit: 19_000_000n });
     ok(`player ${p.getAddress().slice(0, 8)}… taps (free)`, x);
+  }
+}
+
+if (cmd === "fund") {                       // fund <koin> <usdt> <address…>: test KOIN (for Mana) + test USDT (to buy with)
+  const [koin, usdt, ...to] = process.argv.slice(3);
+  const kc = new Contract({ id: KOIN, abi: utils.tokenAbi, provider, signer: KEY.funder });
+  const tc = new Contract({ id: TOK, abi: abiT, provider, signer: Signer.fromWif(K.token.wif) });
+  for (const a of to) {
+    if (Number(koin) > 0) ok(`send ${koin} tKOIN to ${a}`, await send(kc, "transfer", { from: FUN, to: a, value: String(BigInt(Math.round(Number(koin) * 1e8))) }, { rcLimit: M }));
+    if (Number(usdt) > 0) ok(`mint ${usdt} tUSDT to ${a}`, await send(tc, "mint", { to: a, value: String(BigInt(Math.round(Number(usdt) * 1e8))) }, { payer: FUN, payee: TOK, cosigner: "funder", rcLimit: M }));
   }
 }
 
