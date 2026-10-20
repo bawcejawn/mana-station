@@ -82,15 +82,16 @@ window.MS = (() => {
   // ops: [[contract, fn, args], …]. The station pays when its rules allow (free checkout, your pass, free apps);
   // if it says no and this wallet has Mana of its own, the wallet pays instead. `cosign` = another key in this browser
   // that must also sign (an app approving a purchase for itself).
-  async function send(ops, { from, cosign, rc = M / 2n, stationPays = true } = {}) {
+  async function send(ops, { from, cosign, rc = M / 2n, stationPays = true, fallback = true } = {}) {
     from = from || active()?.address; if (!from) throw new Error("Choose a wallet first (top right).");
     const isKondor = active()?.kind === "kondor" && active().address === from;
-    const tries = stationPays ? [{ payer: ST, payee: from }, { payer: from }] : [{ payer: from }];
+    const tries = !stationPays ? [{ payer: from }] : fallback ? [{ payer: ST, payee: from }, { payer: from }] : [{ payer: ST, payee: from }];
     let last;
     for (const t of tries) {
       try { return await sendOnce(ops, from, isKondor, cosign, { rcLimit: String(rc), ...t }); }
       catch (e) {
         last = e;
+        if (/not mined/i.test(String(e?.message || e))) throw e;      // sent: never send it a second time
         const refused = /has not authorized|insufficient|"code":104/i.test(String(e?.message || e));
         if (!refused) break;
         if (t.payer === ST && BigInt(await provider.getAccountRc(from).catch(() => "0")) < rc) break; // no own Mana to fall back on
@@ -103,7 +104,7 @@ window.MS = (() => {
       const o = { ...options }; if (cosign) o.beforeSend = async (tx) => { await MSWallets.signer(cosign, provider).signTransaction(tx); };
       const tx = new Transaction({ signer: MSWallets.signer(from, provider), provider, options: o });
       for (const [c, fn, a] of ops) await tx.pushOperation(c.functions[fn], a);
-      const r = await tx.send(); await tx.wait("byBlock", 90000); return r;
+      const r = await tx.send(); await tx.wait("byBlock", 180000); return r;
     }
     const ks = kondor.getSigner(from);
     const tx = new Transaction({ signer: ks, provider, options });
@@ -112,7 +113,7 @@ window.MS = (() => {
     if (cosign) await MSWallets.signer(cosign, provider).signTransaction(tx.transaction);
     const signed = await ks.signTransaction(tx.transaction);
     const { receipt, transaction } = await provider.sendTransaction(signed);
-    await transaction.wait("byBlock", 90000); return receipt;
+    await transaction.wait("byBlock", 180000); return receipt;
   }
 
   // ---------- words ----------
@@ -120,6 +121,7 @@ window.MS = (() => {
     const m = String(e?.message || e || "");
     const why = (m.match(/transaction reverted: ([^"\]]+)/) || [])[1] || (m.match(/"message":"([^"]+)"/) || [])[1];
     if (/user rejected|denied|cancel/i.test(m) && !why) return "You cancelled it in your wallet. Nothing was sent.";
+    if (/not mined/i.test(m)) return "Sent, but the network is slow to put it in a block. It usually lands within a few minutes and will then show under Your Mana. Don't send it again.";
     if (/insufficient balance/i.test(m)) return "This wallet doesn't have enough tUSDT for that.";
     if (/insufficient pending account resources|"code":104|insufficient rc/i.test(m)) return "The station didn't cover this one and this wallet has no Mana of its own. Wait a minute and try again.";
     if (/has not authorized/i.test(m)) return "The station didn't cover this one. You may have hit a limit for now; try again in a minute.";

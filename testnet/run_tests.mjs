@@ -102,6 +102,11 @@ if (meta?.value?.hash) note(`station account already has a contract (hash ${meta
 // ---------------------------------------------------------------- 0b. funding (first: init checks the station's KOIN balance)
 const want = { [ST]: 200n, [BUY]: 20n, [U1]: 8n, [U2]: 8n, [OWN]: 10n, [SP1]: 3n, [SP2]: 3n }; // station >= its koin_amount (150)
 const RESERVE = 5n * M;                                    // the funder keeps this much Mana for the uploads and mints it pays
+// Preflight (Oct 20): fund nobody unless the funder can fund everyone. A run that stops halfway leaves tKOIN in fresh
+// throwaway accounts whose keys are gone.
+{ let total = 0n; for (const [to, amt] of Object.entries(want)) { const n = amt * M - (await kbal(to)); if (n > M / 10n) total += n; }
+  const have = await rc(FUN);
+  if (have - total < RESERVE) { check("preflight", `funder can fund the run: needs ${Number(total) / 1e8} tKOIN of Mana, has ${Number(have) / 1e8}`, false, "top up the funder from the testnet faucet"); save(); console.log("PREFLIGHT FAIL: funder needs " + Number(total) / 1e8 + " tKOIN of Mana, has " + Number(have) / 1e8); process.exit(1); } }
 for (const [to, amt] of Object.entries(want)) {
   const have = await kbal(to); const need = amt * M - have;
   if (need > M / 10n && (await rc(FUN)) - need < RESERVE) { note(`skip funding ${to.slice(0, 6)}…: funder Mana ${Number(await rc(FUN)) / 1e8} would drop below the ${Number(RESERVE) / 1e8} reserve (top it up from the faucet)`); continue; }

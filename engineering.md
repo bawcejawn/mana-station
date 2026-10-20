@@ -649,3 +649,17 @@ Koinos Foundation testnet node, fresh accounts per run (see `testnet/README.md` 
 **Tests: 71/71.** Mutation checks: all 15 lockdown/council rules and 4 review fixes are caught.
 
 **Not supported:** upgrading an already-deployed pre-lockdown station in place. Deploy fresh (nothing is on mainnet).
+
+## Three ways in: wallet pass, free checkout, new site (Oct 20 2026, afternoon)
+
+Carl: "the overall experience is overwhelming… clear, direct paths for Mana access: a wallet, a contract, and the owner's own apps." He chose a **wallet Mana pass covering any app, with no token moves** (reversing the 9:09 PM "app allowances only" rule for this one case).
+
+**Wallet Mana pass (kind 2 allowance).** The wallet itself must sign the purchase. The station pays only that wallet's own transactions (payee = the wallet), calls only, never the station, KOIN or stablecoins, never a KCS `transfer` / `approve` / `burn` on any contract, never uploads; bounded by the pass's daily Mana and the station-wide 24 h cap. Free and paid app routes run first, so a pass isn't spent where an app pays. `list_connected` reports each purchase's `kind`.
+
+**Free checkout.** A wallet with no KOIN couldn't buy anything (the purchase transaction itself needs Mana). The station now pays exactly `[token.approve(owner = payee, spender = station), station.buy_allowance | buy_big_upload | renew (payee as buyer/payer, same priced token)]` or a single `cancel_allowance` / `cancel_big_upload` by the payee as buyer, under per-player limits, within hard_max and above admin_min; buys refused while paused.
+
+**Tests:** 76/76. Every new rule mutation-checked (6 pass rules, 9 checkout rules; one equivalent mutant: removing the final `else return false` leaves `who` null, which the next line already refuses). Testnet: new `pass` and `checkout` sections in `run_tests.mjs`.
+
+**Site:** rebuilt around three paths with one wallet chip in the header (`ms.js`): `get.html` (pass / app plan with one-click upload / Your Mana), `owner.html` (free Mana in sizes, customers, council), `help.html`; old pages forward. Shared parts built by `site/tools/build-pages.mjs`.
+
+**Playground:** generation v3 `1JnSnBNHrKxWGwWeriuhK1DrG5rv3KRFqc`, handed over to Carl's owner + council; an unconnected "open app" shows a pass paying where no app does. v2 (`1FHnCg7…`, never handed over) is reclaimed with `playground.mjs reclaim v2`.

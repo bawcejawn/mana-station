@@ -218,7 +218,7 @@
       const p = me && planFor(me, 2);
       $("passForm").hidden = !!p; $("passActive").hidden = !p;
       if (!p) return;
-      $("passActive").replaceChildren(itemCard(p, "Your pass is active", true));
+      $("passActive").replaceChildren(itemCard(p, "Your pass is active", true, await refundOf(p)));
     }
     async function appState() {
       const apps = myApps(), sel = $("appSel"), keep = sel.value || MS.store.get("ms.app");
@@ -239,13 +239,13 @@
         return;
       }
       if (free) { $("appState").textContent = `On chain. The station owner already gives this app ${MS.mana(free.mana_per_day)} Mana a day for free, so it doesn't need a plan.`; return; }
-      if (plan) { $("appState").textContent = "On chain, with a plan:"; $("appActive").hidden = false; $("appActive").replaceChildren(itemCard(plan, "Plan active", false)); return; }
+      if (plan) { $("appState").textContent = "On chain, with a plan:"; $("appActive").hidden = false; $("appActive").replaceChildren(itemCard(plan, "Plan active", false, await refundOf(plan))); return; }
       $("appState").textContent = "On chain. Choose a daily amount for its users.";
       $("appForm").hidden = false;
     }
 
     // ---------- one row / card for a purchase ----------
-    function itemCard(p, title, isPass) {
+    function itemCard(p, title, isPass, r) {
       const li = document.createElement("li"); li.className = "item"; li.style.borderTop = "0";
       const used = Number(BigInt(p.used_24h || 0)), cap = Number(BigInt(p.mana_per_day || 1));
       li.innerHTML = `<div class="stack" style="gap:4px"><h3></h3><div class="meta"></div></div><div class="acts"></div><div class="usage"><div class="bar"><i></i></div></div>`;
@@ -254,8 +254,10 @@
       li.querySelector(".bar i").style.width = Math.min(100, used / cap * 100).toFixed(1) + "%";
       const acts = li.querySelector(".acts");
       if (isPass && MS.PG.openApp) acts.append(btn("Test my pass", (b) => MS.run(b, "passMsg", testPass), true));
-      acts.append(btn("Renew", (b) => MS.run(b, isPass ? "passMsg" : "appMsg", () => renew(p))));
-      acts.append(btn("Cancel", (b) => MS.run(b, isPass ? "passMsg" : "appMsg", () => cancelAllowance(p))));
+      if (!r.cancelled) acts.append(btn("Renew", (b) => MS.run(b, isPass ? "passMsg" : "appMsg", () => renew(p))));
+      if (r.cancelled) li.querySelector(".meta").textContent += " · cancelled, runs to the end of today";
+      else if (r.refund === 0n) li.querySelector(".meta").textContent += " · nothing left to refund (today counts as used)";
+      else if (r.refund > 0n) acts.append(btn(`Cancel (get ${MS.usd(r.refund)} back)`, (b) => MS.run(b, isPass ? "passMsg" : "appMsg", () => cancelAllowance(p))));
       const ul = document.createElement("ul"); ul.className = "items"; ul.append(li); return ul;
     }
     function btn(label, fn, main = false) { const b = document.createElement("button"); b.type = "button"; b.className = "btn btn-small " + (main ? "btn-main" : "btn-quiet"); b.textContent = label; b.addEventListener("click", () => fn(b)); return b; }
@@ -270,7 +272,7 @@
       await refresh(); return `Your pass is active: ${mana} Mana a day for ${days} day${days === 1 ? "" : "s"}. Press "Test my pass" to see it pay for a transaction.`;
     }); });
     async function testPass() {
-      const r = await MS.send([[MS.appC(MS.PG.openApp), "play", { user: me }]], { rc: 19000000n, stationPays: true });
+      const r = await MS.send([[MS.appC(MS.PG.openApp), "play", { user: me }]], { rc: 19000000n, fallback: false });
       await refresh(); return `It worked: a call to an app nobody sponsors, and your pass paid ${MS.mana(r.rc_used, 3)} Mana. Your wallet paid nothing.`;
     }
     $("appForm").addEventListener("submit", (e) => { e.preventDefault(); MS.run($("appBuy"), "appMsg", async () => {
@@ -336,7 +338,7 @@
         const ended = Number(p.expiry) <= Date.now(); const { refund, cancelled, paid } = await refundOf(p);
         const what = p.kind === 2 ? (p.target === me ? "Mana pass for this wallet" : "Mana pass for " + MS.short(p.target)) : "App plan for " + (MSWallets.list().find((w) => w.address === p.target)?.name || MS.short(p.target));
         const state = ended ? ["Ended", "warn"] : cancelled ? ["Cancelled, runs to the end of today", "warn"] : p.suspended ? ["Suspended", "bad"] : ["Active", "ok"];
-        rows.push({ what, meta: `${MS.mana(p.mana_per_day)} Mana a day · ${MS.mana(p.used_24h)} used in 24 h · until ${MS.when(p.expiry)} · paid ${MS.usd(paid)}`, state, refund,
+        rows.push({ what, meta: `${MS.mana(p.mana_per_day)} Mana a day · ${MS.mana(p.used_24h)} used in 24 h · until ${MS.when(p.expiry)} · paid ${MS.usd(paid)}` + (!ended && !cancelled && refund === 0n ? " · nothing left to refund" : ""), state, refund,
           acts: ended || cancelled ? [] : [["Renew", () => renew(p)], ...(refund > 0n ? [[`Cancel (get ${MS.usd(refund)} back)`, () => cancelAllowance(p)]] : [])] });
       }
       for (const w of MSWallets.list().filter((w) => /^App/.test(w.name))) {
