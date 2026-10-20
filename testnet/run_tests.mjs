@@ -123,7 +123,7 @@ check("deploy", "station: only authorizes_transaction_application", stMeta?.valu
 if (!stMeta?.value?.hash) { note("station contract is not on chain, so nothing after the deploy step can run: stopping"); save(); process.exit(1); }
 
 // ---------------------------------------------------------------- 2b. funding (after the uploads, while the funder still has its full Mana)
-const want = { [ST]: 21n, [BUY]: 5n, [U1]: 4n, [A("user2")]: 3n, [OWN]: 3n, [SP1]: 2n, [SP2]: 2n }; // station >= its koin_amount (20)
+const want = { [ST]: 200n, [BUY]: 5n, [U1]: 4n, [A("user2")]: 3n, [OWN]: 3n, [SP1]: 2n, [SP2]: 2n }; // station >= its koin_amount (150): room for repeated runs within 24 h
 const RESERVE = 5n * M;                                    // the funder keeps this much Mana for the uploads and mints it pays
 for (const [to, amt] of Object.entries(want)) {
   const have = await kbal(to); const need = amt * M - have;
@@ -134,7 +134,7 @@ await sleep(4000);
 
 
 // ---------------------------------------------------------------- 3. init (provisional config for the measurements)
-const koinAmt = 20n * M;                 // configured capacity → daily budget 4 Mana (20%)
+const koinAmt = 150n * M;                // configured capacity → daily budget 30 Mana (20%), enough for repeated runs in one day
 const base = { owner: OWN, paused: false, koin_amount: String(koinAmt), refill_bp: 2000, admin_min: String(M / 2n), hard_max: String(2n * M),
   per_min: 10, cooldown_ms: "60000", day_actions: 50, day_mana: String(40n * M), new_actions: 50, new_mana: String(40n * M), new_pct: 100, max_ops: 2,
   big_max: String(5n * M), big_cooldown_ms: "86400000", big_week_cap: String(15n * M), big_max_debt: String(10n * M), big_ticket_ms: "0",
@@ -145,7 +145,7 @@ else { const x = await send(sta("station"), "init", { config: base }, { payer: F
 if (st0.config?.owner) { const x = await admin("set_config", { config: base }); check("init", "set_config provisional", x.ok, x.error || (x.reverted ? "reverted" : "")); }
 const errOf = (x) => x.error || (x.reverted ? "reverted" : "") || (x.firstError ? `sponsored path: ${x.firstError}` : "");
 let r;
-r = await admin("set_app", { app: 1, value: { reserved_mana: String(3n * M), active: true } }); check("init", "set_app 1 (measurement app)", r.ok, (r.viaSelf ? "owner self-paid " : "station-sponsored owner path ") + errOf(r));
+r = await admin("set_app", { app: 1, value: { reserved_mana: String(20n * M), active: true } }); check("init", "set_app 1 (measurement app)", r.ok, (r.viaSelf ? "owner self-paid " : "station-sponsored owner path ") + errOf(r));
 r = await admin("set_app", { app: 2, value: { reserved_mana: String(M / 2n), active: true } }); check("init", "set_app 2 (Stories)", r.ok, errOf(r));
 check("init", "set_exempt testapp → app 1, strict", (await admin("set_exempt", { contract_id: APP, value: { app: 1, strict: true } })).ok);
 for (const fn of ["play", "heavy", "boom"]) check("init", `set_entry ${fn}`, (await admin("set_entry", { contract_id: APP, entry_point: ep(abiA, fn), value: { app: 1, cap: String(2n * M), max_args: 64 } })).ok);
