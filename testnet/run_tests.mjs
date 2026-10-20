@@ -79,15 +79,7 @@ check("preflight", "funder 1N6yd5… holds tKOIN", fb > 0n, `${Number(fb) / 1e8}
 const meta = await provider.invokeGetContractMetadata(ST).catch(() => null);
 if (meta?.value?.hash) note(`station account already has a contract (hash ${meta.value.hash}): a prior run (ours or another assistant's, e.g. Clover) touched it`);
 
-// ---------------------------------------------------------------- 1. funding (before deploys: KOIN transfers need Mana)
-const want = { [ST]: 30n, [BUY]: 2n, [U1]: 2n, [OWN]: 1n }; // station holds >= its configured koin_amount (init refuses more)
-for (const [to, amt] of Object.entries(want)) {
-  const have = await kbal(to); const need = amt * M - have;
-  if (need > M / 10n) check("fund", `fund ${to.slice(0, 6)}… to ${amt} tKOIN`, (await send(koinC("funder"), "transfer", { from: FUN, to, value: String(need) }, { rcLimit: 2n * M })).ok, `${Number(need) / 1e8}`);
-}
-await sleep(4000);
-
-// ---------------------------------------------------------------- 2. deploys (paid by the funder)
+// ---------------------------------------------------------------- 1. deploys (paid by the funder, before it sends KOIN out)
 // Upload rc limit sized from the chain's real resource prices (bytes × (disk + network) cost, + 1 Mana for compute), × 1.5.
 // A flat 30 Mana was refused ("insufficient pending account resources") once the funder had sent KOIN out.
 const LIM = (await provider.call("chain.get_resource_limits", {})).resource_limit_data;
@@ -99,8 +91,8 @@ async function deploy(role, path, abi, extra = {}) {
   const have = (await provider.invokeGetContractMetadata(A(role)).catch(() => null))?.value?.hash;
   if (have === want) return { ok: true, rc: 0n, skipped: true };
   const c = new Contract({ id: A(role), abi, provider, signer: S(role), bytecode: wasm(path) });
-  // The station pays its own upload from its KOIN; the others are paid by the funder.
-  const pay = role === "station" ? {} : { payer: FUN, payee: A(role), beforeSend: coSign("funder") };
+  // The funder pays every upload (an uninitialized station refuses to pay for anything, by design).
+  const pay = { payer: FUN, payee: A(role), beforeSend: coSign("funder") };
   try {
     const { transaction, receipt } = await c.deploy({ ...pay, rcLimit: String(rcFor(wasm(path).length)), ...extra });
     await transaction.wait("byBlock", 120000); return { ok: !receipt.reverted, rc: BigInt(receipt.rc_used) };
@@ -115,6 +107,15 @@ for (const [role, path, abi, extra] of [["token", "../contracts/mocktoken/build/
 const stMeta = await provider.invokeGetContractMetadata(ST).catch(() => null);
 check("deploy", "station: only authorizes_transaction_application", stMeta?.value?.authorizes_transaction_application && !stMeta?.value?.authorizes_call_contract && !stMeta?.value?.authorizes_upload_contract, JSON.stringify(stMeta?.value || {}).slice(0, 200));
 if (!stMeta?.value?.hash) { note("station contract is not on chain, so nothing after the deploy step can run: stopping"); save(); process.exit(1); }
+
+// ---------------------------------------------------------------- 2b. funding (after the uploads, while the funder still has its full Mana)
+const want = { [ST]: 21n, [BUY]: 2n, [U1]: 2n, [OWN]: 1n }; // station holds >= its configured koin_amount (20; init refuses more), funder keeps Mana for later steps
+for (const [to, amt] of Object.entries(want)) {
+  const have = await kbal(to); const need = amt * M - have;
+  if (need > M / 10n) check("fund", `fund ${to.slice(0, 6)}… to ${amt} tKOIN`, (await send(koinC("funder"), "transfer", { from: FUN, to, value: String(need) }, { rcLimit: 2n * M })).ok, `${Number(need) / 1e8}`);
+}
+await sleep(4000);
+
 
 // ---------------------------------------------------------------- 3. init (provisional config for the measurements)
 const koinAmt = 20n * M;                 // configured capacity → daily budget 4 Mana (20%)
