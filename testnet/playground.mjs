@@ -113,7 +113,8 @@ if (cmd === "traffic") {
 if (cmd === "fund") {                       // fund <koin> <usdt> <address…>: test KOIN (for Mana) + test USDT (to buy with)
   const [koin, usdt, ...to] = process.argv.slice(3);
   const kc = new Contract({ id: KOIN, abi: utils.tokenAbi, provider, signer: KEY.funder });
-  const tc = new Contract({ id: TOK, abi: abiT, provider, signer: Signer.fromWif(K.token.wif) });
+  const tokKey = Signer.fromWif(K.token.wif); tokKey.provider = provider;   // a signer needs the provider to send
+  const tc = new Contract({ id: TOK, abi: abiT, provider, signer: tokKey });
   for (const a of to) {
     if (Number(koin) > 0) ok(`send ${koin} tKOIN to ${a}`, await send(kc, "transfer", { from: FUN, to: a, value: String(BigInt(Math.round(Number(koin) * 1e8))) }, { rcLimit: M }));
     if (Number(usdt) > 0) ok(`mint ${usdt} tUSDT to ${a}`, await send(tc, "mint", { to: a, value: String(BigInt(Math.round(Number(usdt) * 1e8))) }, { payer: FUN, payee: TOK, cosigner: "funder", rcLimit: M }));
@@ -122,7 +123,7 @@ if (cmd === "fund") {                       // fund <koin> <usdt> <address…>: 
 
 if (cmd === "mint") {
   const to = process.argv[3]; const amt = BigInt(Math.round(Number(process.argv[4] || 100) * 1e8));
-  ok(`mint ${Number(amt) / 1e8} tUSDT to ${to}`, await send(new Contract({ id: TOK, abi: abiT, provider, signer: Signer.fromWif(K.token.wif) }), "mint", { to, value: String(amt) }, { payer: FUN, payee: TOK, cosigner: "funder", rcLimit: M }));
+  ok(`mint ${Number(amt) / 1e8} tUSDT to ${to}`, await send(new Contract({ id: TOK, abi: abiT, provider, signer: Object.assign(Signer.fromWif(K.token.wif), { provider }) }), "mint", { to, value: String(amt) }, { payer: FUN, payee: TOK, cosigner: "funder", rcLimit: M }));
 }
 
 // status (always)
