@@ -27,6 +27,11 @@ const check = (area, name, pass, detail = "") => {
 const cost = (k, v) => { R.costs[k] = v; console.log(`COST ${k} = ${fmt(v)}`); save(); };
 const note = (s) => { R.notes.push(s); console.log("NOTE " + s); save(); };
 
+// Fresh throwaway accounts every run (in memory only, never printed or saved): the station and the players start
+// clean, so 24 h windows, cooldowns and new-user status from earlier runs can't skew the checks. The funder, owner,
+// mock token and test app stay the same (their keys come from TESTNET_KEYS). Set FRESH=0 to reuse the stored keys.
+const FRESH = process.env.FRESH === "0" ? [] : ["station", "user1", "user2", "buyer", "spam1", "spam2"];
+for (const r of FRESH) { const k = new Signer({ privateKey: crypto.randomBytes(32).toString("hex") }); K[r] = { address: k.getAddress(), wif: k.getPrivateKey("wif") }; }
 const S = (r) => { const s = Signer.fromWif(K[r].wif); s.provider = provider; return s; };
 const A = (r) => K[r].address;
 const ST = A("station"), OWN = A("owner"), APP = A("app"), TOK = A("token"), FUN = A("funder");
@@ -123,7 +128,7 @@ check("deploy", "station: only authorizes_transaction_application", stMeta?.valu
 if (!stMeta?.value?.hash) { note("station contract is not on chain, so nothing after the deploy step can run: stopping"); save(); process.exit(1); }
 
 // ---------------------------------------------------------------- 2b. funding (after the uploads, while the funder still has its full Mana)
-const want = { [ST]: 200n, [BUY]: 5n, [U1]: 4n, [A("user2")]: 3n, [OWN]: 3n, [SP1]: 2n, [SP2]: 2n }; // station >= its koin_amount (150): room for repeated runs within 24 h
+const want = { [ST]: 200n, [BUY]: 5n, [U1]: 4n, [U2]: 4n, [OWN]: 3n, [SP1]: 3n, [SP2]: 3n }; // station >= its koin_amount (150)
 const RESERVE = 5n * M;                                    // the funder keeps this much Mana for the uploads and mints it pays
 for (const [to, amt] of Object.entries(want)) {
   const have = await kbal(to); const need = amt * M - have;
@@ -238,7 +243,7 @@ check("escrow", "audit #3: buy_allowance without the target app's signature refu
 const ba = await buyA(2n * AU);
 check("escrow", "buy_allowance 2 Mana/day × 7 d (approve + pull in one tx), allowance_bought event", ba.ok && ba.events.includes("station.allowance_bought"), ba.error || `rc ${ba.rc} events ${ba.events}`); if (ba.ok) cost("buy_allowance tx (approve + buy)", ba.rc);
 const aid = 1;
-const xfer = () => send(C(PAYAPP, abiA, "user1"), "play", { user: U1 }, sponsored(U1, L));
+const xfer = () => send(C(PAYAPP, abiA, "user2"), "play", { user: U2 }, sponsored(U2, L)); // user2: user1 is in its 10-min cooldown from the measurements
 const b1 = await xfer(); check("escrow", "paying app (app allowance): its users' txs sponsored from its allowance", b1.ok, b1.error || `rc ${b1.rc}`); if (b1.ok) cost("play on paying app, sponsored by its allowance", b1.rc);
 const acc = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(price * 2n) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 2, target: U1, mana_per_day: String(2n * AU), days: "7", token: TOK, max_price: String(price * 2n) }]], { rcLimit: 3n * M });
 check("designated", "account allowance (kind 2) refused (Carl, 9:09 PM)", !acc.ok, acc.error || "");
@@ -307,15 +312,22 @@ check("money", "escrow held == station tUSDT balance; collected == held + refund
 const koinSt1 = await kbal(ST);
 check("money", "station KOIN balance unchanged through all escrow/refund flows (no KOIN refund path)", koinSt1 === koinSt0, `${koinSt0} → ${koinSt1}`);
 cost("station Mana at end", await rc(ST));
+// Sweep the fresh accounts' leftover tKOIN back to the funder (best effort; each keeps a little Mana for the fee).
+let swept = 0n;
+for (const r of FRESH) {
+  const bal = await kbal(A(r)), mana = await rc(A(r)); let amt = (bal < mana ? bal : mana) - M; if (amt <= 0n) continue;
+  const x = await send(koinC(r), "transfer", { from: A(r), to: FUN, value: String(amt) }, { rcLimit: M / 2n });
+  if (x.ok) swept += amt; else note(`sweep ${r} ${A(r).slice(0, 6)}…: ${x.error || "reverted"}`);
+}
+note(`swept ${Number(swept) / 1e8} tKOIN back to the funder`);
 R.finished = new Date().toISOString(); save();
 
 // ---------------------------------------------------------------- report
 const pass = R.checks.filter((c) => c.pass).length, total = R.checks.length;
-let md = `## Mana Station testnet run\nchain ${chainId}\n\n| area | check | result | detail |\n|---|---|---|---|\n`;
-for (const c of R.checks) md += `| ${c.area} | ${c.name} | ${c.pass ? "PASS" : "**FAIL**"} | ${c.detail.replace(/\|/g, "/").slice(0, 160)} |\n`;
+let md = `## Mana Station testnet run\nchain ${chainId}\n\n**${pass}/${total} checks passed**\n\nNotes:\n` + R.notes.map((n) => `- ${n}`).join("\n") + `\n\n| area | check | result | detail |\n|---|---|---|---|\n`;
+for (const c of R.checks) md += `| ${c.area} | ${c.name} | ${c.pass ? "PASS" : "**FAIL**"} | ${c.detail.replace(/\|/g, "/").replace(/"account":"[^"]+",/g, "").slice(0, 120)} |\n`;
 md += `\n**${pass}/${total} checks passed**\n\n| cost | rc (base units) | Mana |\n|---|---|---|\n`;
 for (const [k, v] of Object.entries(R.costs)) md += `| ${k} | ${v} | ${(Number(v) / 1e8).toFixed(5)} |\n`;
-md += `\nNotes:\n` + R.notes.map((n) => `- ${n}`).join("\n") + "\n";
 console.log("\n" + md);
 if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
 fs.writeFileSync(new URL("./results.md", import.meta.url), md);
