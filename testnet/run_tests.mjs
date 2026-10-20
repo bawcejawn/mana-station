@@ -29,8 +29,8 @@ const A = (r) => K[r].address;
 const ST = A("station"), OWN = A("owner"), APP = A("app"), TOK = A("token"), FUN = A("funder");
 const U1 = A("user1"), U2 = A("user2"), BUY = A("buyer"), SP1 = A("spam1"), SP2 = A("spam2");
 const rc = async (a) => BigInt(await provider.getAccountRc(a));
-const KOIN = await provider.invokeGetContractAddress("koin").then((r) => r.address).catch(() => process.env.KOIN_ADDR);
-if (!KOIN) throw new Error("could not resolve the Harbinger KOIN address (name service); set KOIN_ADDR");
+const KOIN = process.env.KOIN_ADDR || await provider.invokeGetContractAddress("koin").then((r) => r?.value?.address || r?.address).catch(() => null); // koilib wraps the answer in { value }
+if (!KOIN) throw new Error("could not resolve the testnet KOIN address (name service); set KOIN_ADDR (testnet: 1FaSvLjQJsCJKq5ybmGsMMQs8RQYyVv8ju)");
 const rd = (p) => JSON.parse(fs.readFileSync(new URL(p, import.meta.url)));
 const abiS = rd("../contracts/station/abi/station.koilib.json"), abiA = rd("../contracts/testapp/abi/testapp.koilib.json"), abiT = rd("../contracts/mocktoken/abi/mocktoken.koilib.json");
 const wasm = (p) => fs.readFileSync(new URL(p, import.meta.url));
