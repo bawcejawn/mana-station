@@ -32,7 +32,7 @@ message config_object {
   uint64 max_days = 22 [jstype = JS_STRING];        // longest prepaid period per buy / renew
   // Where ESCROW RELEASES go (Carl, 7:47 PM: payments are held in the station's escrow until the term ends).
   // Empty = the owner wallet. Must not be the station itself. Owner-changeable.
-  // Default (empty) = DIRECT TO THE OWNER WALLET (Carl, 5:18 PM). Owner may set another address, or the station's own id.
+  // Default (empty) = the owner wallet. Changes only through a council proposal (kind 6); never the station itself.
   bytes treasury = 23 [(koinos.btype) = ADDRESS];
   // Fee-exempt reserved apps may go this far above their daily allowance (2000 = 20%: 3,000 → 3,600). The extra comes
   // straight from the reserve (Carl, 5:22 PM): no debt, no repayment, never below the hard floor (admin_min + budget).

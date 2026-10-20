@@ -1135,9 +1135,12 @@ describe("audit #1: permission takeover, council, delay, veto (Oct 20)", () => {
     MockVM.commitTransaction(); expect(() => { gS!.execute(new station.execute_arguments(gId)); }).toThrow(); // C2's vote no longer counts
     signedBy([C2]); MockVM.commitTransaction(); expect(() => { gS!.approve(new station.approve_arguments(C2, gId)); }).toThrow(); signedBy([]); // C2 is out
   });
-  it("operators: the owner or any council member runs daily actions; strangers can't; money settings need the council", () => {
+  it("operators: the owner runs daily actions; a council member can only pull the emergency brake; money settings need the council", () => {
     const s = setup(); gS = s;
-    signedBy([C3]); s.set_paused(new station.set_paused_arguments(true)); s.set_paused(new station.set_paused_arguments(false));
+    signedBy([C3]); s.set_paused(new station.set_paused_arguments(true));                  // emergency brake
+    MockVM.commitTransaction(); expect(() => { gS!.set_paused(new station.set_paused_arguments(false)); }).toThrow(); // only the owner resumes
+    MockVM.commitTransaction(); expect(() => { gS!.connect_app(new station.connect_app_arguments(SOLDAPP, 5 * M, false)); }).toThrow(); // review H1
+    signedBy([OWNER]); s.set_paused(new station.set_paused_arguments(false));
     signedBy([OTHER]); MockVM.commitTransaction(); expect(() => { gS!.set_paused(new station.set_paused_arguments(true)); }).toThrow();
     signedBy([OWNER]);
     const c1 = cfg(); c1.owner = OTHER; gC = c1; MockVM.commitTransaction(); expect(() => { gS!.set_config(new station.set_config_arguments(gC)); }).toThrow();
@@ -1193,5 +1196,66 @@ describe("connected apps (Oct 20): one list, one-step connect / disconnect", () 
     expect(L.paid[0].suspended).toBe(true); expect(L.sold).toBe(30 * M);
     signedBy([OWNER]); MockVM.commitTransaction(); expect(() => { gS!.connect_app(new station.connect_app_arguments(SOLDAPP, 11 * M, false)); }).toThrow(); // 40 − 11 < 30 sold
     s.connect_app(new station.connect_app_arguments(SOLDAPP, 10 * M, false)); signedBy([]);
+  });
+});
+
+describe("independent review of audit #1 (Oct 20): fixes", () => {
+  it("C1: an approved upgrade must be the ONLY operation in its tx (no attacker code slipped in before it)", () => {
+    const s = setup(); const code = new Uint8Array(64); code[0] = 7; const evil = new Uint8Array(64); evil[0] = 66;
+    const a = act(1); a.hash = System.hash(Crypto.multicodec.sha2_256, code)!;
+    signedBy([C1]); const id = s.propose(new station.propose_arguments(C1, a)).id;
+    signedBy([C2]); s.approve(new station.approve_arguments(C2, id)); signedBy([]);
+    at(NOW + 2 * DAYMS);
+    const t = new protocol.transaction(); const o1 = new protocol.operation(); const o2 = new protocol.operation();
+    o1.upload_contract = new protocol.upload_contract_operation(STATION, evil, "", true, true, true);
+    o2.upload_contract = new protocol.upload_contract_operation(STATION, code, "", true, true, true);
+    t.operations = [o1, o2]; MockVM.setTransaction(t); System.resetCache();
+    expect(s.authorize(new authority.authorize_arguments(authority.authorization_type.contract_upload)).value).toBe(false);
+    expect(s.get_proposal(new station.get_proposal_arguments(id)).proposal!.executed).toBe(false); // still available
+    const t2 = new protocol.transaction(); const u = new protocol.operation();       // approved code first, then anything else
+    u.upload_contract = new protocol.upload_contract_operation(STATION, code, "", true, true, true);
+    t2.operations = [u, op(KOIN, EP_TRANSFER)]; MockVM.setTransaction(t2); System.resetCache();
+    expect(s.authorize(new authority.authorize_arguments(authority.authorization_type.contract_upload)).value).toBe(false);
+    expect(upAuth(s, code, true)).toBe(true);                                    // alone in its tx: accepted
+  });
+  it("H1: a member can't veto their own removal; M2: 3 open proposals per member; M3: delay capped at 30 days", () => {
+    const s = setup(); gS = s; testSetBalance(1300 * M);
+    const nc = act(4); nc.council = [C1, C2, cm(4)]; nc.threshold = 2;          // removes C3
+    signedBy([C1]); const id = s.propose(new station.propose_arguments(C1, nc)).id; gId = id;
+    signedBy([C3]); MockVM.commitTransaction(); expect(() => { gS!.cancel_proposal(new station.cancel_proposal_arguments(C3, gId)); }).toThrow();
+    signedBy([C2]); s.approve(new station.approve_arguments(C2, id)); signedBy([]);
+    at(NOW + 2 * DAYMS); s.execute(new station.execute_arguments(id));
+    expect(s.get_status(new station.get_status_arguments()).config!.council.length).toBe(3);
+    const w = act(2); w.to = OTHER; w.amount = M;
+    signedBy([C1]); s.propose(new station.propose_arguments(C1, w)); s.propose(new station.propose_arguments(C1, w)); s.propose(new station.propose_arguments(C1, w)); gA = w;
+    MockVM.commitTransaction(); expect(() => { gS!.propose(new station.propose_arguments(C1, gA)); }).toThrow(); // 4th from the same member
+    signedBy([C2]); s.propose(new station.propose_arguments(C2, w));             // another member still can
+    const d = act(5); d.delay_ms = 31 * DAYMS; gA = d;
+    MockVM.commitTransaction(); expect(() => { gS!.propose(new station.propose_arguments(C2, gA)); }).toThrow(); signedBy([]);
+  });
+  it("L1: a council change restarts the wait on open proposals; L4: no refunds to operators' own purchases", () => {
+    const s = setup(); gS = s; testSetBalance(1300 * M);
+    const w = act(2); w.to = OTHER; w.amount = M;
+    signedBy([C1]); const id = s.propose(new station.propose_arguments(C1, w)).id; gId = id;
+    signedBy([C2]); s.approve(new station.approve_arguments(C2, id)); signedBy([]);
+    const nc = act(4); nc.council = [C1, C2, C3, cm(4)]; nc.threshold = 2; councilDo(s, nc); // 48 h later: council grows
+    expect(s.get_proposal(new station.get_proposal_arguments(id)).proposal!.ready_at).toBe(NOW + 2 * DAYMS); // fresh wait
+    MockVM.commitTransaction(); expect(() => { gS!.execute(new station.execute_arguments(gId)); }).toThrow();
+    at(NOW + 2 * DAYMS); s.execute(new station.execute_arguments(id));
+    testSetToken(USDT, C1, 10 * USD);
+    signedBy([C1, U2]); const r = s.buy_allowance(new station.buy_allowance_arguments(C1, 1, U2, 10 * M, 7, USDT, 1000 * USD)); signedBy([]);
+    gId = r.id; signedBy([OWNER]); MockVM.commitTransaction(); expect(() => { gS!.owner_refund(new station.owner_refund_arguments(gId, null)); }).toThrow(); signedBy([]);
+  });
+  it("M1: station-paid admin txs follow the per-user limits; L2: set_exempt only to real slots, connect never edits a shared slot", () => {
+    const s = setup(); gS = s;
+    let n = 0; for (let i = 0; i < 8; i++) { at(NOW + 1000); tx(OWNER, M, [op(STATION, 0x12345678)]); signedBy([OWNER]); if (ok(s)) n++; }
+    expect(n).toBe(5);                                                           // 5 per minute, then the cooldown
+    signedBy([OWNER]);
+    MockVM.commitTransaction(); expect(() => { gS!.set_exempt(new station.set_exempt_arguments(SOLDAPP, new station.exempt_object(9, false), false)); }).toThrow();
+    s.set_exempt(new station.set_exempt_arguments(SOLDAPP, new station.exempt_object(1, false), false)); // shares Knode's slot 1
+    const id = s.connect_app(new station.connect_app_arguments(SOLDAPP, 10 * M, false)).app;
+    expect(id).not.toBe(1);                                                      // gets its own slot…
+    expect(s.get_app(new station.get_app_arguments(1)).app!.reserved_mana).toBe(80 * M); // …Knode's is untouched
+    signedBy([]);
   });
 });

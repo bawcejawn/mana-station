@@ -196,7 +196,9 @@ await cmSend(2, "approve", { signer: A(council(2)), id: vetoId });
 { const x = await send(sta("user1"), "propose", { signer: U1, action: { kind: 2, to: U1, amount: String(M) } }, { rcLimit: M / 2n });
   check("council", "a non-member can't propose", refusedNot104(x), x.error || "ACCEPTED"); }
 { const a = await cmSend(3, "set_paused", { paused: true }); const b = await cmSend(3, "set_paused", { paused: false });
-  check("operators", "a council member can pause and unpause (station-sponsored)", a.ok && b.ok, a.error || b.error || ""); }
+  check("operators", "a council member can pull the emergency brake (pause), but not resume", a.ok && refusedNot104(b), a.error || b.error || "RESUMED"); }
+{ const x = await admin("set_paused", { paused: false }); check("operators", "the owner resumes", x.ok, errOf(x)); }
+{ const x = await cmSend(3, "connect_app", { contract_id: APP, mana_per_day: String(M), strict: false }); check("operators", "a council member can't run everyday operations (owner only)", refusedNot104(x), x.error || "ACCEPTED"); }
 { const x = await send(sta("user1"), "set_paused", { paused: true }, { rcLimit: M / 2n }); check("operators", "a stranger can't pause", refusedNot104(x), x.error || "ACCEPTED"); }
 { const x = await admin("set_config", { config: { ...base, treasury: U1 } }); check("council", "owner alone can't change the treasury (council only)", !x.ok, errOf(x) || "ACCEPTED"); }
 
@@ -373,7 +375,19 @@ const APP3 = A("app3");
 // ---------------------------------------------------------------- 8c. audit #1: approved upgrade, then council withdrawal (also returns the test KOIN)
 { const x = await uploadTo("funder", wasm("../contracts/testapp/build/release/contract.wasm")); check("upgrade", "uploading code the council did not approve is refused", refusedNot104(x), x.error || "ACCEPTED"); }
 { const x = await uploadTo("funder", stCode, false); check("upgrade", "the approved code without the three overrides is refused", refusedNot104(x), x.error || "ACCEPTED"); }
-{ const x = await uploadTo("funder", stCode); check("upgrade", "the approved code, after the wait, uploads WITHOUT the station key", x.ok, x.error || ""); }
+// Review C1 replayed on chain: attacker code and the approved code in ONE transaction must be refused.
+{ let x;
+  try {
+    const evil = new Contract({ id: ST, abi: abiS, provider, signer: S("funder"), bytecode: wasm("../contracts/testapp/build/release/contract.wasm") });
+    const good = new Contract({ id: ST, abi: abiS, provider, signer: S("funder"), bytecode: stCode });
+    const f = { onlyOperation: true, authorizesCallContract: true, authorizesTransactionApplication: true, authorizesUploadContract: true };
+    const tx = new Transaction({ signer: S("funder"), provider, options: { rcLimit: String(rcFor(stCode.length) * 2n + 2n * M) } });
+    await tx.pushOperation((await evil.deploy(f)).operation); await tx.pushOperation((await good.deploy(f)).operation);
+    const receipt = await tx.send(); await tx.wait("byBlock", 120000); x = { ok: !receipt.reverted };
+  } catch (e) { x = { ok: false, error: String(e?.message || e).slice(0, 300) }; }
+  check("upgrade", "attacker code + approved code in one transaction is refused (review C1)", refusedNot104(x), x.error || "ACCEPTED"); }
+{ const m0 = await provider.invokeGetContractMetadata(ST).catch(() => null); check("upgrade", "…and the station's code is unchanged", m0?.value?.hash === STHASH, m0?.value?.hash || ""); }
+{ const x = await uploadTo("funder", stCode); check("upgrade", "the approved code, alone, after the wait, uploads WITHOUT the station key", x.ok, x.error || ""); }
 { const x = await uploadTo("funder", stCode); check("upgrade", "…and only once", refusedNot104(x), x.error || "ACCEPTED"); }
 // Cleanup doubles as the withdrawal test: free the budget, lower koin_amount, then 2 of 3 + 70 s to take KOIN out.
 await admin("set_app", { app: 1, value: { reserved_mana: "0", active: false } });
