@@ -1,16 +1,17 @@
 <!doctype html>
+<!-- Built from site/src/play.html by site/tools/build-pages.mjs. Edit the source, not this file. -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Try free play: Mana Station</title>
-  <meta name="description" content="Tap a button and send a real Koinos testnet transaction with no KOIN and no Mana. Mana Station pays.">
   <meta name="theme-color" content="#2f5bff">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Figtree:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="styles.css">
+  <title>Try it: a free Koinos transaction</title>
+  <meta name="description" content="Tap a button and send a real Koinos testnet transaction with no KOIN and no Mana. Mana Station pays.">
   <style>
     .play { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: clamp(24px, 4vw, 48px); align-items: start; padding-block: 8px 80px; }
     .stage { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-big); padding: clamp(24px, 4vw, 40px); display: grid; gap: 22px; justify-items: center; text-align: center; }
@@ -46,6 +47,7 @@
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
+  <div class="testnet-bar"><div class="wrap"><span>Playground on the Koinos testnet. Nothing here costs real money.</span></div></div>
   <header class="site-head">
     <div class="wrap">
       <a class="brand" href="index.html" aria-label="Mana Station home">
@@ -53,13 +55,12 @@
         Mana Station
       </a>
       <nav class="nav" aria-label="Main">
-        <a href="index.html">Home</a>
-        <a href="how-it-works.html">How it works</a>
-        <a href="buy.html">Buy</a>
+        <a href="get.html">Get Mana</a>
         <a href="play.html" aria-current="page">Try it</a>
-        <a href="console.html">Console</a>
-        <span class="status-pill">Koinos testnet</span>
+        <a href="help.html">Help</a>
+        <a href="owner.html">Owner</a>
       </nav>
+      <div class="wallet-slot" id="walletChip"></div>
     </div>
   </header>
 
@@ -94,7 +95,7 @@
             <dt>Your Mana</dt><dd id="myMana">…</dd>
             <dt>Free taps today</dt><dd id="myToday">…</dd>
           </dl>
-          <p class="small">With no Mana you couldn't send a single transaction on your own. The station covers you.</p>
+          <p class="small">You play as a brand-new test player with no KOIN and no Mana, separate from your wallet in the top right. On your own you couldn't send a single transaction. The station covers you.</p>
           <p class="small"><button class="linkish" id="fresh" type="button">Start over as a new player</button></p>
         </section>
 
@@ -112,12 +113,13 @@
     </div>
   </main>
 
-  <footer class="site-foot"><div class="wrap"><span>Mana Station playground</span><p>Testnet only. Your test wallet lives in this browser; it holds nothing of value.</p></div></footer>
-
+  <footer class="site-foot"><div class="wrap"><span>Mana Station, built on Koinos</span><p>Payments are held by the station contract until a term ends; cancel any time for the unused part. The station's key alone can't move funds: that takes two of three council members, a public wait and no veto. Draft terms, under legal review.</p></div></footer>
   <script src="https://cdn.jsdelivr.net/npm/koilib@9.4.1/dist/koinos.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/kondor-js@1.3.0/dist/kondor.min.js"></script>
   <script src="abis.js"></script>
   <script src="playground.js"></script>
   <script src="wallets.js"></script>
+  <script src="ms.js"></script>
   <script>
   (() => {
     const PG = window.MS_PLAYGROUND || {}, ABI = window.MS_ABI || {};
@@ -134,8 +136,8 @@
     let APP = PG.demoApp;
     const appRead = () => new Contract({ id: APP, abi: ABI.app, provider });
     function fillApps() {
-      const sel = $("appPick"); sel.replaceChildren(new Option("Demo app (free slot from the operator)", PG.demoApp));
-      for (const w of MSWallets.list().filter((w) => /^App/.test(w.name))) sel.append(new Option(w.name + " (your paid free play) · " + w.address.slice(0, 8) + "…", w.address));
+      const sel = $("appPick"); sel.replaceChildren(new Option("Demo app (free Mana from the owner)", PG.demoApp));
+      for (const w of MSWallets.list().filter((w) => /^App/.test(w.name))) sel.append(new Option(w.name + " (your app plan) · " + w.address.slice(0, 8) + "…", w.address));
       const h = (location.hash.match(/app=([1-9A-HJ-NP-Za-km-z]{25,35})/) || [])[1];
       if (h && ![...sel.options].some((o) => o.value === h)) sel.append(new Option("App " + h.slice(0, 8) + "…", h));
       let want = h; try { want = want || localStorage.getItem("ms.playApp"); } catch {}
@@ -161,7 +163,7 @@
         const paid = ((L.result || {}).paid || []).filter((p) => p.target === APP && Number(p.expiry) > Date.now() && !p.suspended);
         const app = free || (paid.length ? { mana_per_day: String(paid.reduce((s, p) => s + BigInt(p.mana_per_day), 0n)), used_24h: String(paid.reduce((s, p) => s + BigInt(p.used_24h), 0n)) } : {});
         $("capLabel").textContent = free ? "This app's daily Mana (free slot)" : paid.length ? "This app's daily Mana (paid)" : "This app's daily Mana";
-        if (!free && !paid.length && APP !== PG.demoApp) status("This app has no free play right now. Buy some on the Buy page.", "err");
+        if (!free && !paid.length && APP !== PG.demoApp) status("This app has no Mana from the station right now. Buy an app plan on the Get Mana page.", "err");
         const cap = Number(BigInt(app.mana_per_day || 0)), used = Number(BigInt(app.used_24h || 0));
         $("appCap").textContent = fmt(app.mana_per_day); $("appUsed").textContent = fmt(app.used_24h);
         $("appBar").style.width = (cap ? Math.min(100, used / cap * 100) : 0).toFixed(1) + "%";

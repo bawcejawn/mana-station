@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+{{HEAD}}
+  <title>Get Mana: a pass for your wallet or a plan for your app</title>
+  <meta name="description" content="Buy Koinos Mana in two clicks: a daily Mana pass for your wallet, or a daily plan that lets your app's users act for free. Pay in stablecoins; no KOIN needed.">
+</head>
+<body>
+{{TOP:get}}
+
+  <main id="main" class="wrap page">
+    <div class="page-head">
+      <h1>Get Mana</h1>
+      <p class="lede">Who is the Mana for? You pay in tUSDT, and you don't need any KOIN: the station even pays the Mana for the purchase.</p>
+      <nav class="tabs" aria-label="Who the Mana is for">
+        <a href="#wallet" id="tabWallet">For my wallet</a>
+        <a href="#app" id="tabApp">For my app</a>
+      </nav>
+    </div>
+
+    <p class="msg" id="needWallet" hidden></p>
+
+    <!-- ============ wallet pass ============ -->
+    <section class="panel" id="walletPane" aria-labelledby="w-title">
+      <div class="stack" style="gap:8px">
+        <h2 id="w-title">A Mana pass for your wallet</h2>
+        <p class="hint">The station pays your wallet's own transactions, on any Koinos app, up to a daily amount. It never pays to move tokens (sending KOIN or stablecoins stays on your own Mana).</p>
+      </div>
+
+      <div id="passActive" hidden></div>
+
+      <form id="passForm" class="stack" style="gap:20px">
+        <fieldset class="field" style="border:0;padding:0;margin:0">
+          <legend class="label" style="margin-bottom:8px">How much a day?</legend>
+          <div class="choices" id="passSize"></div>
+        </fieldset>
+        <fieldset class="field" style="border:0;padding:0;margin:0">
+          <legend class="label" style="margin-bottom:8px">For how long?</legend>
+          <div class="choices terms" id="passDays"></div>
+        </fieldset>
+        <div class="checkout">
+          <div class="what"><b id="passWhat">…</b><span class="hint" id="passNote"></span></div>
+          <div class="row"><span class="price" id="passPrice">…</span><button class="btn btn-main" id="passBuy" type="submit">Buy pass</button></div>
+        </div>
+        <details class="disclose"><summary>Terms in full</summary><div><p class="small" id="passTerms"></p></div></details>
+      </form>
+      <p class="msg" id="passMsg" hidden></p>
+    </section>
+
+    <!-- ============ app plan ============ -->
+    <section class="panel" id="appPane" aria-labelledby="a-title" hidden>
+      <div class="stack" style="gap:8px">
+        <h2 id="a-title">Free use for your app's users</h2>
+        <p class="hint">Buy a daily amount of Mana for your app's contract. Every user of the app draws from it when they use it, with fair-use limits per user so no one can drain it.</p>
+      </div>
+
+      <div class="field">
+        <label for="appSel">Which app?</label>
+        <div class="row"><select id="appSel" style="flex:1 1 260px"></select><button class="btn btn-quiet btn-small" id="newApp" type="button">Create a test app</button></div>
+        <p class="hint" id="appState"></p>
+      </div>
+
+      <div id="appUpload" class="checkout" hidden>
+        <div class="what"><b>Put your app on chain first</b><span class="hint">Uploading a contract is the biggest transaction an app makes. The station pays it from a 24-hour upload ticket, then refunds the unused part. On this playground, "your app" is a copy of the demo app.</span></div>
+        <div class="row"><span class="price" id="upPrice">…</span><button class="btn btn-main" id="upBtn" type="button">Upload my app</button></div>
+      </div>
+
+      <div id="appActive" hidden></div>
+
+      <form id="appForm" class="stack" style="gap:20px" hidden>
+        <fieldset class="field" style="border:0;padding:0;margin:0">
+          <legend class="label" style="margin-bottom:8px">How much a day, for all its users together?</legend>
+          <div class="choices" id="appSize"></div>
+        </fieldset>
+        <fieldset class="field" style="border:0;padding:0;margin:0">
+          <legend class="label" style="margin-bottom:8px">For how long?</legend>
+          <div class="choices terms" id="appDays"></div>
+        </fieldset>
+        <div class="checkout">
+          <div class="what"><b id="appWhat">…</b><span class="hint">Your app's key co-signs the purchase, which proves the app is yours.</span></div>
+          <div class="row"><span class="price" id="appPrice">…</span><button class="btn btn-main" id="appBuy" type="submit">Buy app plan</button></div>
+        </div>
+      </form>
+      <p class="msg" id="appMsg" hidden></p>
+      <details class="disclose"><summary>How does my app use it?</summary><div>
+        <p class="small">Your app sends its users' transactions with the station as the payer and the user as the payee. Users sign as usual and pay nothing. With Koilib:</p>
+        <p class="mono">{ payer: STATION, payee: user, rcLimit: "19000000" }</p>
+        <p class="small">If the station says no (for example a user hit the per-minute limit), fall back to the user's own Mana. A refused attempt costs nothing.</p>
+      </div></details>
+    </section>
+
+    <!-- ============ everything you hold ============ -->
+    <section class="panel" aria-labelledby="m-title">
+      <div class="row" style="justify-content:space-between">
+        <h2 id="m-title">Your Mana</h2>
+        <span class="hint" id="balance"></span>
+      </div>
+      <ul class="items" id="mine"><li class="empty">Choose a wallet (top right) to see what it holds.</li></ul>
+      <p class="msg" id="mineMsg" hidden></p>
+    </section>
+  </main>
+
+{{FOOT}}
+  <script src="app-code.js"></script>
+  <script>
+  (() => {
+    const { M, ST, TOK, $ } = MS;
+    // Sizes at playground scale (the testnet station sells about 10 Mana a day in total). Mainnet sizes are larger.
+    const PASS = [["Light", 1], ["Regular", 2], ["Heavy", 5]];
+    const APP = [["Starter", 2], ["Growing", 5], ["Busy", 10]];
+    const DAYS = [["1 day", 1], ["7 days", 7], ["30 days", 30]];
+    let L = {}, me = null;
+
+    // ---------- choice controls ----------
+    function choices(box, name, opts, unit, checked) {
+      box.replaceChildren();
+      for (const [label, v] of opts) {
+        const l = document.createElement("label"); l.className = "choice";
+        l.innerHTML = `<input type="radio" name="${name}" value="${v}"><span><b></b><small></small></span>`;
+        l.querySelector("b").textContent = label; l.querySelector("small").textContent = unit ? `${v} Mana · about ${MS.actions(v)} actions a day` : "";
+        if (String(v) === String(checked)) l.querySelector("input").checked = true;
+        box.append(l);
+      }
+      if (unit) {
+        const l = document.createElement("label"); l.className = "choice";
+        l.innerHTML = `<input type="radio" name="${name}" value="custom"><span><b>Custom</b><small><input type="number" min="1" step="1" value="3" aria-label="Mana a day" style="width:6em;font:inherit;padding:4px 8px;border-radius:8px;border:1px solid var(--line)"> Mana</small></span>`;
+        l.querySelector("input[type=number]").addEventListener("focus", () => { l.querySelector("input[type=radio]").checked = true; quoteAll(); });
+        l.querySelector("input[type=number]").addEventListener("input", quoteAll);
+        box.append(l);
+      }
+      box.addEventListener("change", quoteAll);
+    }
+    const picked = (box) => { const r = box.querySelector("input[type=radio]:checked"); if (!r) return 0; return r.value === "custom" ? Number(r.parentElement.querySelector("input[type=number]").value) : Number(r.value); };
+    choices($("passSize"), "ps", PASS, true, 2); choices($("passDays"), "pd", DAYS, false, 7);
+    choices($("appSize"), "as", APP, true, 5); choices($("appDays"), "ad", DAYS, false, 7);
+
+    // ---------- tabs ----------
+    function tab() {
+      const app = location.hash === "#app";
+      $("walletPane").hidden = app; $("appPane").hidden = !app;
+      $("tabWallet").setAttribute("aria-current", String(!app)); $("tabApp").setAttribute("aria-current", String(app));
+    }
+    window.addEventListener("hashchange", tab); tab();
+
+    // ---------- quotes ----------
+    async function quote(mana, days) {
+      if (!(mana >= 1)) return { reason: "choose at least 1 Mana a day" };
+      return MS.read("quote_allowance", { token: TOK, mana_per_day: String(MS.units(mana)), days: String(days) }).catch((e) => ({ reason: MS.friendly(e) }));
+    }
+    let qPass = {}, qApp = {};
+    async function quoteAll() {
+      const pm = picked($("passSize")), pd = picked($("passDays")), am = picked($("appSize")), ad = picked($("appDays"));
+      $("passWhat").textContent = `${pm} Mana a day for ${pd} day${pd === 1 ? "" : "s"}`;
+      $("appWhat").textContent = `${am} Mana a day for ${ad} day${ad === 1 ? "" : "s"}, about ${MS.actions(am)} user actions a day`;
+      [qPass, qApp] = await Promise.all([quote(pm, pd), quote(am, ad)]);
+      show(qPass, "passPrice", "passBuy", "passNote", `About ${MS.actions(pm)} actions a day.`);
+      show(qApp, "appPrice", "appBuy", null);
+      if (qPass.terms) $("passTerms").textContent = qPass.terms;
+    }
+    function show(q, priceId, btnId, noteId, okNote) {
+      $(priceId).textContent = q.available ? MS.usd(q.price) : "";
+      $(btnId).disabled = !q.available;
+      const reason = q.available ? "" : "Not available right now: " + (q.reason || "the station can't sell this amount at the moment") + (/capacity/.test(q.reason || "") ? `. Today the station has ${MS.mana(room())} Mana a day left to sell.` : ".");
+      if (noteId) $(noteId).textContent = q.available ? okNote : reason;
+      else if (!q.available) MS.say("appMsg", reason, "err");
+    }
+    const room = () => { const s = BigInt(L.sellable || 0), d = BigInt(L.sold || 0); return s > d ? s - d : 0n; };
+
+    // ---------- state for the chosen wallet ----------
+    const myApps = () => MSWallets.list().filter((w) => /^App/.test(w.name));
+    const hasCode = (addr) => MS.appC(addr).functions.get({ user: addr }).then(() => true, () => false);
+    const planFor = (target, kind) => (L.paid || []).find((p) => p.target === target && p.kind === kind && Number(p.expiry) > Date.now());
+
+    async function refresh() {
+      me = MS.active()?.address || null;
+      $("needWallet").hidden = !!me; if (!me) MS.say("needWallet", "Choose a wallet in the top right first. A test wallet takes one click and holds nothing of value.");
+      L = await MS.read("list_connected").catch(() => ({}));
+      await Promise.all([quoteAll(), passState(), appState(), mine(), balance()]);
+    }
+    async function balance() {
+      if (!me) { $("balance").textContent = ""; return; }
+      const b = await MS.token().functions.balance_of({ owner: me }).then((r) => r.result?.value, () => "0");
+      $("balance").textContent = `${MS.short(me)} has ${MS.usd(b)}`;
+    }
+
+    // Pass: one per wallet. If there is one, show it instead of the form.
+    async function passState() {
+      const p = me && planFor(me, 2);
+      $("passForm").hidden = !!p; $("passActive").hidden = !p;
+      if (!p) return;
+      $("passActive").replaceChildren(itemCard(p, "Your pass is active", true));
+    }
+    async function appState() {
+      const apps = myApps(), sel = $("appSel"), keep = sel.value || MS.store.get("ms.app");
+      sel.replaceChildren(...apps.map((w) => new Option(`${w.name} · ${MS.short(w.address)}`, w.address)));
+      if (!apps.length) sel.append(new Option("No app yet: create a test app", ""));
+      if (apps.some((w) => w.address === keep)) sel.value = keep;
+      const a = sel.value; MS.store.set("ms.app", a || "");
+      $("appUpload").hidden = true; $("appForm").hidden = true; $("appActive").hidden = true;
+      if (!a) { $("appState").textContent = "An app here is a key kept in this browser. Its contract lives at the key's address."; return; }
+      const [code, free] = [await hasCode(a), (L.free_apps || []).find((x) => x.contract_id === a && x.active)];
+      const plan = planFor(a, 1);
+      if (!code) {
+        $("appState").textContent = "Not on chain yet.";
+        $("appUpload").hidden = false; $("upPrice").textContent = "";
+        const q = await MS.read("quote_big_upload", { token: TOK, mana: String(uploadReserve()) }).catch(() => ({}));
+        $("upPrice").textContent = q.available ? MS.usd(q.price) : ""; $("upBtn").disabled = !q.available;
+        if (!q.available) MS.say("appMsg", "Uploads aren't available right now: " + (q.reason || "try again later") + ".", "err");
+        return;
+      }
+      if (free) { $("appState").textContent = `On chain. The station owner already gives this app ${MS.mana(free.mana_per_day)} Mana a day for free, so it doesn't need a plan.`; return; }
+      if (plan) { $("appState").textContent = "On chain, with a plan:"; $("appActive").hidden = false; $("appActive").replaceChildren(itemCard(plan, "Plan active", false)); return; }
+      $("appState").textContent = "On chain. Choose a daily amount for its users.";
+      $("appForm").hidden = false;
+    }
+
+    // ---------- one row / card for a purchase ----------
+    function itemCard(p, title, isPass) {
+      const li = document.createElement("li"); li.className = "item"; li.style.borderTop = "0";
+      const used = Number(BigInt(p.used_24h || 0)), cap = Number(BigInt(p.mana_per_day || 1));
+      li.innerHTML = `<div class="stack" style="gap:4px"><h3></h3><div class="meta"></div></div><div class="acts"></div><div class="usage"><div class="bar"><i></i></div></div>`;
+      li.querySelector("h3").textContent = title;
+      li.querySelector(".meta").textContent = `${MS.mana(p.mana_per_day)} Mana a day · ${MS.mana(p.used_24h)} used in the last 24 hours · until ${MS.when(p.expiry)}`;
+      li.querySelector(".bar i").style.width = Math.min(100, used / cap * 100).toFixed(1) + "%";
+      const acts = li.querySelector(".acts");
+      if (isPass && MS.PG.openApp) acts.append(btn("Test my pass", (b) => MS.run(b, "passMsg", testPass), true));
+      acts.append(btn("Renew", (b) => MS.run(b, isPass ? "passMsg" : "appMsg", () => renew(p))));
+      acts.append(btn("Cancel", (b) => MS.run(b, isPass ? "passMsg" : "appMsg", () => cancelAllowance(p))));
+      const ul = document.createElement("ul"); ul.className = "items"; ul.append(li); return ul;
+    }
+    function btn(label, fn, main = false) { const b = document.createElement("button"); b.type = "button"; b.className = "btn btn-small " + (main ? "btn-main" : "btn-quiet"); b.textContent = label; b.addEventListener("click", () => fn(b)); return b; }
+
+    // ---------- actions ----------
+    const approveAnd = (fn, args, price) => [[MS.token(), "approve", { owner: me, spender: ST, value: price }], [MS.station(), fn, args]];
+    $("passForm").addEventListener("submit", (e) => { e.preventDefault(); MS.run($("passBuy"), "passMsg", async () => {
+      if (!me) throw new Error("Choose a wallet first (top right).");
+      const q = qPass; if (!q.available) throw new Error(q.reason || "not available");
+      const mana = picked($("passSize")), days = picked($("passDays"));
+      await MS.send(approveAnd("buy_allowance", { buyer: me, kind: 2, target: me, mana_per_day: String(MS.units(mana)), days: String(days), token: TOK, max_price: q.price }, q.price));
+      await refresh(); return `Your pass is active: ${mana} Mana a day for ${days} day${days === 1 ? "" : "s"}. Press "Test my pass" to see it pay for a transaction.`;
+    }); });
+    async function testPass() {
+      const r = await MS.send([[MS.appC(MS.PG.openApp), "play", { user: me }]], { rc: 19000000n, stationPays: true });
+      await refresh(); return `It worked: a call to an app nobody sponsors, and your pass paid ${MS.mana(r.rc_used, 3)} Mana. Your wallet paid nothing.`;
+    }
+    $("appForm").addEventListener("submit", (e) => { e.preventDefault(); MS.run($("appBuy"), "appMsg", async () => {
+      if (!me) throw new Error("Choose a wallet first (top right).");
+      const a = $("appSel").value; if (!a) throw new Error("Create a test app first.");
+      const q = qApp; if (!q.available) throw new Error(q.reason || "not available");
+      const mana = picked($("appSize")), days = picked($("appDays"));
+      await MS.send(approveAnd("buy_allowance", { buyer: me, kind: 1, target: a, mana_per_day: String(MS.units(mana)), days: String(days), token: TOK, max_price: q.price }, q.price), { cosign: a });
+      await refresh(); return `Done: ${MS.short(a)}'s users now share ${mana} Mana a day for ${days} day${days === 1 ? "" : "s"}. Try it on the Try it page.`;
+    }); });
+    $("newApp").addEventListener("click", () => { const w = MSWallets.create("App " + (myApps().length + 1)); MS.store.set("ms.app", w.address); appState(); });
+    $("appSel").addEventListener("change", () => { MS.store.set("ms.app", $("appSel").value); appState(); });
+
+    // Upload: buy a ticket, upload with it, then end the ticket and get the unused part back. Three steps, one button.
+    let limits = null;
+    const code = () => Uint8Array.from(atob(window.MS_APP_CODE || ""), (c) => c.charCodeAt(0));
+    function uploadRc() {   // same formula as helper/payer.js estimateUploadRc
+      if (!limits) return 3n * M;
+      const bytes = BigInt(code().length + 600);
+      const raw = bytes * (BigInt(limits.disk_storage_cost) + BigInt(limits.network_bandwidth_cost)) + bytes * 1700n * BigInt(limits.compute_bandwidth_cost) + 3000000n * BigInt(limits.compute_bandwidth_cost);
+      return (raw * 115n + 99n) / 100n;
+    }
+    const uploadReserve = () => ((uploadRc() + M - 1n) / M) * M;   // whole Mana, rounded up
+    $("upBtn").addEventListener("click", () => MS.run($("upBtn"), "appMsg", async () => {
+      if (!me) throw new Error("Choose a wallet first (top right).");
+      const a = $("appSel").value; const reserve = uploadReserve();
+      const q = await MS.read("quote_big_upload", { token: TOK, mana: String(reserve) }); if (!q.available) throw new Error(q.reason || "not available");
+      MS.say("appMsg", "1 of 3: reserving Mana for the upload…");
+      await MS.send(approveAnd("buy_big_upload", { buyer: me, payee: a, mana: String(reserve), token: TOK, max_price: q.price, allow_upload: true }, q.price));
+      MS.say("appMsg", "2 of 3: uploading your app. The station pays from the ticket…");
+      const c = new Contract({ id: a, abi: MS.ABI.app, provider: MS.provider, signer: MSWallets.signer(a, MS.provider), bytecode: code() });
+      const { transaction, receipt } = await c.deploy({ payer: ST, payee: a, rcLimit: String(uploadRc()) }); await transaction.wait("byBlock", 120000);
+      MS.say("appMsg", "3 of 3: ending the ticket and refunding the unused part…");
+      try { await MS.send([[MS.station(), "cancel_big_upload", { buyer: me, payee: a }]]); } catch {}
+      await refresh(); return `Your app is on chain at ${a}. The upload used ${MS.mana(receipt.rc_used)} Mana, paid by the station. Now choose a daily amount for its users.`;
+    }));
+
+    async function renew(p) {
+      const days = 7; const q = await MS.read("quote_allowance", { token: TOK, mana_per_day: p.mana_per_day, days: String(days) });
+      if (!q.available) throw new Error(q.reason || "not available");
+      if (!confirm(`Add 7 more days at ${MS.mana(p.mana_per_day)} Mana a day for ${MS.usd(q.price)}?`)) return "Nothing changed.";
+      await MS.send(approveAnd("renew", { payer: me, id: p.id, days: String(days), token: TOK, max_price: q.price }, q.price));
+      await refresh(); return "Renewed for 7 more days.";
+    }
+    async function refundOf(p) {
+      const a = (await MS.read("get_allowance", { id: p.id })).allowance || {};
+      let r = 0n, refunded = 0n;
+      for (const id of a.purchase_ids || []) { const e = await MS.read("get_escrow", { purchase_id: id }); r += BigInt(e.refundable_now || 0); refunded += BigInt(e.purchase?.refunded || 0); }
+      return { refund: r, cancelled: refunded > 0n && r === 0n, paid: a.total_paid };
+    }
+    async function cancelAllowance(p) {
+      const { refund } = await refundOf(p);
+      if (!confirm(`Cancel? You get ${MS.usd(refund)} back. It keeps working to the end of today's paid day.`)) return "Nothing changed.";
+      await MS.send([[MS.station(), "cancel_allowance", { buyer: me, id: p.id }]]);
+      await refresh(); return `Cancelled. ${MS.usd(refund)} went back to your wallet.`;
+    }
+
+    // ---------- everything this wallet bought ----------
+    async function mine() {
+      const ul = $("mine"); if (!me) return;
+      const rows = [];
+      for (const p of (L.paid || []).filter((x) => x.buyer === me)) {
+        const ended = Number(p.expiry) <= Date.now(); const { refund, cancelled, paid } = await refundOf(p);
+        const what = p.kind === 2 ? (p.target === me ? "Mana pass for this wallet" : "Mana pass for " + MS.short(p.target)) : "App plan for " + (MSWallets.list().find((w) => w.address === p.target)?.name || MS.short(p.target));
+        const state = ended ? ["Ended", "warn"] : cancelled ? ["Cancelled, runs to the end of today", "warn"] : p.suspended ? ["Suspended", "bad"] : ["Active", "ok"];
+        rows.push({ what, meta: `${MS.mana(p.mana_per_day)} Mana a day · ${MS.mana(p.used_24h)} used in 24 h · until ${MS.when(p.expiry)} · paid ${MS.usd(paid)}`, state, refund,
+          acts: ended || cancelled ? [] : [["Renew", () => renew(p)], ...(refund > 0n ? [[`Cancel (get ${MS.usd(refund)} back)`, () => cancelAllowance(p)]] : [])] });
+      }
+      for (const w of MSWallets.list().filter((w) => /^App/.test(w.name))) {
+        const t = (await MS.read("get_ticket", { payee: w.address }).catch(() => ({}))).ticket;
+        if (!t || t.buyer !== me) continue;
+        const e = await MS.read("get_escrow", { purchase_id: t.purchase_id }).catch(() => ({})); if (e.purchase?.closed) continue;
+        const ended = Number(t.expiry) <= Date.now(); const refund = BigInt(e.refundable_now || 0);
+        rows.push({ what: "Upload ticket for " + w.name, meta: `${MS.mana(t.remaining)} of ${MS.mana(t.mana)} Mana left · until ${MS.when(t.expiry)} · paid ${MS.usd(t.paid)}`, state: ended ? ["Ended", "warn"] : ["Active", "ok"], refund,
+          acts: ended ? [["Close", () => MS.send([[MS.station(), "close_ticket", { payee: w.address }]]).then(refresh).then(() => "Closed.")]] : [[`End early (get ${MS.usd(refund)} back)`, () => MS.send([[MS.station(), "cancel_big_upload", { buyer: me, payee: w.address }]]).then(refresh).then(() => "Ended. The refund went back to your wallet.")]] });
+      }
+      ul.replaceChildren(...rows.map((r) => {
+        const li = document.createElement("li"); li.className = "item";
+        li.innerHTML = `<div class="stack" style="gap:4px"><h3><span></span> <span class="pill"></span></h3><div class="meta"></div></div><div class="acts"></div>`;
+        li.querySelector("h3 span").textContent = r.what; const pill = li.querySelector(".pill"); pill.textContent = r.state[0]; pill.classList.add(r.state[1]);
+        li.querySelector(".meta").textContent = r.meta;
+        for (const [label, fn] of r.acts) li.querySelector(".acts").append(btn(label, (b) => MS.run(b, "mineMsg", fn)));
+        return li;
+      }));
+      if (!rows.length) ul.innerHTML = '<li class="empty">Nothing yet. A pass or an app plan you buy shows up here, with what you\'d get back if you cancelled now.</li>';
+    }
+
+    MS.onWallet(refresh);
+    MS.provider.call("chain.get_resource_limits", {}).then((r) => { limits = r.resource_limit_data; }).catch(() => {}).finally(refresh);
+    if (!MS.active() && MSWallets.list().some((w) => w.name === "Owner")) MS.use("test:" + MSWallets.list().find((w) => w.name === "Owner").address);
+  })();
+  </script>
+</body>
+</html>

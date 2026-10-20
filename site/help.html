@@ -1,0 +1,103 @@
+<!doctype html>
+<!-- Built from site/src/help.html by site/tools/build-pages.mjs. Edit the source, not this file. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2f5bff">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Figtree:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+  <title>Help: how Mana Station works</title>
+  <meta name="description" content="How Mana Station pays Koinos transaction costs: Mana passes for wallets, app plans for builders, free Mana for the owner's apps, refunds, limits and who holds your payment.">
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
+   {"@type":"Question","name":"What is Mana?","acceptedAnswer":{"@type":"Answer","text":"Mana is what a Koinos transaction costs. It comes from holding KOIN and refills by itself, about 20% a day. Mana Station holds the KOIN and pays the Mana for you."}},
+   {"@type":"Question","name":"What does a Mana pass cover?","acceptedAnswer":{"@type":"Answer","text":"Your wallet's own transactions on any Koinos app, up to a daily amount. It never pays to move tokens."}},
+   {"@type":"Question","name":"Can I cancel?","acceptedAnswer":{"@type":"Answer","text":"Yes. You get back every whole day you haven't started, in the stablecoin you paid with."}}]}
+  </script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <div class="testnet-bar"><div class="wrap"><span>Playground on the Koinos testnet. Nothing here costs real money.</span></div></div>
+  <header class="site-head">
+    <div class="wrap">
+      <a class="brand" href="index.html" aria-label="Mana Station home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--ink)"/><path d="M16 6c4 5 7 8.6 7 12.4A7 7 0 0 1 9 18.4C9 14.6 12 11 16 6Z" fill="var(--mana)"/><rect x="11" y="20" width="10" height="3" rx="1.5" fill="var(--spark)"/></svg>
+        Mana Station
+      </a>
+      <nav class="nav" aria-label="Main">
+        <a href="get.html">Get Mana</a>
+        <a href="play.html">Try it</a>
+        <a href="help.html" aria-current="page">Help</a>
+        <a href="owner.html">Owner</a>
+      </nav>
+      <div class="wallet-slot" id="walletChip"></div>
+    </div>
+  </header>
+
+  <main id="main" class="wrap page">
+    <div class="page-head">
+      <h1>Help</h1>
+      <p class="lede">Every Koinos transaction needs Mana, and Mana comes from holding KOIN. Mana Station holds the KOIN and pays the Mana, so you, your users or your apps don't have to.</p>
+    </div>
+
+    <section class="panel" aria-labelledby="h-wallet">
+      <h2 id="h-wallet">A Mana pass for your wallet</h2>
+      <ol class="flow">
+        <li><h3>Buy a pass</h3><p class="small">On <a href="get.html#wallet">Get Mana</a>, pick a daily amount and 1, 7 or 30 days. Your wallet doesn't need KOIN: the station pays for the purchase too.</p></li>
+        <li><h3>Send as usual</h3><p class="small">Any app or script that names the station as the payer gets your transaction paid, up to your daily amount. Apps built for Mana Station do this for you.</p></li>
+        <li><h3>Cancel any time</h3><p class="small">Whole days you haven't started come back to you in tUSDT (vUSDT or vUSDC on mainnet).</p></li>
+      </ol>
+      <p class="small">A pass never pays to move tokens (sending, approving or burning KOIN or stablecoins), never pays for uploading a contract, and only pays for transactions your own wallet signs.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="h-app">
+      <h2 id="h-app">Covering your app's users</h2>
+      <ol class="flow">
+        <li><h3>Put your app on chain</h3><p class="small">Not uploaded yet? <a href="get.html#app">Get Mana</a> uploads it with a 24-hour ticket and refunds the unused part.</p></li>
+        <li><h3>Buy an app plan</h3><p class="small">A daily amount shared by all its users. Your app's own key co-signs, so nobody can buy a plan for an app that isn't theirs.</p></li>
+        <li><h3>Point your app at the station</h3><p class="small">Send users' transactions with the station as payer and the user as payee. If the station says no, fall back to the user's own Mana.</p></li>
+      </ol>
+      <div class="example"><b>For developers.</b> With Koilib: <span class="mono">{ payer: STATION, payee: user, rcLimit: "19000000" }</span>. Keep <span class="mono">rcLimit</span> close to what the action really uses: the station counts the limit, not what was spent.</div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-owner">
+      <h2 id="h-owner">Free Mana for the owner's apps</h2>
+      <p>On the <a href="owner.html">Owner page</a>, the station's owner adds any contract with a size (Small, Medium, Large or a custom amount a day) and changes or removes it in one step. Users of those apps pay nothing and the owner pays no fee.</p>
+    </section>
+
+    <section class="stack" aria-labelledby="qa-title">
+      <h2 id="qa-title" style="font-size:var(--step-2)">Questions</h2>
+      <div class="qa">
+        <details><summary>What happens if I cancel?</summary><div><p>You get back every whole day you haven't started. The current day counts as used, so one day is the minimum charge. It keeps working until the end of that day.</p><div class="example">Bought 7 days, cancelled on day 1: 6/7 of the price back.</div></div></details>
+        <details><summary>How do upload tickets work?</summary><div><p>A ticket reserves Mana for 24 hours at the full price, whether you use it or not. End it early and you get back the value of the Mana you didn't use, reduced by the time that has passed, with at least 5% kept.</p></div></details>
+        <details><summary>Can one user use up an app's whole plan?</summary><div><p>No. Each user has a few actions a minute and a daily cap, and brand-new accounts get a smaller share on their first day.</p></div></details>
+        <details><summary>How many purchases can one wallet hold?</summary><div><p>Up to five at a time: passes, app plans and upload tickets together.</p></div></details>
+        <details><summary>What if the station is paused?</summary><div><p>It pays for nothing while paused, and the paused time is added back to your term.</p></div></details>
+        <details><summary>Who holds my payment?</summary><div><p>The station contract holds it until your term ends, then it goes to the operator, or back to you if you cancel. The station's own key can't move it. Anything else that moves money or changes the code needs two of the three council members, then a 48-hour public wait, during which any one of them can veto. It isn't fully trustless, but no single person can take your payment.</p></div></details>
+        <details><summary>I got "the station didn't cover this one"</summary><div><p>You hit a limit for now: a few actions a minute, your daily amount, or the station's daily budget. Wait a minute and try again. A refused attempt costs nothing.</p></div></details>
+      </div>
+    </section>
+
+    <section class="panel panel-quiet" aria-labelledby="words-title">
+      <h2 id="words-title">Three words you'll see</h2>
+      <dl class="glossary">
+        <div><dt>Mana</dt><dd>What a Koinos transaction costs. It comes from holding KOIN and refills by itself, about 20% a day.</dd></div>
+        <div><dt>KOIN</dt><dd>The Koinos coin. The station holds it so you don't have to.</dd></div>
+        <div><dt>vUSDT and vUSDC</dt><dd>Dollar stablecoins on Koinos, used to pay. On this playground it's a test coin, tUSDT.</dd></div>
+      </dl>
+    </section>
+  </main>
+
+  <footer class="site-foot"><div class="wrap"><span>Mana Station, built on Koinos</span><p>Payments are held by the station contract until a term ends; cancel any time for the unused part. The station's key alone can't move funds: that takes two of three council members, a public wait and no veto. Draft terms, under legal review.</p></div></footer>
+  <script src="https://cdn.jsdelivr.net/npm/koilib@9.4.1/dist/koinos.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/kondor-js@1.3.0/dist/kondor.min.js"></script>
+  <script src="abis.js"></script>
+  <script src="playground.js"></script>
+  <script src="wallets.js"></script>
+  <script src="ms.js"></script>
+</body>
+</html>

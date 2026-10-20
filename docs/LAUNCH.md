@@ -2,9 +2,10 @@
 
 Status on 2026-10-20 (branch `fix/squat-freeze-stall`, PR #1):
 
-- **Unit tests:** 71 of 71 pass (`contracts/station/assembly/__tests__/Station.spec.ts`).
-- **Testnet:** 100 of 100 checks pass (`testnet/run_tests.mjs`).
-- **Playground:** a station is live on the Koinos testnet and handed over to Carl's wallets.
+- **Unit tests:** 76 of 76 pass (`contracts/station/assembly/__tests__/Station.spec.ts`), including wallet passes and free checkout; every new rule is mutation-checked.
+- **Testnet:** `testnet/run_tests.mjs` (now also covers passes and free checkout).
+- **Playground:** station v3 (`1JnSnBNHrKxWGwWeriuhK1DrG5rv3KRFqc`) is live on the Koinos testnet and handed over to Carl's wallets (owner + council 1–3).
+- **Three ways in (Oct 20):** a **Mana pass** for a wallet, an **app plan** for a contract, and **free Mana** the owner gives their own apps. A wallet with no KOIN and no Mana can buy, renew and cancel (free checkout).
 - **Not done yet:** mainnet deployment, a legal review of the terms, and a domain.
 
 ## 1. Access: who can do what
@@ -15,13 +16,14 @@ Status on 2026-10-20 (branch `fix/squat-freeze-stall`, PR #1):
 
 | Action | Who | Tested in |
 |---|---|---|
-| Status, prices, quotes, allowances, tickets, escrow, connected apps, proposals | Anyone, with no wallet | `console.html`, `buy.html`, testnet run |
+| Status, prices, quotes, passes, plans, tickets, escrow, connected apps, proposals | Anyone, with no wallet | `owner.html`, `get.html`, testnet run |
 
-### Buying (app builders)
+### Buying (wallets and app builders)
 
 | Action | Who must sign | Tested in |
 |---|---|---|
-| `buy_allowance`: daily free play for an app | The buyer **and the app itself** (so nobody can claim someone else's app) | unit "#3 target squat"; testnet "buy_allowance without the target app's signature refused" |
+| `buy_allowance` kind 1: an **app plan** | The buyer **and the app itself** (so nobody can claim someone else's app) | unit "#3 target squat"; testnet "buy_allowance without the target app's signature refused" |
+| `buy_allowance` kind 2: a **Mana pass** for a wallet | The buyer **and the pass wallet itself** | unit "wallet Mana pass … only the wallet itself can approve"; testnet "wallet Mana pass without the wallet's own signature refused" |
 | `renew` | The wallet paying for the renewal signs. Anyone may extend an allowance with their own money; it can never be renewed without a signed payment. | unit "no auto-renew… only the payer can renew" |
 | `buy_big_upload`: a 24-hour ticket | The buyer. The ticket only ever pays for the payee's *own* contract, and the payee still signs those transactions. | unit "big-upload ticket only sponsors calls to the payee's own contract"; testnet ticket section |
 | `cancel_allowance` / `cancel_big_upload` | The buyer. A suspended buyer can't self-cancel; the owner can refund them instead. | unit escrow and refund tests; testnet "suspended buyer cannot self-cancel" |
@@ -70,6 +72,7 @@ Tested in:
 
 On each transaction it is asked to pay for, the station checks `authorize(transaction_application)` in this order:
 
+0. **Free checkout:** a wallet's own `approve` (to the station, in a priced stablecoin) plus `buy_allowance` / `buy_big_upload` / `renew` with that wallet as buyer, or a single `cancel_allowance` / `cancel_big_upload` by the buyer. Per-player limits apply. Buys are refused while paused; cancels aren't. (unit "free checkout"; testnet "checkout" section)
 1. **Calls to the station itself, from the owner or a council member.** Allowed for admin and votes, even while paused, within the same per-minute and per-day limits as players.
 2. **Paused:** nothing else is paid for.
 3. **A big-upload ticket holder:** uploading or calling *their own* contract, up to the ticket's Mana, for 24 hours.
@@ -78,11 +81,12 @@ On each transaction it is asked to pay for, the station checks `authorize(transa
    - per-function caps, or listed functions only in strict mode;
    - per-player limits: a few actions a minute (10 on the playground), then a pause, one per block, and a daily cap that is smaller for new players;
    - the app's daily amount; an app with a reserved share may go up to 20% over it (owner-configurable), taken from the reserve.
-5. **Calls into an app with paid free play**, under the same per-player limits.
-6. **Never paid:**
-   - token transfers;
-   - transactions mixing several contracts;
-   - unknown apps;
+5. **Calls into an app with an app plan**, under the same per-player limits.
+6. **The payee's own Mana pass**, for anything no app pays for: calls to any contract (also several in one transaction), up to the pass's daily Mana. Never the station, KOIN or stablecoins, never a KCS `transfer` / `approve` / `burn` on any contract, never uploads. Free and paid apps are used first, so a pass isn't spent where an app already pays. (unit "wallet Mana pass"; testnet "pass" section)
+7. **Never paid:**
+   - token transfers (by anyone, pass or not);
+   - mixed-contract transactions from wallets without a pass;
+   - unknown apps, for wallets without a pass;
    - anything that would take the station below its safety floor.
 
 A refused transaction costs the player nothing. The player's app can then offer to use their own Mana instead (`helper/payer.js` → `sendAction`).
@@ -150,8 +154,14 @@ Once the station is serving Knode, switch off Knode's own sponsor: `set_sponsor_
 
 ## 5. Try it on the playground
 
+Pick your wallet once, top right; every page uses it.
+
 | Page | What to do |
 |---|---|
-| `buy.html` | Create an app wallet, buy a ticket and upload "your app" with it, buy daily free play (the app co-signs), see the refund each purchase would give now, then renew, cancel or end early. |
-| `play.html` | Choose the demo app or your paid app and tap as a player with no KOIN. The tap stands in for a real action such as a Knode prediction or a SwarmTales vote. |
-| `console.html` | Sign as Owner or a council member: connect or disconnect apps, pause, propose, approve, veto, execute. |
+| `get.html` → For my wallet | Buy a Mana pass (Light / Regular / Heavy or custom, 1, 7 or 30 days), then "Test my pass": a call to an app nobody sponsors, paid by your pass. Works from a wallet with no KOIN. |
+| `get.html` → For my app | Create a test app, "Upload my app" (ticket, upload, refund of the unused part in one click), then buy an app plan (the app co-signs). |
+| `get.html` → Your Mana | Everything the wallet holds, with the refund you'd get now; renew or cancel. |
+| `play.html` | Tap as a brand-new player with nothing in their wallet, on the demo app or on your app with a plan. The tap stands in for a real action such as a Knode prediction. |
+| `owner.html` | As Owner: give any contract free Mana (Small / Medium / Large or custom), change or remove it; see customers; pause. As a council member: pause, approve, veto, carry out. |
+
+Old links (`buy.html`, `console.html`, `how-it-works.html`) forward to the new pages.

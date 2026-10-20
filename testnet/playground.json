@@ -1,8 +1,15 @@
 {
   "network": "https://testnet.koinosfoundation.org",
   "chain_id": "EiAIKVvm6-V2qmsmUvPJy09vCCLbtn9lHFpwrJbcTIEWRQ==",
-  "station": "1D5GC6nPqVV2WFV5hGRy86bzgezErHz5TD",
+  "station": "1JnSnBNHrKxWGwWeriuhK1DrG5rv3KRFqc",
   "demo_app": "1JF71KYwaRa4XTfuL8fi4fkH8j4qUrN3Kn",
   "test_stablecoin": "1G85uRcAKiMPQjXv7jYc7VQWMe37NtNT2q",
-  "koin": "1FaSvLjQJsCJKq5ybmGsMMQs8RQYyVv8ju"
+  "koin": "1FaSvLjQJsCJKq5ybmGsMMQs8RQYyVv8ju",
+  "open_app": "1MKjQ9zfcLetsQZD9g4JgdxoEpW6Z3kiQX",
+  "owner": "1GcusCGwkbQWoRm4Vbwc8eLxNj8dCdKujf",
+  "council": [
+    "1C5WCih2qyccDKzqMRAGbDP9x9LHL7Sqwb",
+    "1F7FqZ8jLhpwSAaYsmjbpL2DwvutGPDCx9",
+    "1nKNbSUmGQacouNmm4crc9aR1Td8jALyU"
+  ]
 }
