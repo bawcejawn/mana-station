@@ -71,7 +71,7 @@ async function admin(fn, args, rcLimit = 2n * M) {
 const tbal = async (a) => BigInt((await read(C(TOK, abiT), "balance_of", { owner: a })).value || 0);
 
 // ---------------------------------------------------------------- 0. preflight
-console.log(`chain ${chainId}  rpc ${RPC}  KOIN ${KOIN}`);
+console.log(`chain ${chainId}  rpc ${RPC.replace(/apikey=[^&]+/, "apikey=***")}  KOIN ${KOIN}`); // never print the API key
 const kbal = async (a) => BigInt((await new Contract({ id: KOIN, abi: utils.tokenAbi, provider }).functions.balanceOf({ owner: a })).result?.value || 0);
 const fb = await kbal(FUN);
 check("preflight", "funder 1N6yd5… holds tKOIN", fb > 0n, `${Number(fb) / 1e8} tKOIN, Mana ${Number(await rc(FUN)) / 1e8}`);
