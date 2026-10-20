@@ -646,6 +646,47 @@ describe("wallet Mana pass (kind 2, Carl Oct 20: any app, no token moves)", () =
   });
 });
 
+function opA(contract: Uint8Array, ep: u32, args: Uint8Array): protocol.operation {
+  const o = new protocol.operation(); o.call_contract = new protocol.call_contract_operation(contract, ep, args); return o;
+}
+function approveOp(token: Uint8Array, owner: Uint8Array, spender: Uint8Array): protocol.operation {
+  return opA(token, 0x74e21680, Protobuf.encode(new station.kcs_approve_args(owner, spender, 1000 * USD), station.kcs_approve_args.encode));
+}
+function buyOp(buyer: Uint8Array, kind: u32, target: Uint8Array, token: Uint8Array): protocol.operation {
+  return opA(STATION, 0x60422f5f, Protobuf.encode(new station.buy_allowance_arguments(buyer, kind, target, 5 * M, 1, token, 1000 * USD), station.buy_allowance_arguments.encode));
+}
+describe("free checkout (Oct 20): a wallet with no Mana can buy, renew and cancel", () => {
+  it("the station pays approve + buy by the payee in a priced token; nothing else", () => {
+    const s = setup();
+    tx(U2, 1 * M, [approveOp(USDT, U2, STATION), buyOp(U2, 2, U2, USDT)]); expect(ok(s)).toBe(true);
+    at(NOW + 3000); tx(U2, 1 * M, [approveOp(USDT, U2, STATION), opA(STATION, 0x1c1d9f26, Protobuf.encode(new station.buy_big_upload_arguments(U2, U2, 60 * M, USDT, 1000 * USD, true), station.buy_big_upload_arguments.encode))]); expect(ok(s)).toBe(true);
+    at(NOW + 3000); tx(U2, 1 * M, [approveOp(USDT, U2, STATION), opA(STATION, 0xa36a2ce1, Protobuf.encode(new station.renew_arguments(U2, 1, 7, USDT, 1000 * USD), station.renew_arguments.encode))]); expect(ok(s)).toBe(true);
+    at(NOW + 3000); tx(U1, 1 * M, [approveOp(USDT, U2, STATION), buyOp(U2, 2, U2, USDT)]); expect(ok(s)).toBe(false);   // someone else's approve
+    at(NOW + 3000); tx(U2, 1 * M, [approveOp(USDT, U1, STATION), buyOp(U2, 2, U2, USDT)]); expect(ok(s)).toBe(false);   // approve from another owner
+    at(NOW + 3000); tx(U2, 1 * M, [approveOp(USDT, U2, OTHER), buyOp(U2, 2, U2, USDT)]); expect(ok(s)).toBe(false);     // approve to another spender
+    at(NOW + 3000); tx(U2, 1 * M, [approveOp(USDT, U2, STATION), buyOp(U1, 2, U1, USDT)]); expect(ok(s)).toBe(false);   // buying for another buyer
+    at(NOW + 3000); tx(U2, 1 * M, [approveOp(USDT, U2, STATION), buyOp(U2, 2, U2, USDC)]); expect(ok(s)).toBe(false);   // token mismatch
+    at(NOW + 3000); tx(U2, 1 * M, [approveOp(OTHER, U2, STATION), buyOp(U2, 2, U2, OTHER)]); expect(ok(s)).toBe(false); // not a priced token
+    at(NOW + 3000); tx(U2, 1 * M, [buyOp(U2, 2, U2, USDT), approveOp(USDT, U2, STATION)]); expect(ok(s)).toBe(false);   // wrong order
+    at(NOW + 3000); tx(U2, 1 * M, [approveOp(USDT, U2, STATION), opA(STATION, 0x11111111, new Uint8Array(0))]); expect(ok(s)).toBe(false); // other station call
+    at(NOW + 3000); tx(U2, 4 * M, [approveOp(USDT, U2, STATION), buyOp(U2, 2, U2, USDT)]); expect(ok(s)).toBe(false);   // above hard_max
+    at(NOW + 3000); tx(U2, 1 * M, [opA(USDT, 0x27f576ca, new Uint8Array(8))]); expect(ok(s)).toBe(false);              // a plain token transfer
+  });
+  it("cancel by the buyer is paid, for another buyer refused; per-user limits apply; paused: cancel yes, buy no", () => {
+    const s = setup();
+    const cancel = (buyer: Uint8Array): protocol.operation => opA(STATION, 0xc7643cce, Protobuf.encode(new station.cancel_allowance_arguments(buyer, 1), station.cancel_allowance_arguments.encode));
+    const cancelBig = (buyer: Uint8Array): protocol.operation => opA(STATION, 0xc2985745, Protobuf.encode(new station.cancel_big_upload_arguments(buyer, U2), station.cancel_big_upload_arguments.encode));
+    tx(U2, 1 * M, [cancel(U2)]); expect(ok(s)).toBe(true);
+    at(NOW + 3000); tx(U2, 1 * M, [cancelBig(U2)]); expect(ok(s)).toBe(true);
+    at(NOW + 3000); tx(U2, 1 * M, [cancel(U1)]); expect(ok(s)).toBe(false);
+    for (let i = 0; i < 3; i++) { at(NOW + 3000); tx(U2, 1 * M, [cancel(U2)]); expect(ok(s)).toBe(true); }  // 5 this minute
+    at(NOW + 3000); tx(U2, 1 * M, [cancel(U2)]); expect(ok(s)).toBe(false);                                // per-minute limit, then cooldown
+    signedBy([OWNER]); s.set_paused(new station.set_paused_arguments(true)); signedBy([]);
+    at(NOW + 3000); tx(U1, 1 * M, [cancel(U1)]); expect(ok(s)).toBe(true);
+    at(NOW + 3000); tx(U1, 1 * M, [approveOp(USDT, U1, STATION), buyOp(U1, 2, U1, USDT)]); expect(ok(s)).toBe(false);
+  });
+});
+
 describe("ticket fee config and stablecoin-only money paths", () => {
   it("fee is owner-adjustable in bp, capped at 20%; only vUSDT/vUSDC can be priced (so refunds are never KOIN or Mana)", () => {
     const s = setup(); gS = s;

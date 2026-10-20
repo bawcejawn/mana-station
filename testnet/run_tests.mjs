@@ -388,6 +388,22 @@ const APP3 = A("app3");
   check("pass", "list_connected shows the pass (kind 2) with today's use", !!mine && mine.kind === 2 && BigInt(mine.used_24h || 0) > 0n, JSON.stringify(mine || {}));
   if (mine) { const x = await send(sta("buyer"), "cancel_allowance", { buyer: BUY, id: mine.id }, { rcLimit: M / 2n }); check("pass", "buyer cancels the pass (refund of unused whole days)", x.ok, x.error || ""); }
 }
+// ---------------------------------------------------------------- 8b3. free checkout: a wallet with NO Mana buys and cancels its own pass
+{ const P3 = A("player3");
+  let x = await send(tok("token"), "mint", { to: P3, value: String(10n * M) }, { payer: FUN, payee: TOK, cosigner: "funder" });
+  check("checkout", "mint 10 tUSDT to player3 (a wallet with no KOIN and no Mana)", x.ok, x.error || "");
+  note(`player3 own Mana: ${await rc(P3)}`);
+  const qp = await read(sta(), "quote_allowance", { token: TOK, mana_per_day: String(AU), days: "1" }); const pp = BigInt(qp.price || 0);
+  const buy = await sendOps("player3", [[tok("player3"), "approve", { owner: P3, spender: ST, value: String(pp) }], [sta("player3"), "buy_allowance", { buyer: P3, kind: 2, target: P3, mana_per_day: String(AU), days: "1", token: TOK, max_price: String(pp) }]], { payer: ST, payee: P3, rcLimit: M / 2n });
+  check("checkout", "player3 buys a pass with the station paying the Mana (approve + buy)", buy.ok && buy.events.includes("station.allowance_bought"), buy.error || buy.events);
+  const use = await send(C(APP3, abiA, "player3"), "play", { user: P3 }, sponsored(P3, L));
+  check("checkout", "player3's new pass pays its call to an unconnected app", use.ok, use.error || "");
+  const sneaky = await sendOps("player3", [[tok("player3"), "approve", { owner: P3, spender: BUY, value: "1" }], [sta("player3"), "buy_allowance", { buyer: P3, kind: 2, target: P3, mana_per_day: String(AU), days: "1", token: TOK, max_price: String(pp) }]], { payer: ST, payee: P3, rcLimit: M / 2n });
+  check("checkout", "an approve to anyone but the station is never paid", !sneaky.ok, sneaky.error || "ACCEPTED");
+  const Lc = await read(sta(), "list_connected"); const mine = (Lc.paid || []).find((p) => p.target === P3);
+  if (mine) { const c = await send(sta("player3"), "cancel_allowance", { buyer: P3, id: mine.id }, { payer: ST, payee: P3, rcLimit: M / 2n }); check("checkout", "player3 cancels with the station paying the Mana", c.ok, c.error || ""); }
+  else check("checkout", "player3's pass is listed", false, JSON.stringify(Lc.paid || []));
+}
 { const x = await send(C(APP3, abiA, "player3"), "play", { user: A("player3") }, sponsored(A("player3"), L)); check("connect", "after disconnect its users are no longer sponsored", refusedNot104(x), x.error || "ACCEPTED"); }
 
 // ---------------------------------------------------------------- 8c. audit #1: approved upgrade, then council withdrawal (also returns the test KOIN)

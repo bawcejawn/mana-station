@@ -205,6 +205,13 @@ message registry_object {
 // bytecode, "0x1220…" as shown in contract metadata), 2 withdraw KOIN (to, amount), 3 rescue a token sent by mistake
 // (token, to, amount; never escrowed funds), 4 replace the council (council, threshold), 5 set the delay (delay_ms),
 // 6 set the treasury (to), 7 set the ticket fee (fee_bp), 8 set the owner (to).
+// KCS-4 approve arguments, read by the free-checkout rule (the station pays a buyer's approve + buy).
+message kcs_approve_args {
+  bytes owner = 1 [(koinos.btype) = ADDRESS];
+  bytes spender = 2 [(koinos.btype) = ADDRESS];
+  uint64 value = 3 [jstype = JS_STRING];
+}
+
 message guarded_action {
   uint32 kind = 1;
   bytes hash = 2 [(koinos.btype) = HEX];               // "0x1220…" in tools (koilib hex encoding)

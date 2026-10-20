@@ -1816,6 +1816,69 @@ export namespace station {
     }
   }
 
+  export class kcs_approve_args {
+    static encode(message: kcs_approve_args, writer: Writer): void {
+      const unique_name_owner = message.owner;
+      if (unique_name_owner !== null) {
+        writer.uint32(10);
+        writer.bytes(unique_name_owner);
+      }
+
+      const unique_name_spender = message.spender;
+      if (unique_name_spender !== null) {
+        writer.uint32(18);
+        writer.bytes(unique_name_spender);
+      }
+
+      if (message.value != 0) {
+        writer.uint32(24);
+        writer.uint64(message.value);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): kcs_approve_args {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new kcs_approve_args();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.owner = reader.bytes();
+            break;
+
+          case 2:
+            message.spender = reader.bytes();
+            break;
+
+          case 3:
+            message.value = reader.uint64();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    owner: Uint8Array | null;
+    spender: Uint8Array | null;
+    value: u64;
+
+    constructor(
+      owner: Uint8Array | null = null,
+      spender: Uint8Array | null = null,
+      value: u64 = 0
+    ) {
+      this.owner = owner;
+      this.spender = spender;
+      this.value = value;
+    }
+  }
+
   export class guarded_action {
     static encode(message: guarded_action, writer: Writer): void {
       if (message.kind != 0) {

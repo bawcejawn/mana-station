@@ -1045,6 +1045,31 @@
                             }
                         }
                     },
+                    "kcs_approve_args": {
+                        "fields": {
+                            "owner": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "spender": {
+                                "type": "bytes",
+                                "id": 2,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "value": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
                     "guarded_action": {
                         "fields": {
                             "kind": {

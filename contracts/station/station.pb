@@ -1,5 +1,5 @@
 
-Ûa
+Ùb
 assembly/proto/station.protostationkoinos/options.proto"Ö
 config_object
 owner (B€µRowner
@@ -166,7 +166,11 @@ hard_floor (B0R	hardFloor"Ý
 
 exempt_ids (B€µR	exemptIds%
 open_proposals (RopenProposals#
-next_proposal (RnextProposal"€
+next_proposal (RnextProposal"h
+kcs_approve_args
+owner (B€µRowner
+spender (B€µRspender
+value (B0Rvalue"€
 guarded_action
 kind (Rkind
 hash (B€µRhash
@@ -203,7 +207,7 @@ boost_mana (B0R	boostMana#
 boostUntil
 strict (Rstrict
 active (Ractive
-used_24h (B0Rused24h"Ó
+used_24h (B0Rused24h"ç
 paid_app
 id (Rid
 buyer (B€µRbuyer
@@ -212,7 +216,8 @@ boostUntil
 manaPerDay
 expiry (B0Rexpiry
 used_24h (B0Rused24h
-	suspended (R	suspended"º
+	suspended (R	suspended
+kind (Rkind"º
 escrow_object
 id (Rid
 kind (Rkind

@@ -65,6 +65,9 @@ const DEFAULT_TICKET_FEE_BP: u32 = 500;             // 5% (Carl, 8:10 PM)
 const EP_KCS_TRANSFER: u32 = 0x27f576ca;
 const EP_KCS_APPROVE: u32 = 0x74e21680;
 const EP_KCS_BURN: u32 = 0x859facc5;
+// The station's own buy / renew / cancel entry points (free checkout).
+const EP_BUY_ALLOWANCE: u32 = 0x60422f5f, EP_RENEW: u32 = 0xa36a2ce1, EP_BUY_BIG: u32 = 0x1c1d9f26;
+const EP_CANCEL_ALLOWANCE: u32 = 0xc7643cce, EP_CANCEL_BIG: u32 = 0xc2985745;
 const DEFAULT_TICKET_MS: u64 = 86_400_000;          // ticket lifetime when big_ticket_ms = 0 (Carl, 8:02 PM: 24 h)
 const DEFAULT_MAX_PER_BUYER: u32 = 5;               // audit #3: open allowances per buyer when max_per_buyer = 0
 const SWEEP_MAX: i32 = 8;                           // audit #4: finished purchases closed per buy / renew
@@ -433,6 +436,8 @@ export class Station {
     System.setSystemBufferSize(this.tickets.has(payee) ? BIG_TX_BUFFER : TX_BUFFER);
     const ops = txOps();
     if (ops.length < 1 || ops.length > i32(c.max_ops)) return false;
+    // Free checkout (Oct 20): a wallet with no Mana can still buy, renew or cancel its own purchases.
+    if (this.checkoutOk(c, ops, payee, rc, mana)) return true;
     let allSelf = true, hasUpload = false, allCalls = true;
     for (let i = 0; i < ops.length; i++) {
       const o = ops[i].call_contract;
@@ -532,6 +537,41 @@ export class Station {
     this.allowances.put(u32Key(s.id), s); this.globalWin.put(gw);
     if (u != null) this.users.put(payee, u);
     this.watchReserve(c, mana - rc);
+    return true;
+  }
+
+  /** Free checkout: [token.approve(owner = payee, spender = the station), station.buy_allowance | buy_big_upload | renew
+   *  with the payee as buyer / payer, paying in that same priced token], or a single station.cancel_allowance |
+   *  cancel_big_upload by the payee as buyer. Per-user limits apply (like players), within hard_max and above admin_min.
+   *  The buy itself still checks every signature (buyer, and the app for app plans), price and capacity. */
+  checkoutOk(c: station.config_object, ops: protocol.operation[], payee: Uint8Array, rc: u64, mana: u64): bool {
+    if (ops.length < 1 || ops.length > 2 || rc > c.hard_max || mana - rc < c.admin_min) return false;
+    const last = ops[ops.length - 1].call_contract;
+    if (last == null || !Arrays.equal(last.contract_id, this.contractId)) return false;
+    const ep = last.entry_point;
+    if (ops.length == 1) {
+      if (ep == EP_CANCEL_ALLOWANCE) {
+        const a = Protobuf.decode<station.cancel_allowance_arguments>(last.args, station.cancel_allowance_arguments.decode);
+        if (!isAddress(a.buyer) || !Arrays.equal(a.buyer!, payee)) return false;
+      } else if (ep == EP_CANCEL_BIG) {
+        const a = Protobuf.decode<station.cancel_big_upload_arguments>(last.args, station.cancel_big_upload_arguments.decode);
+        if (!isAddress(a.buyer) || !Arrays.equal(a.buyer!, payee)) return false;
+      } else return false;
+    } else {
+      if (c.paused) return false;
+      const ap = ops[0].call_contract;
+      if (ap == null || ap.entry_point != EP_KCS_APPROVE || !this.prices.has(ap.contract_id)) return false;
+      const x = Protobuf.decode<station.kcs_approve_args>(ap.args, station.kcs_approve_args.decode);
+      if (!isAddress(x.owner) || !Arrays.equal(x.owner!, payee) || !isAddress(x.spender) || !Arrays.equal(x.spender!, this.contractId)) return false;
+      let who: Uint8Array | null = null, tok: Uint8Array | null = null;
+      if (ep == EP_BUY_ALLOWANCE) { const a = Protobuf.decode<station.buy_allowance_arguments>(last.args, station.buy_allowance_arguments.decode); who = a.buyer; tok = a.token; }
+      else if (ep == EP_BUY_BIG) { const a = Protobuf.decode<station.buy_big_upload_arguments>(last.args, station.buy_big_upload_arguments.decode); who = a.buyer; tok = a.token; }
+      else if (ep == EP_RENEW) { const a = Protobuf.decode<station.renew_arguments>(last.args, station.renew_arguments.decode); who = a.payer; tok = a.token; }
+      else return false;
+      if (!isAddress(who) || !Arrays.equal(who!, payee) || tok == null || !Arrays.equal(tok!, ap.contract_id)) return false;
+    }
+    const u = this.userCheck(c, payee, this.now(), this.height(), rc); if (u == null) return false;
+    this.users.put(payee, u);
     return true;
   }
 
