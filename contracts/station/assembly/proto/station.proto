@@ -44,6 +44,13 @@ message config_object {
   reserved 27;                                      // was big_idle_ms (dropped for the time-based ticket model)
   // Audit #3 (Carl, 8:43 PM): open allowances + open big-upload tickets one wallet may hold at once. 0 = default 5.
   uint32 max_per_buyer = 28;
+  // Audit #1 (permission takeover). The council approves money-moving changes and upgrades: `threshold` of `council`
+  // must approve, then `guard_delay_ms` must pass, and any ONE council member can veto during the wait. Owner and
+  // council members are "operators" for everyday actions (pause, suspend, connect apps, prices, limits).
+  // These fields, `owner`, `treasury` and a higher `ticket_fee_bp` change only through council proposals.
+  repeated bytes council = 29 [(koinos.btype) = ADDRESS];
+  uint32 threshold = 30;
+  uint64 guard_delay_ms = 31 [jstype = JS_STRING];
 }
 
 // Carl's reserved app: a fixed RESERVATION of Mana per rolling 24 h (absolute, so adding KOIN never changes it;
@@ -189,6 +196,67 @@ message registry_object {
   repeated uint32 app_ids = 1;
   repeated uint32 open_ids = 2;
   repeated uint32 open_purchases = 3;                // escrow purchases not yet closed (bounded)
+  repeated bytes exempt_ids = 4 [(koinos.btype) = CONTRACT_ID]; // connected free apps (bounded index, for list_connected)
+  repeated uint32 open_proposals = 5;                // council proposals not yet executed or cancelled (bounded)
+  uint32 next_proposal = 6;
+}
+
+// A council-guarded action (audit #1). kind: 1 upgrade the station's code (hash = multihash sha2-256 of the new
+// bytecode, "0x1220…" as shown in contract metadata), 2 withdraw KOIN (to, amount), 3 rescue a token sent by mistake
+// (token, to, amount; never escrowed funds), 4 replace the council (council, threshold), 5 set the delay (delay_ms),
+// 6 set the treasury (to), 7 set the ticket fee (fee_bp), 8 set the owner (to).
+message guarded_action {
+  uint32 kind = 1;
+  bytes hash = 2;
+  bytes to = 3 [(koinos.btype) = ADDRESS];
+  uint64 amount = 4 [jstype = JS_STRING];
+  bytes token = 5 [(koinos.btype) = CONTRACT_ID];
+  repeated bytes council = 6 [(koinos.btype) = ADDRESS];
+  uint32 threshold = 7;
+  uint64 delay_ms = 8 [jstype = JS_STRING];
+  uint32 fee_bp = 9;
+}
+
+message proposal_object {
+  uint32 id = 1;
+  guarded_action action = 2;
+  bytes proposer = 3 [(koinos.btype) = ADDRESS];
+  repeated bytes approvals = 4 [(koinos.btype) = ADDRESS];
+  uint64 created = 5 [jstype = JS_STRING];
+  uint64 ready_at = 6 [jstype = JS_STRING];          // 0 until the threshold is reached; then + guard delay
+  bool executed = 7;
+  bool cancelled = 8;
+  bytes cancelled_by = 9 [(koinos.btype) = ADDRESS];
+}
+
+// Payload of station.proposal_* events.
+message proposal_event {
+  proposal_object proposal = 1;
+  bytes by = 2 [(koinos.btype) = ADDRESS];
+  string what = 3;                                   // created / approved / ready / executed / cancelled
+}
+
+// One connected free app, as list_connected returns it.
+message connected_app {
+  bytes contract_id = 1 [(koinos.btype) = CONTRACT_ID];
+  uint32 app = 2;
+  uint64 mana_per_day = 3 [jstype = JS_STRING];      // its reservation
+  uint64 boost_mana = 4 [jstype = JS_STRING];
+  uint64 boost_until = 5 [jstype = JS_STRING];
+  bool strict = 6;
+  bool active = 7;
+  uint64 used_24h = 8 [jstype = JS_STRING];
+}
+
+// One paid allowance, as list_connected returns it.
+message paid_app {
+  uint32 id = 1;
+  bytes buyer = 2 [(koinos.btype) = ADDRESS];
+  bytes target = 3 [(koinos.btype) = CONTRACT_ID];
+  uint64 mana_per_day = 4 [jstype = JS_STRING];
+  uint64 expiry = 5 [jstype = JS_STRING];
+  uint64 used_24h = 6 [jstype = JS_STRING];
+  bool suspended = 7;
 }
 
 // One prepaid purchase held in the station's escrow (Carl, 7:47 PM). kind 1 = an allowance term, kind 2 = a big-upload
@@ -482,7 +550,7 @@ message get_escrow_totals_result {
 
 // ════════ Admin (owner only) ════════
 
-// @description First-time setup (station key).
+// @description First-time setup. Only valid inside the transaction that uploads the station (so nobody can front-run it).
 // @read-only false
 message init_arguments {
   config_object config = 1;
@@ -601,3 +669,99 @@ message set_price_result {}
 // (withdraw_revenue removed: all payments are escrow; Carl gets funds only through release / ticket settlement.)
 
 // (7:47 PM: the 7:32 "no refunds" rule is superseded: buyer cancel with pro-rata refunds from escrow, see cancel_allowance.)
+
+
+// ═══════ connected apps (Carl, Oct 20: one list, one-step add / remove) ═══════
+
+// @description Connect (or update) a free app: it gets mana_per_day of the station's daily budget for its users. Operator.
+// @read-only false
+message connect_app_arguments {
+  bytes contract_id = 1 [(koinos.btype) = CONTRACT_ID];
+  uint64 mana_per_day = 2 [jstype = JS_STRING];
+  bool strict = 3;                                   // true: only entry points listed with set_entry are covered
+}
+
+message connect_app_result {
+  uint32 app = 1;
+}
+
+// @description Disconnect a free app; its daily Mana goes back to the sellable slice. Operator.
+// @read-only false
+message disconnect_app_arguments {
+  bytes contract_id = 1 [(koinos.btype) = CONTRACT_ID];
+}
+
+message disconnect_app_result {}
+
+// @description Everything connected: free apps and paid allowances, with today's use and the station's budget.
+// @read-only true
+message list_connected_arguments {}
+
+message list_connected_result {
+  repeated connected_app free_apps = 1;
+  repeated paid_app paid = 2;
+  uint64 daily_budget = 3 [jstype = JS_STRING];
+  uint64 reserved = 4 [jstype = JS_STRING];
+  uint64 sellable = 5 [jstype = JS_STRING];
+  uint64 sold = 6 [jstype = JS_STRING];
+  uint64 mana = 7 [jstype = JS_STRING];
+}
+
+// ═══════ council (audit #1) ═══════
+
+// @description Propose a guarded action (council member `signer`, who also approves it).
+// @read-only false
+message propose_arguments {
+  bytes signer = 1 [(koinos.btype) = ADDRESS];
+  guarded_action action = 2;
+}
+
+message propose_result {
+  uint32 id = 1;
+}
+
+// @description Approve a proposal (council member `signer`).
+// @read-only false
+message approve_arguments {
+  bytes signer = 1 [(koinos.btype) = ADDRESS];
+  uint32 id = 2;
+}
+
+message approve_result {
+  uint64 ready_at = 1 [jstype = JS_STRING];
+}
+
+// @description Veto a pending proposal (any ONE council member).
+// @read-only false
+message cancel_proposal_arguments {
+  bytes signer = 1 [(koinos.btype) = ADDRESS];
+  uint32 id = 2;
+}
+
+message cancel_proposal_result {}
+
+// @description Carry out an approved proposal after its delay (anyone). Upgrades instead run by uploading the approved code.
+// @read-only false
+message execute_arguments {
+  uint32 id = 1;
+}
+
+message execute_result {}
+
+// @description One proposal by id.
+// @read-only true
+message get_proposal_arguments {
+  uint32 id = 1;
+}
+
+message get_proposal_result {
+  proposal_object proposal = 1;
+}
+
+// @description Open proposals (not executed or cancelled).
+// @read-only true
+message list_proposals_arguments {}
+
+message list_proposals_result {
+  repeated proposal_object proposals = 1;
+}

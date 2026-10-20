@@ -134,6 +134,24 @@ export namespace station {
         writer.uint32(224);
         writer.uint32(message.max_per_buyer);
       }
+
+      const unique_name_council = message.council;
+      if (unique_name_council.length !== 0) {
+        for (let i = 0; i < unique_name_council.length; ++i) {
+          writer.uint32(234);
+          writer.bytes(unique_name_council[i]);
+        }
+      }
+
+      if (message.threshold != 0) {
+        writer.uint32(240);
+        writer.uint32(message.threshold);
+      }
+
+      if (message.guard_delay_ms != 0) {
+        writer.uint32(248);
+        writer.uint64(message.guard_delay_ms);
+      }
     }
 
     static decode(reader: Reader, length: i32): config_object {
@@ -247,6 +265,18 @@ export namespace station {
             message.max_per_buyer = reader.uint32();
             break;
 
+          case 29:
+            message.council.push(reader.bytes());
+            break;
+
+          case 30:
+            message.threshold = reader.uint32();
+            break;
+
+          case 31:
+            message.guard_delay_ms = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -282,6 +312,9 @@ export namespace station {
     alert_mana: u64;
     ticket_fee_bp: u32;
     max_per_buyer: u32;
+    council: Array<Uint8Array>;
+    threshold: u32;
+    guard_delay_ms: u64;
 
     constructor(
       owner: Uint8Array | null = null,
@@ -309,7 +342,10 @@ export namespace station {
       buffer_bp: u32 = 0,
       alert_mana: u64 = 0,
       ticket_fee_bp: u32 = 0,
-      max_per_buyer: u32 = 0
+      max_per_buyer: u32 = 0,
+      council: Array<Uint8Array> = [],
+      threshold: u32 = 0,
+      guard_delay_ms: u64 = 0
     ) {
       this.owner = owner;
       this.paused = paused;
@@ -337,6 +373,9 @@ export namespace station {
       this.alert_mana = alert_mana;
       this.ticket_fee_bp = ticket_fee_bp;
       this.max_per_buyer = max_per_buyer;
+      this.council = council;
+      this.threshold = threshold;
+      this.guard_delay_ms = guard_delay_ms;
     }
   }
 
@@ -1690,6 +1729,27 @@ export namespace station {
           writer.uint32(unique_name_open_purchases[i]);
         }
       }
+
+      const unique_name_exempt_ids = message.exempt_ids;
+      if (unique_name_exempt_ids.length !== 0) {
+        for (let i = 0; i < unique_name_exempt_ids.length; ++i) {
+          writer.uint32(34);
+          writer.bytes(unique_name_exempt_ids[i]);
+        }
+      }
+
+      const unique_name_open_proposals = message.open_proposals;
+      if (unique_name_open_proposals.length !== 0) {
+        for (let i = 0; i < unique_name_open_proposals.length; ++i) {
+          writer.uint32(40);
+          writer.uint32(unique_name_open_proposals[i]);
+        }
+      }
+
+      if (message.next_proposal != 0) {
+        writer.uint32(48);
+        writer.uint32(message.next_proposal);
+      }
     }
 
     static decode(reader: Reader, length: i32): registry_object {
@@ -1711,6 +1771,18 @@ export namespace station {
             message.open_purchases.push(reader.uint32());
             break;
 
+          case 4:
+            message.exempt_ids.push(reader.bytes());
+            break;
+
+          case 5:
+            message.open_proposals.push(reader.uint32());
+            break;
+
+          case 6:
+            message.next_proposal = reader.uint32();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -1723,15 +1795,603 @@ export namespace station {
     app_ids: Array<u32>;
     open_ids: Array<u32>;
     open_purchases: Array<u32>;
+    exempt_ids: Array<Uint8Array>;
+    open_proposals: Array<u32>;
+    next_proposal: u32;
 
     constructor(
       app_ids: Array<u32> = [],
       open_ids: Array<u32> = [],
-      open_purchases: Array<u32> = []
+      open_purchases: Array<u32> = [],
+      exempt_ids: Array<Uint8Array> = [],
+      open_proposals: Array<u32> = [],
+      next_proposal: u32 = 0
     ) {
       this.app_ids = app_ids;
       this.open_ids = open_ids;
       this.open_purchases = open_purchases;
+      this.exempt_ids = exempt_ids;
+      this.open_proposals = open_proposals;
+      this.next_proposal = next_proposal;
+    }
+  }
+
+  export class guarded_action {
+    static encode(message: guarded_action, writer: Writer): void {
+      if (message.kind != 0) {
+        writer.uint32(8);
+        writer.uint32(message.kind);
+      }
+
+      const unique_name_hash = message.hash;
+      if (unique_name_hash !== null) {
+        writer.uint32(18);
+        writer.bytes(unique_name_hash);
+      }
+
+      const unique_name_to = message.to;
+      if (unique_name_to !== null) {
+        writer.uint32(26);
+        writer.bytes(unique_name_to);
+      }
+
+      if (message.amount != 0) {
+        writer.uint32(32);
+        writer.uint64(message.amount);
+      }
+
+      const unique_name_token = message.token;
+      if (unique_name_token !== null) {
+        writer.uint32(42);
+        writer.bytes(unique_name_token);
+      }
+
+      const unique_name_council = message.council;
+      if (unique_name_council.length !== 0) {
+        for (let i = 0; i < unique_name_council.length; ++i) {
+          writer.uint32(50);
+          writer.bytes(unique_name_council[i]);
+        }
+      }
+
+      if (message.threshold != 0) {
+        writer.uint32(56);
+        writer.uint32(message.threshold);
+      }
+
+      if (message.delay_ms != 0) {
+        writer.uint32(64);
+        writer.uint64(message.delay_ms);
+      }
+
+      if (message.fee_bp != 0) {
+        writer.uint32(72);
+        writer.uint32(message.fee_bp);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): guarded_action {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new guarded_action();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.kind = reader.uint32();
+            break;
+
+          case 2:
+            message.hash = reader.bytes();
+            break;
+
+          case 3:
+            message.to = reader.bytes();
+            break;
+
+          case 4:
+            message.amount = reader.uint64();
+            break;
+
+          case 5:
+            message.token = reader.bytes();
+            break;
+
+          case 6:
+            message.council.push(reader.bytes());
+            break;
+
+          case 7:
+            message.threshold = reader.uint32();
+            break;
+
+          case 8:
+            message.delay_ms = reader.uint64();
+            break;
+
+          case 9:
+            message.fee_bp = reader.uint32();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    kind: u32;
+    hash: Uint8Array | null;
+    to: Uint8Array | null;
+    amount: u64;
+    token: Uint8Array | null;
+    council: Array<Uint8Array>;
+    threshold: u32;
+    delay_ms: u64;
+    fee_bp: u32;
+
+    constructor(
+      kind: u32 = 0,
+      hash: Uint8Array | null = null,
+      to: Uint8Array | null = null,
+      amount: u64 = 0,
+      token: Uint8Array | null = null,
+      council: Array<Uint8Array> = [],
+      threshold: u32 = 0,
+      delay_ms: u64 = 0,
+      fee_bp: u32 = 0
+    ) {
+      this.kind = kind;
+      this.hash = hash;
+      this.to = to;
+      this.amount = amount;
+      this.token = token;
+      this.council = council;
+      this.threshold = threshold;
+      this.delay_ms = delay_ms;
+      this.fee_bp = fee_bp;
+    }
+  }
+
+  export class proposal_object {
+    static encode(message: proposal_object, writer: Writer): void {
+      if (message.id != 0) {
+        writer.uint32(8);
+        writer.uint32(message.id);
+      }
+
+      const unique_name_action = message.action;
+      if (unique_name_action !== null) {
+        writer.uint32(18);
+        writer.fork();
+        guarded_action.encode(unique_name_action, writer);
+        writer.ldelim();
+      }
+
+      const unique_name_proposer = message.proposer;
+      if (unique_name_proposer !== null) {
+        writer.uint32(26);
+        writer.bytes(unique_name_proposer);
+      }
+
+      const unique_name_approvals = message.approvals;
+      if (unique_name_approvals.length !== 0) {
+        for (let i = 0; i < unique_name_approvals.length; ++i) {
+          writer.uint32(34);
+          writer.bytes(unique_name_approvals[i]);
+        }
+      }
+
+      if (message.created != 0) {
+        writer.uint32(40);
+        writer.uint64(message.created);
+      }
+
+      if (message.ready_at != 0) {
+        writer.uint32(48);
+        writer.uint64(message.ready_at);
+      }
+
+      if (message.executed != false) {
+        writer.uint32(56);
+        writer.bool(message.executed);
+      }
+
+      if (message.cancelled != false) {
+        writer.uint32(64);
+        writer.bool(message.cancelled);
+      }
+
+      const unique_name_cancelled_by = message.cancelled_by;
+      if (unique_name_cancelled_by !== null) {
+        writer.uint32(74);
+        writer.bytes(unique_name_cancelled_by);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): proposal_object {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new proposal_object();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.id = reader.uint32();
+            break;
+
+          case 2:
+            message.action = guarded_action.decode(reader, reader.uint32());
+            break;
+
+          case 3:
+            message.proposer = reader.bytes();
+            break;
+
+          case 4:
+            message.approvals.push(reader.bytes());
+            break;
+
+          case 5:
+            message.created = reader.uint64();
+            break;
+
+          case 6:
+            message.ready_at = reader.uint64();
+            break;
+
+          case 7:
+            message.executed = reader.bool();
+            break;
+
+          case 8:
+            message.cancelled = reader.bool();
+            break;
+
+          case 9:
+            message.cancelled_by = reader.bytes();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    id: u32;
+    action: guarded_action | null;
+    proposer: Uint8Array | null;
+    approvals: Array<Uint8Array>;
+    created: u64;
+    ready_at: u64;
+    executed: bool;
+    cancelled: bool;
+    cancelled_by: Uint8Array | null;
+
+    constructor(
+      id: u32 = 0,
+      action: guarded_action | null = null,
+      proposer: Uint8Array | null = null,
+      approvals: Array<Uint8Array> = [],
+      created: u64 = 0,
+      ready_at: u64 = 0,
+      executed: bool = false,
+      cancelled: bool = false,
+      cancelled_by: Uint8Array | null = null
+    ) {
+      this.id = id;
+      this.action = action;
+      this.proposer = proposer;
+      this.approvals = approvals;
+      this.created = created;
+      this.ready_at = ready_at;
+      this.executed = executed;
+      this.cancelled = cancelled;
+      this.cancelled_by = cancelled_by;
+    }
+  }
+
+  export class proposal_event {
+    static encode(message: proposal_event, writer: Writer): void {
+      const unique_name_proposal = message.proposal;
+      if (unique_name_proposal !== null) {
+        writer.uint32(10);
+        writer.fork();
+        proposal_object.encode(unique_name_proposal, writer);
+        writer.ldelim();
+      }
+
+      const unique_name_by = message.by;
+      if (unique_name_by !== null) {
+        writer.uint32(18);
+        writer.bytes(unique_name_by);
+      }
+
+      const unique_name_what = message.what;
+      if (unique_name_what !== null) {
+        writer.uint32(26);
+        writer.string(unique_name_what);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): proposal_event {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new proposal_event();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.proposal = proposal_object.decode(reader, reader.uint32());
+            break;
+
+          case 2:
+            message.by = reader.bytes();
+            break;
+
+          case 3:
+            message.what = reader.string();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    proposal: proposal_object | null;
+    by: Uint8Array | null;
+    what: string | null;
+
+    constructor(
+      proposal: proposal_object | null = null,
+      by: Uint8Array | null = null,
+      what: string | null = null
+    ) {
+      this.proposal = proposal;
+      this.by = by;
+      this.what = what;
+    }
+  }
+
+  export class connected_app {
+    static encode(message: connected_app, writer: Writer): void {
+      const unique_name_contract_id = message.contract_id;
+      if (unique_name_contract_id !== null) {
+        writer.uint32(10);
+        writer.bytes(unique_name_contract_id);
+      }
+
+      if (message.app != 0) {
+        writer.uint32(16);
+        writer.uint32(message.app);
+      }
+
+      if (message.mana_per_day != 0) {
+        writer.uint32(24);
+        writer.uint64(message.mana_per_day);
+      }
+
+      if (message.boost_mana != 0) {
+        writer.uint32(32);
+        writer.uint64(message.boost_mana);
+      }
+
+      if (message.boost_until != 0) {
+        writer.uint32(40);
+        writer.uint64(message.boost_until);
+      }
+
+      if (message.strict != false) {
+        writer.uint32(48);
+        writer.bool(message.strict);
+      }
+
+      if (message.active != false) {
+        writer.uint32(56);
+        writer.bool(message.active);
+      }
+
+      if (message.used_24h != 0) {
+        writer.uint32(64);
+        writer.uint64(message.used_24h);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): connected_app {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new connected_app();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.contract_id = reader.bytes();
+            break;
+
+          case 2:
+            message.app = reader.uint32();
+            break;
+
+          case 3:
+            message.mana_per_day = reader.uint64();
+            break;
+
+          case 4:
+            message.boost_mana = reader.uint64();
+            break;
+
+          case 5:
+            message.boost_until = reader.uint64();
+            break;
+
+          case 6:
+            message.strict = reader.bool();
+            break;
+
+          case 7:
+            message.active = reader.bool();
+            break;
+
+          case 8:
+            message.used_24h = reader.uint64();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    contract_id: Uint8Array | null;
+    app: u32;
+    mana_per_day: u64;
+    boost_mana: u64;
+    boost_until: u64;
+    strict: bool;
+    active: bool;
+    used_24h: u64;
+
+    constructor(
+      contract_id: Uint8Array | null = null,
+      app: u32 = 0,
+      mana_per_day: u64 = 0,
+      boost_mana: u64 = 0,
+      boost_until: u64 = 0,
+      strict: bool = false,
+      active: bool = false,
+      used_24h: u64 = 0
+    ) {
+      this.contract_id = contract_id;
+      this.app = app;
+      this.mana_per_day = mana_per_day;
+      this.boost_mana = boost_mana;
+      this.boost_until = boost_until;
+      this.strict = strict;
+      this.active = active;
+      this.used_24h = used_24h;
+    }
+  }
+
+  export class paid_app {
+    static encode(message: paid_app, writer: Writer): void {
+      if (message.id != 0) {
+        writer.uint32(8);
+        writer.uint32(message.id);
+      }
+
+      const unique_name_buyer = message.buyer;
+      if (unique_name_buyer !== null) {
+        writer.uint32(18);
+        writer.bytes(unique_name_buyer);
+      }
+
+      const unique_name_target = message.target;
+      if (unique_name_target !== null) {
+        writer.uint32(26);
+        writer.bytes(unique_name_target);
+      }
+
+      if (message.mana_per_day != 0) {
+        writer.uint32(32);
+        writer.uint64(message.mana_per_day);
+      }
+
+      if (message.expiry != 0) {
+        writer.uint32(40);
+        writer.uint64(message.expiry);
+      }
+
+      if (message.used_24h != 0) {
+        writer.uint32(48);
+        writer.uint64(message.used_24h);
+      }
+
+      if (message.suspended != false) {
+        writer.uint32(56);
+        writer.bool(message.suspended);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): paid_app {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new paid_app();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.id = reader.uint32();
+            break;
+
+          case 2:
+            message.buyer = reader.bytes();
+            break;
+
+          case 3:
+            message.target = reader.bytes();
+            break;
+
+          case 4:
+            message.mana_per_day = reader.uint64();
+            break;
+
+          case 5:
+            message.expiry = reader.uint64();
+            break;
+
+          case 6:
+            message.used_24h = reader.uint64();
+            break;
+
+          case 7:
+            message.suspended = reader.bool();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    id: u32;
+    buyer: Uint8Array | null;
+    target: Uint8Array | null;
+    mana_per_day: u64;
+    expiry: u64;
+    used_24h: u64;
+    suspended: bool;
+
+    constructor(
+      id: u32 = 0,
+      buyer: Uint8Array | null = null,
+      target: Uint8Array | null = null,
+      mana_per_day: u64 = 0,
+      expiry: u64 = 0,
+      used_24h: u64 = 0,
+      suspended: bool = false
+    ) {
+      this.id = id;
+      this.buyer = buyer;
+      this.target = target;
+      this.mana_per_day = mana_per_day;
+      this.expiry = expiry;
+      this.used_24h = used_24h;
+      this.suspended = suspended;
     }
   }
 
@@ -5120,5 +5780,740 @@ export namespace station {
     }
 
     constructor() {}
+  }
+
+  export class connect_app_arguments {
+    static encode(message: connect_app_arguments, writer: Writer): void {
+      const unique_name_contract_id = message.contract_id;
+      if (unique_name_contract_id !== null) {
+        writer.uint32(10);
+        writer.bytes(unique_name_contract_id);
+      }
+
+      if (message.mana_per_day != 0) {
+        writer.uint32(16);
+        writer.uint64(message.mana_per_day);
+      }
+
+      if (message.strict != false) {
+        writer.uint32(24);
+        writer.bool(message.strict);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): connect_app_arguments {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new connect_app_arguments();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.contract_id = reader.bytes();
+            break;
+
+          case 2:
+            message.mana_per_day = reader.uint64();
+            break;
+
+          case 3:
+            message.strict = reader.bool();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    contract_id: Uint8Array | null;
+    mana_per_day: u64;
+    strict: bool;
+
+    constructor(
+      contract_id: Uint8Array | null = null,
+      mana_per_day: u64 = 0,
+      strict: bool = false
+    ) {
+      this.contract_id = contract_id;
+      this.mana_per_day = mana_per_day;
+      this.strict = strict;
+    }
+  }
+
+  @unmanaged
+  export class connect_app_result {
+    static encode(message: connect_app_result, writer: Writer): void {
+      if (message.app != 0) {
+        writer.uint32(8);
+        writer.uint32(message.app);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): connect_app_result {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new connect_app_result();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.app = reader.uint32();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    app: u32;
+
+    constructor(app: u32 = 0) {
+      this.app = app;
+    }
+  }
+
+  export class disconnect_app_arguments {
+    static encode(message: disconnect_app_arguments, writer: Writer): void {
+      const unique_name_contract_id = message.contract_id;
+      if (unique_name_contract_id !== null) {
+        writer.uint32(10);
+        writer.bytes(unique_name_contract_id);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): disconnect_app_arguments {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new disconnect_app_arguments();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.contract_id = reader.bytes();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    contract_id: Uint8Array | null;
+
+    constructor(contract_id: Uint8Array | null = null) {
+      this.contract_id = contract_id;
+    }
+  }
+
+  @unmanaged
+  export class disconnect_app_result {
+    static encode(message: disconnect_app_result, writer: Writer): void {}
+
+    static decode(reader: Reader, length: i32): disconnect_app_result {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new disconnect_app_result();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    constructor() {}
+  }
+
+  @unmanaged
+  export class list_connected_arguments {
+    static encode(message: list_connected_arguments, writer: Writer): void {}
+
+    static decode(reader: Reader, length: i32): list_connected_arguments {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new list_connected_arguments();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    constructor() {}
+  }
+
+  export class list_connected_result {
+    static encode(message: list_connected_result, writer: Writer): void {
+      const unique_name_free_apps = message.free_apps;
+      for (let i = 0; i < unique_name_free_apps.length; ++i) {
+        writer.uint32(10);
+        writer.fork();
+        connected_app.encode(unique_name_free_apps[i], writer);
+        writer.ldelim();
+      }
+
+      const unique_name_paid = message.paid;
+      for (let i = 0; i < unique_name_paid.length; ++i) {
+        writer.uint32(18);
+        writer.fork();
+        paid_app.encode(unique_name_paid[i], writer);
+        writer.ldelim();
+      }
+
+      if (message.daily_budget != 0) {
+        writer.uint32(24);
+        writer.uint64(message.daily_budget);
+      }
+
+      if (message.reserved != 0) {
+        writer.uint32(32);
+        writer.uint64(message.reserved);
+      }
+
+      if (message.sellable != 0) {
+        writer.uint32(40);
+        writer.uint64(message.sellable);
+      }
+
+      if (message.sold != 0) {
+        writer.uint32(48);
+        writer.uint64(message.sold);
+      }
+
+      if (message.mana != 0) {
+        writer.uint32(56);
+        writer.uint64(message.mana);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): list_connected_result {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new list_connected_result();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.free_apps.push(
+              connected_app.decode(reader, reader.uint32())
+            );
+            break;
+
+          case 2:
+            message.paid.push(paid_app.decode(reader, reader.uint32()));
+            break;
+
+          case 3:
+            message.daily_budget = reader.uint64();
+            break;
+
+          case 4:
+            message.reserved = reader.uint64();
+            break;
+
+          case 5:
+            message.sellable = reader.uint64();
+            break;
+
+          case 6:
+            message.sold = reader.uint64();
+            break;
+
+          case 7:
+            message.mana = reader.uint64();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    free_apps: Array<connected_app>;
+    paid: Array<paid_app>;
+    daily_budget: u64;
+    reserved: u64;
+    sellable: u64;
+    sold: u64;
+    mana: u64;
+
+    constructor(
+      free_apps: Array<connected_app> = [],
+      paid: Array<paid_app> = [],
+      daily_budget: u64 = 0,
+      reserved: u64 = 0,
+      sellable: u64 = 0,
+      sold: u64 = 0,
+      mana: u64 = 0
+    ) {
+      this.free_apps = free_apps;
+      this.paid = paid;
+      this.daily_budget = daily_budget;
+      this.reserved = reserved;
+      this.sellable = sellable;
+      this.sold = sold;
+      this.mana = mana;
+    }
+  }
+
+  export class propose_arguments {
+    static encode(message: propose_arguments, writer: Writer): void {
+      const unique_name_signer = message.signer;
+      if (unique_name_signer !== null) {
+        writer.uint32(10);
+        writer.bytes(unique_name_signer);
+      }
+
+      const unique_name_action = message.action;
+      if (unique_name_action !== null) {
+        writer.uint32(18);
+        writer.fork();
+        guarded_action.encode(unique_name_action, writer);
+        writer.ldelim();
+      }
+    }
+
+    static decode(reader: Reader, length: i32): propose_arguments {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new propose_arguments();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.signer = reader.bytes();
+            break;
+
+          case 2:
+            message.action = guarded_action.decode(reader, reader.uint32());
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    signer: Uint8Array | null;
+    action: guarded_action | null;
+
+    constructor(
+      signer: Uint8Array | null = null,
+      action: guarded_action | null = null
+    ) {
+      this.signer = signer;
+      this.action = action;
+    }
+  }
+
+  @unmanaged
+  export class propose_result {
+    static encode(message: propose_result, writer: Writer): void {
+      if (message.id != 0) {
+        writer.uint32(8);
+        writer.uint32(message.id);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): propose_result {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new propose_result();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.id = reader.uint32();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    id: u32;
+
+    constructor(id: u32 = 0) {
+      this.id = id;
+    }
+  }
+
+  export class approve_arguments {
+    static encode(message: approve_arguments, writer: Writer): void {
+      const unique_name_signer = message.signer;
+      if (unique_name_signer !== null) {
+        writer.uint32(10);
+        writer.bytes(unique_name_signer);
+      }
+
+      if (message.id != 0) {
+        writer.uint32(16);
+        writer.uint32(message.id);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): approve_arguments {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new approve_arguments();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.signer = reader.bytes();
+            break;
+
+          case 2:
+            message.id = reader.uint32();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    signer: Uint8Array | null;
+    id: u32;
+
+    constructor(signer: Uint8Array | null = null, id: u32 = 0) {
+      this.signer = signer;
+      this.id = id;
+    }
+  }
+
+  @unmanaged
+  export class approve_result {
+    static encode(message: approve_result, writer: Writer): void {
+      if (message.ready_at != 0) {
+        writer.uint32(8);
+        writer.uint64(message.ready_at);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): approve_result {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new approve_result();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.ready_at = reader.uint64();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    ready_at: u64;
+
+    constructor(ready_at: u64 = 0) {
+      this.ready_at = ready_at;
+    }
+  }
+
+  export class cancel_proposal_arguments {
+    static encode(message: cancel_proposal_arguments, writer: Writer): void {
+      const unique_name_signer = message.signer;
+      if (unique_name_signer !== null) {
+        writer.uint32(10);
+        writer.bytes(unique_name_signer);
+      }
+
+      if (message.id != 0) {
+        writer.uint32(16);
+        writer.uint32(message.id);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): cancel_proposal_arguments {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new cancel_proposal_arguments();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.signer = reader.bytes();
+            break;
+
+          case 2:
+            message.id = reader.uint32();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    signer: Uint8Array | null;
+    id: u32;
+
+    constructor(signer: Uint8Array | null = null, id: u32 = 0) {
+      this.signer = signer;
+      this.id = id;
+    }
+  }
+
+  @unmanaged
+  export class cancel_proposal_result {
+    static encode(message: cancel_proposal_result, writer: Writer): void {}
+
+    static decode(reader: Reader, length: i32): cancel_proposal_result {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new cancel_proposal_result();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    constructor() {}
+  }
+
+  @unmanaged
+  export class execute_arguments {
+    static encode(message: execute_arguments, writer: Writer): void {
+      if (message.id != 0) {
+        writer.uint32(8);
+        writer.uint32(message.id);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): execute_arguments {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new execute_arguments();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.id = reader.uint32();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    id: u32;
+
+    constructor(id: u32 = 0) {
+      this.id = id;
+    }
+  }
+
+  @unmanaged
+  export class execute_result {
+    static encode(message: execute_result, writer: Writer): void {}
+
+    static decode(reader: Reader, length: i32): execute_result {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new execute_result();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    constructor() {}
+  }
+
+  @unmanaged
+  export class get_proposal_arguments {
+    static encode(message: get_proposal_arguments, writer: Writer): void {
+      if (message.id != 0) {
+        writer.uint32(8);
+        writer.uint32(message.id);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): get_proposal_arguments {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new get_proposal_arguments();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.id = reader.uint32();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    id: u32;
+
+    constructor(id: u32 = 0) {
+      this.id = id;
+    }
+  }
+
+  export class get_proposal_result {
+    static encode(message: get_proposal_result, writer: Writer): void {
+      const unique_name_proposal = message.proposal;
+      if (unique_name_proposal !== null) {
+        writer.uint32(10);
+        writer.fork();
+        proposal_object.encode(unique_name_proposal, writer);
+        writer.ldelim();
+      }
+    }
+
+    static decode(reader: Reader, length: i32): get_proposal_result {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new get_proposal_result();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.proposal = proposal_object.decode(reader, reader.uint32());
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    proposal: proposal_object | null;
+
+    constructor(proposal: proposal_object | null = null) {
+      this.proposal = proposal;
+    }
+  }
+
+  @unmanaged
+  export class list_proposals_arguments {
+    static encode(message: list_proposals_arguments, writer: Writer): void {}
+
+    static decode(reader: Reader, length: i32): list_proposals_arguments {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new list_proposals_arguments();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    constructor() {}
+  }
+
+  export class list_proposals_result {
+    static encode(message: list_proposals_result, writer: Writer): void {
+      const unique_name_proposals = message.proposals;
+      for (let i = 0; i < unique_name_proposals.length; ++i) {
+        writer.uint32(10);
+        writer.fork();
+        proposal_object.encode(unique_name_proposals[i], writer);
+        writer.ldelim();
+      }
+    }
+
+    static decode(reader: Reader, length: i32): list_proposals_result {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new list_proposals_result();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.proposals.push(
+              proposal_object.decode(reader, reader.uint32())
+            );
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    proposals: Array<proposal_object>;
+
+    constructor(proposals: Array<proposal_object> = []) {
+      this.proposals = proposals;
+    }
   }
 }

@@ -1,6 +1,6 @@
 
-ÎM
-assembly/proto/station.protostationkoinos/options.proto"î
+Õa
+assembly/proto/station.protostationkoinos/options.proto"Ö
 config_object
 owner (B€µRowner
 paused (Rpaused#
@@ -35,7 +35,10 @@ bigMaxDebt&
 
 alert_mana (B0R	alertMana"
 ticket_fee_bp (RticketFeeBp"
-max_per_buyer (RmaxPerBuyerJJ"•
+max_per_buyer (RmaxPerBuyer
+council (B€µRcouncil
+	threshold (R	threshold(
+guard_delay_ms (B0RguardDelayMsJJ"•
 
 app_object'
 reserved_mana (B0RreservedMana
@@ -155,11 +158,61 @@ mana_after (B0R	manaAfter#
 alert_level (B0R
 alertLevel!
 
-hard_floor (B0R	hardFloor"l
+hard_floor (B0R	hardFloor"Ý
 registry_object
 app_ids (RappIds
 open_ids (RopenIds%
-open_purchases (RopenPurchases"º
+open_purchases (RopenPurchases#
+
+exempt_ids (B€µR	exemptIds%
+open_proposals (RopenProposals#
+next_proposal (RnextProposal"ú
+guarded_action
+kind (Rkind
+hash (Rhash
+to (B€µRto
+amount (B0Ramount
+token (B€µRtoken
+council (B€µRcouncil
+	threshold (R	threshold
+delay_ms (B0RdelayMs
+fee_bp	 (RfeeBp"¸
+proposal_object
+id (Rid/
+action (2.station.guarded_actionRaction 
+proposer (B€µRproposer"
+	approvals (B€µR	approvals
+created (B0Rcreated
+ready_at (B0RreadyAt
+executed (Rexecuted
+	cancelled (R	cancelled'
+cancelled_by	 (B€µRcancelledBy"p
+proposal_event4
+proposal (2.station.proposal_objectRproposal
+by (B€µRby
+what (	Rwhat"…
+connected_app%
+contract_id (B€µR
+contractId
+app (Rapp$
+mana_per_day (B0R
+manaPerDay!
+
+boost_mana (B0R	boostMana#
+boost_until (B0R
+boostUntil
+strict (Rstrict
+active (Ractive
+used_24h (B0Rused24h"Ó
+paid_app
+id (Rid
+buyer (B€µRbuyer
+target (B€µRtarget$
+mana_per_day (B0R
+manaPerDay
+expiry (B0Rexpiry
+used_24h (B0Rused24h
+	suspended (R	suspended"º
 escrow_object
 id (Rid
 kind (Rkind
@@ -399,7 +452,52 @@ contractId"C
 set_price_arguments
 token (B€µRtoken+
 value (2.station.price_objectRvalue"
-set_price_resultbproto3
+set_price_result"|
+connect_app_arguments%
+contract_id (B€µR
+contractId$
+mana_per_day (B0R
+manaPerDay
+strict (Rstrict"&
+connect_app_result
+app (Rapp"A
+disconnect_app_arguments%
+contract_id (B€µR
+contractId"
+disconnect_app_result"
+list_connected_arguments"Š
+list_connected_result3
+	free_apps (2.station.connected_appRfreeApps%
+paid (2.station.paid_appRpaid%
+daily_budget (B0RdailyBudget
+reserved (B0Rreserved
+sellable (B0Rsellable
+sold (B0Rsold
+mana (B0Rmana"b
+propose_arguments
+signer (B€µRsigner/
+action (2.station.guarded_actionRaction" 
+propose_result
+id (Rid"A
+approve_arguments
+signer (B€µRsigner
+id (Rid"/
+approve_result
+ready_at (B0RreadyAt"I
+cancel_proposal_arguments
+signer (B€µRsigner
+id (Rid"
+cancel_proposal_result"#
+execute_arguments
+id (Rid"
+execute_result"(
+get_proposal_arguments
+id (Rid"K
+get_proposal_result4
+proposal (2.station.proposal_objectRproposal"
+list_proposals_arguments"O
+list_proposals_result6
+	proposals (2.station.proposal_objectR	proposalsbproto3
 ç
 koinos/chain/authority.protokoinos.chainkoinos/options.proto"U
 call_target%

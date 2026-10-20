@@ -12,12 +12,12 @@
  * swept on buy/renew; #7 no-oversell guard. KNOWN OPEN (#1): the station key still holds every permission except
  * transaction_application, so it can move funds and re-upload code. Fix designed separately before any mainnet.
  */
-import { System, Storage, Protobuf, Arrays, Token, Base58, authority, value, protocol } from "@koinos/sdk-as";
+import { System, Storage, Protobuf, Arrays, Token, Base58, Crypto, authority, value, protocol } from "@koinos/sdk-as";
 import { station } from "./proto/station";
 
 const S_CONFIG: u32 = 0, S_APPS: u32 = 1, S_ENTRIES: u32 = 2, S_USERS: u32 = 3, S_APPWIN: u32 = 4,
   S_PRICES: u32 = 5, S_ALLOW: u32 = 6, S_TARGET: u32 = 7, S_TICKETS: u32 = 8, S_BIG: u32 = 9, S_REVENUE: u32 = 10, S_EXEMPT: u32 = 11, S_REGISTRY: u32 = 12, S_GLOBALWIN: u32 = 13, S_OVERFLOWWIN: u32 = 14, S_BUFFERWIN: u32 = 15, S_SUSPEND: u32 = 16, S_ESCROW: u32 = 17, S_ESCROWTOT: u32 = 18, S_TICKETCD: u32 = 19,
-  S_TESTLEDGER: u32 = 90;
+  S_PROPOSALS: u32 = 20, S_TESTLEDGER: u32 = 90;
 const DAY: u64 = 86_400_000;
 const MANA: u64 = 100_000_000;
 const USER_SLOT: u64 = 21_600_000; const USER_N: i32 = 4;   // 4 × 6 h
@@ -25,7 +25,14 @@ const APP_SLOT: u64 = 3_600_000; const APP_N: i32 = 24;     // 24 × 1 h
 const WEEK_N: i32 = 7;                                       // 7 × 1 day
 const GLOBAL_KEY: u32 = 0xffffffff;
 // Stablecoins (stablecoins.md, 2026-10-19). Prices are set per token by the owner; these are the defaults to set.
-import { VUSDT, VUSDC } from "./net";
+import { VUSDT, VUSDC, NETWORK } from "./net";
+// Audit #1: council delay floor. 48 h on mainnet so everyone can see a money move or upgrade coming; 1 min on testnet.
+const MIN_GUARD_DELAY_MS: u64 = NETWORK == "mainnet" ? 172_800_000 : 60_000;
+const UPGRADE_WINDOW_MS: u64 = 7 * 86_400_000;      // an approved upgrade must be uploaded within 7 days of being ready
+const MAX_COUNCIL: i32 = 7;
+const MAX_OPEN_PROPOSALS: i32 = 16;
+const MAX_EXEMPT: i32 = 64;                         // connected free apps (bounded list)
+const TEST_KOIN = "19GYjDBVXU7keLbYvMLazsGQn3GTWHjHkK"; // test build only: stands in for the KOIN contract
 export { VUSDT, VUSDC };
 const LEGACY_CHAINGE_USDT = "19WrWze3XAoMa3Mwqys4rJMP6emZX2wfpH"; // rejected
 
@@ -136,12 +143,24 @@ export class Station {
   globalWin: Storage.Obj<station.window_object> = new Storage.Obj(System.getContractId(), S_GLOBALWIN, station.window_object.decode, station.window_object.encode, () => new station.window_object());
   suspended: Storage.Map<Uint8Array, station.suspend_object> = new Storage.Map(System.getContractId(), S_SUSPEND, station.suspend_object.decode, station.suspend_object.encode, null);
   bufferWin: Storage.Obj<station.window_object> = new Storage.Obj(System.getContractId(), S_BUFFERWIN, station.window_object.decode, station.window_object.encode, () => new station.window_object());
+  proposals: Storage.Map<Uint8Array, station.proposal_object> = new Storage.Map(System.getContractId(), S_PROPOSALS, station.proposal_object.decode, station.proposal_object.encode, null);
   overflowWin: Storage.Obj<station.window_object> = new Storage.Obj(System.getContractId(), S_OVERFLOWWIN, station.window_object.decode, station.window_object.encode, () => new station.window_object());
   lastNew: bool = false;
 
   // ───── environment ─────
   mana(): u64 { return BUILD_FOR_TESTING ? TEST_MANA : System.getAccountRC(this.contractId); }
   koinBalance(): u64 { return BUILD_FOR_TESTING ? TEST_BALANCE : new Token(System.getContractAddress("koin")).balanceOf(this.contractId); }
+  koinId(): Uint8Array { return BUILD_FOR_TESTING ? Base58.decode(TEST_KOIN) : System.getContractAddress("koin"); }
+  /** KOIN out of the station: only from a council-approved withdrawal (execute). */
+  koinSend(to: Uint8Array, amount: u64): void {
+    if (BUILD_FOR_TESTING) {
+      System.require(TEST_BALANCE >= amount, "insufficient KOIN"); TEST_BALANCE -= amount;
+      testSetToken(this.koinId(), to, testGetToken(this.koinId(), to) + amount);
+    } else {
+      System.require(new Token(this.koinId()).transfer(this.contractId, to, amount), "KOIN transfer failed");
+    }
+  }
+  tokenBalance(token: Uint8Array): u64 { return BUILD_FOR_TESTING ? testGetToken(token, this.contractId) : new Token(token).balanceOf(this.contractId); }
   now(): u64 { return System.getBlockField("header.timestamp")!.uint64_value; }
   height(): u64 { return System.getBlockField("header.height")!.uint64_value; }
   /** Payment, pattern A from stablecoins.md §5.1: the buyer approves the station for exactly `amount` (same tx,
@@ -359,6 +378,14 @@ export class Station {
   // ═══════ authorize ═══════
   authorize(args: authority.authorize_arguments): authority.authorize_result {
     if (args.type == authority.authorization_type.transaction_application) return new authority.authorize_result(this.sponsorOk());
+    // Audit #1 (permission takeover). The station overrides ALL three authorities, so its private key alone can't move
+    // anything. contract_call: a token asks "may the station's funds move?". Yes only when the station's OWN code is
+    // the caller (escrow refunds/releases, council-approved withdrawals); a tx signed with the key gets no.
+    if (args.type == authority.authorization_type.contract_call) {
+      return new authority.authorize_result(args.call != null && Arrays.equal(args.call!.caller, this.contractId));
+    }
+    // contract_upload: only bytecode the council approved (hash), after the delay, keeping all three overrides.
+    if (args.type == authority.authorization_type.contract_upload) return new authority.authorize_result(this.upgradeOk());
     return new authority.authorize_result(false);
   }
 
@@ -390,12 +417,9 @@ export class Station {
     const payee = pf == null ? new Uint8Array(0) : pf.bytes_value;
     const mana = this.mana();
     if (rc > mana) return false;
-    // The station's OWN transactions (payee = the station) need only the station key, and must work BEFORE init:
-    // found on testnet 2026-10-20 that checking "initialized?" first refused every station tx after upload, so init
-    // itself could never be approved and a fresh station was stuck.
-    if (payee.length == 0 || Arrays.equal(payee, this.contractId)) {
-      return System.checkAuthority(authority.authorization_type.contract_call, this.contractId); // station key only
-    }
+    // Audit #1: the station never pays for its OWN transactions (payee = the station). There is no station-key path:
+    // setup happens in the upload transaction itself (see init), which the chain authorizes before this code exists.
+    if (payee.length == 0 || Arrays.equal(payee, this.contractId)) return false;
     if (!isAddress(c.owner)) return false;                              // everything else needs an initialized station
     // The SDK's system-call buffer is 1 KiB by default: reading the operations of a bigger tx (a contract upload, long
     // args) would fail. Enlarge it; a big-upload ticket holder may send a whole contract (UNVERIFIED max tx size:
@@ -409,8 +433,8 @@ export class Station {
       if (o == null) { allCalls = false; allSelf = false; if (ops[i].upload_contract != null) hasUpload = true; continue; }
       if (!Arrays.equal(o.contract_id, this.contractId)) allSelf = false;
     }
-    if (allSelf) { // owner admin (kill switch etc.): works while paused, down to rc <= mana
-      return rc <= c.hard_max && Arrays.equal(payee, c.owner) && System.checkAuthority(authority.authorization_type.contract_call, c.owner!);
+    if (allSelf) { // operator admin and council votes (kill switch etc.): work while paused, down to rc <= mana
+      return rc <= c.hard_max && this.isOperator(c, payee) && System.checkAuthority(authority.authorization_type.contract_call, payee);
     }
     if (c.paused) return false;
     const now = this.now(), h = this.height();
@@ -701,11 +725,28 @@ export class Station {
   }
 
   // ═══════ admin ═══════
+  isCouncil(c: station.config_object, a: Uint8Array): bool {
+    for (let i = 0; i < c.council.length; i++) if (Arrays.equal(c.council[i], a)) return true;
+    return false;
+  }
+  isOperator(c: station.config_object, a: Uint8Array): bool { return (isAddress(c.owner) && Arrays.equal(c.owner, a)) || this.isCouncil(c, a); }
+  /** Everyday actions: the owner or any council member signs (audit #1). Money moves and upgrades need the council. */
   requireOwner(): station.config_object {
     const c = this.config.get()!;
     System.require(isAddress(c.owner), "not initialized");
-    System.require(System.checkAuthority(authority.authorization_type.contract_call, c.owner!), "owner only");
+    if (System.checkAuthority(authority.authorization_type.contract_call, c.owner!)) return c;
+    for (let i = 0; i < c.council.length; i++) if (System.checkAuthority(authority.authorization_type.contract_call, c.council[i])) return c;
+    System.require(false, "operator only (the owner or a council member)");
     return c;
+  }
+  checkCouncil(council: Uint8Array[], threshold: u32, delay: u64): void {
+    System.require(council.length >= 2 && council.length <= MAX_COUNCIL, "council: 2 to 7 members");
+    for (let i = 0; i < council.length; i++) {
+      System.require(isAddress(council[i]) && !Arrays.equal(council[i], this.contractId), "council: wallet addresses only");
+      for (let j = 0; j < i; j++) System.require(!Arrays.equal(council[i], council[j]), "council: duplicate member");
+    }
+    System.require(threshold >= 2 && threshold <= u32(council.length), "threshold: at least 2, at most the council size");
+    System.require(delay >= MIN_GUARD_DELAY_MS, "guard delay below the minimum (48 h on mainnet)");
   }
   checkConfig(c: station.config_object): void {
     System.require(isAddress(c.owner), "owner required");
@@ -714,11 +755,23 @@ export class Station {
     System.require(c.ticket_fee_bp <= 2000, "ticket fee above 20%");
     System.require(!isAddress(c.treasury) || !Arrays.equal(c.treasury!, this.contractId), "treasury must be an external wallet (escrow lives in the station)");
     System.require(c.koin_amount <= this.koinBalance(), "koin_amount above the station's KOIN balance");
+    this.checkCouncil(c.council, c.threshold, c.guard_delay_ms);
     this.validateReservations(c, 0, null);
   }
   init(args: station.init_arguments): station.init_result {
     System.require(!isAddress(this.config.get()!.owner), "already initialized");
-    System.require(System.checkAuthority(authority.authorization_type.contract_call, this.contractId), "station key only");
+    // Audit #1: setup is only valid inside the transaction that uploads this station, with all three permissions taken
+    // over. Only the key holder can make that first upload, so nobody can front-run init, and a deploy that forgot the
+    // lockdown can't be set up at all.
+    // The upload tx carries the whole bytecode: read it with the big buffer. (Not in the test build: its test runner
+    // never frees memory, so a 1 MiB buffer per test runs it out; each real call gets fresh memory.)
+    if (!BUILD_FOR_TESTING) System.setSystemBufferSize(BIG_TX_BUFFER);
+    const ops = txOps(); let ok = false;
+    for (let i = 0; i < ops.length; i++) {
+      const up = ops[i].upload_contract;
+      if (up != null && Arrays.equal(up.contract_id, this.contractId) && up.authorizes_call_contract && up.authorizes_transaction_application && up.authorizes_upload_contract) ok = true;
+    }
+    System.require(ok, "init only in the station's own upload transaction, with all three permissions taken over");
     System.require(args.config != null, "config required");
     this.checkConfig(args.config!);
     this.config.put(args.config!);
@@ -726,8 +779,14 @@ export class Station {
   }
   set_config(args: station.set_config_arguments): station.set_config_result {
     this.requireOwner(); System.require(args.config != null, "config required");
-    const oldCap = this.soldCap(this.config.get()!);
-    args.config!.paused = this.config.get()!.paused;                     // pause only via set_paused (escrow clock)
+    const old = this.config.get()!; const n = args.config!;
+    const oldCap = this.soldCap(old);
+    n.paused = old.paused;                                               // pause only via set_paused (escrow clock)
+    // Audit #1: these change only through a council proposal (delay + veto).
+    let same = Arrays.equal(n.owner, old.owner) && Arrays.equal(n.treasury, old.treasury) && n.threshold == old.threshold
+      && n.guard_delay_ms == old.guard_delay_ms && n.council.length == old.council.length && this.ticketFeeBp(n) <= this.ticketFeeBp(old);
+    for (let i = 0; same && i < n.council.length; i++) same = Arrays.equal(n.council[i], old.council[i]);
+    System.require(same, "owner, treasury, council, threshold, delay and a higher ticket fee change only through a council proposal");
     this.checkConfig(args.config!); this.config.put(args.config!);
     this.noOversell(args.config!, this.now(), oldCap);                  // audit #7
     return new station.set_config_result();
@@ -798,8 +857,8 @@ export class Station {
     this.requireOwner();                                                // owner key only
     System.require(isAddress(args.contract_id) && !Arrays.equal(args.contract_id!, this.contractId), "contract id required");
     const ev = new station.exempt_event(args.contract_id, args.value, args.remove);
-    if (args.remove) this.exempt.remove(args.contract_id!);
-    else { System.require(args.value != null, "value required"); this.exempt.put(args.contract_id!, args.value!); }
+    if (args.remove) { this.exempt.remove(args.contract_id!); this.unindexExempt(args.contract_id!); }
+    else { System.require(args.value != null, "value required"); this.exempt.put(args.contract_id!, args.value!); this.indexExempt(args.contract_id!); }
     System.event("station.exempt_changed", Protobuf.encode(ev, station.exempt_event.encode), [args.contract_id!]);
     return new station.set_exempt_result();
   }
@@ -961,5 +1020,216 @@ export class Station {
   }
   get_escrow_totals(args: station.get_escrow_totals_arguments): station.get_escrow_totals_result {
     const r = new station.get_escrow_totals_result(); r.totals = this.escrowTot.get(args.token!); return r;
+  }
+
+  // ═══════ connected apps (Carl, Oct 20): one list, one-step connect / disconnect ═══════
+  indexExempt(id: Uint8Array): void {
+    const reg = this.registry.get()!;
+    for (let i = 0; i < reg.exempt_ids.length; i++) if (Arrays.equal(reg.exempt_ids[i], id)) return;
+    System.require(reg.exempt_ids.length < MAX_EXEMPT, "too many connected apps (64)");
+    reg.exempt_ids.push(id); this.registry.put(reg);
+  }
+  unindexExempt(id: Uint8Array): void {
+    const reg = this.registry.get()!; const keep = new Array<Uint8Array>();
+    for (let i = 0; i < reg.exempt_ids.length; i++) if (!Arrays.equal(reg.exempt_ids[i], id)) keep.push(reg.exempt_ids[i]);
+    reg.exempt_ids = keep; this.registry.put(reg);
+  }
+  connect_app(args: station.connect_app_arguments): station.connect_app_result {
+    const c = this.requireOwner(); const now = this.now();
+    System.require(isAddress(args.contract_id) && !Arrays.equal(args.contract_id!, this.contractId), "contract id required");
+    System.require(!this.isMoneyContract(args.contract_id!), "token contracts (KOIN, stablecoins) cannot be sponsored");
+    System.require(args.mana_per_day >= MANA, "at least 1 Mana per day (use disconnect_app to remove)");
+    const oldCap = this.soldCap(c);
+    const ex = this.exempt.get(args.contract_id!);
+    let id: u32 = 0;
+    if (ex != null && ex.app > 0) id = ex.app;
+    else { id = 1; while (this.apps.has(u32Key(id))) id++; }
+    let a = this.apps.get(u32Key(id)); if (a == null) a = new station.app_object();
+    a.reserved_mana = args.mana_per_day; a.active = true;
+    this.validateReservations(c, id, a);
+    this.apps.put(u32Key(id), a);
+    const reg = this.registry.get()!;
+    if (!reg.app_ids.includes(id)) { System.require(reg.app_ids.length < 32, "too many apps"); reg.app_ids.push(id); this.registry.put(reg); }
+    const v = new station.exempt_object(id, args.strict);
+    this.exempt.put(args.contract_id!, v); this.indexExempt(args.contract_id!);
+    this.noOversell(c, now, oldCap);
+    System.event("station.exempt_changed", Protobuf.encode(new station.exempt_event(args.contract_id, v, false), station.exempt_event.encode), [args.contract_id!]);
+    return new station.connect_app_result(id);
+  }
+  disconnect_app(args: station.disconnect_app_arguments): station.disconnect_app_result {
+    this.requireOwner();
+    const ex = this.exempt.get(args.contract_id!); System.require(ex != null, "not connected");
+    this.exempt.remove(args.contract_id!); this.unindexExempt(args.contract_id!);
+    if (ex!.app > 0) {                                                  // free its slot unless another contract shares it
+      const reg = this.registry.get()!; let shared = false;
+      for (let i = 0; i < reg.exempt_ids.length; i++) { const o = this.exempt.get(reg.exempt_ids[i]); if (o != null && o.app == ex!.app) shared = true; }
+      if (!shared) {
+        this.apps.remove(u32Key(ex!.app));
+        const keep = new Array<u32>(); for (let i = 0; i < reg.app_ids.length; i++) if (reg.app_ids[i] != ex!.app) keep.push(reg.app_ids[i]);
+        reg.app_ids = keep; this.registry.put(reg);
+      }
+    }
+    System.event("station.exempt_changed", Protobuf.encode(new station.exempt_event(args.contract_id, ex, true), station.exempt_event.encode), [args.contract_id!]);
+    return new station.disconnect_app_result();
+  }
+  list_connected(args: station.list_connected_arguments): station.list_connected_result {
+    const c = this.config.get()!; const now = this.now(); const reg = this.registry.get()!;
+    const r = new station.list_connected_result(); const seen = new Array<u32>();
+    for (let i = 0; i < reg.exempt_ids.length; i++) {
+      const ex = this.exempt.get(reg.exempt_ids[i]); if (ex == null) continue;
+      const x = new station.connected_app(); x.contract_id = reg.exempt_ids[i]; x.app = ex.app; x.strict = ex.strict;
+      if (ex.app > 0) {
+        seen.push(ex.app); const a = this.apps.get(u32Key(ex.app));
+        if (a != null) { x.mana_per_day = a.reserved_mana; x.boost_mana = a.boost_mana; x.boost_until = a.boost_until; x.active = a.active; }
+        const w = this.appWin.get(u32Key(ex.app))!; roll(w, now / APP_SLOT, APP_N, true); x.used_24h = sumMana(w);
+      }
+      r.free_apps.push(x);
+    }
+    for (let i = 0; i < reg.app_ids.length; i++) {                     // reserved slots with no contract linked yet
+      if (seen.includes(reg.app_ids[i])) continue;
+      const a = this.apps.get(u32Key(reg.app_ids[i])); if (a == null) continue;
+      const x = new station.connected_app(); x.app = reg.app_ids[i]; x.mana_per_day = a.reserved_mana; x.active = a.active;
+      const w = this.appWin.get(u32Key(reg.app_ids[i]))!; roll(w, now / APP_SLOT, APP_N, true); x.used_24h = sumMana(w);
+      r.free_apps.push(x);
+    }
+    for (let i = 0; i < reg.open_ids.length; i++) {
+      const a = this.allowances.get(u32Key(reg.open_ids[i])); if (a == null) continue;
+      const x = new station.paid_app(); x.id = a.id; x.buyer = a.buyer; x.target = a.target; x.mana_per_day = a.mana_per_day; x.expiry = a.expiry;
+      if (a.day != null) { roll(a.day!, now / USER_SLOT, USER_N, false); x.used_24h = sumMana(a.day!); }
+      x.suspended = this.suspended.has(a.buyer!);
+      r.paid.push(x);
+    }
+    r.daily_budget = this.dailyBudget(c); r.reserved = this.reservedTotal(); r.sellable = this.soldCap(c);
+    r.sold = this.committed(c, now, false)[0]; r.mana = this.mana();
+    return r;
+  }
+
+  // ═══════ council (audit #1): M-of-N approval + delay for money moves and upgrades; any one member can veto ═══════
+  validCount(c: station.config_object, p: station.proposal_object): u32 {
+    let n: u32 = 0;
+    for (let i = 0; i < p.approvals.length; i++) if (this.isCouncil(c, p.approvals[i])) n++;
+    return n;
+  }
+  propEvent(p: station.proposal_object, by: Uint8Array, what: string): void {
+    System.event("station.proposal_" + what, Protobuf.encode(new station.proposal_event(p, by, what), station.proposal_event.encode), [by]);
+  }
+  maybeReady(c: station.config_object, p: station.proposal_object, now: u64, by: Uint8Array): void {
+    if (p.ready_at == 0 && this.validCount(c, p) >= c.threshold) { p.ready_at = now + c.guard_delay_ms; this.propEvent(p, by, "ready"); }
+  }
+  closeProposal(p: station.proposal_object): void {
+    this.proposals.put(u32Key(p.id), p);
+    const reg = this.registry.get()!; const keep = new Array<u32>();
+    for (let i = 0; i < reg.open_proposals.length; i++) if (reg.open_proposals[i] != p.id) keep.push(reg.open_proposals[i]);
+    reg.open_proposals = keep; this.registry.put(reg);
+  }
+  requireCouncil(c: station.config_object, signer: Uint8Array | null): void {
+    System.require(isAddress(signer) && this.isCouncil(c, signer!), "council members only");
+    System.require(System.checkAuthority(authority.authorization_type.contract_call, signer!), "signer must sign");
+  }
+  openProposal(id: u32): station.proposal_object {
+    const p = this.proposals.get(u32Key(id)); System.require(p != null, "no such proposal");
+    System.require(!p!.executed && !p!.cancelled, "proposal already closed");
+    return p!;
+  }
+  checkAction(a: station.guarded_action): void {
+    System.require(a.kind >= 1 && a.kind <= 8, "kind 1-8");
+    if (a.kind == 1) { const h = a.hash; System.require(h != null && h.length == 34 && h[0] == 0x12 && h[1] == 0x20, "upgrade: sha2-256 multihash (0x1220…) of the new bytecode"); }
+    if (a.kind == 2 || a.kind == 3 || a.kind == 6 || a.kind == 8) System.require(isAddress(a.to) && !Arrays.equal(a.to, this.contractId), "a wallet address is required");
+    if (a.kind == 2 || a.kind == 3) System.require(a.amount > 0, "amount required");
+    if (a.kind == 3) System.require(isAddress(a.token) && !Arrays.equal(a.token, this.koinId()), "token required (use kind 2 for KOIN)");
+    if (a.kind == 4) this.checkCouncil(a.council, a.threshold, this.config.get()!.guard_delay_ms);
+    if (a.kind == 5) System.require(a.delay_ms >= MIN_GUARD_DELAY_MS, "guard delay below the minimum (48 h on mainnet)");
+    if (a.kind == 7) System.require(a.fee_bp <= 2000, "ticket fee above 20%");
+  }
+  propose(args: station.propose_arguments): station.propose_result {
+    const c = this.config.get()!; System.require(isAddress(c.owner), "not initialized");
+    this.requireCouncil(c, args.signer); System.require(args.action != null, "action required");
+    this.checkAction(args.action!);
+    const reg = this.registry.get()!;
+    System.require(reg.open_proposals.length < MAX_OPEN_PROPOSALS, "too many open proposals (16)");
+    reg.next_proposal += 1; const id = reg.next_proposal; reg.open_proposals.push(id); this.registry.put(reg);
+    const now = this.now();
+    const p = new station.proposal_object(id, args.action, args.signer, [args.signer!], now);
+    this.propEvent(p, args.signer!, "created");
+    this.maybeReady(c, p, now, args.signer!);
+    this.proposals.put(u32Key(id), p);
+    return new station.propose_result(id);
+  }
+  approve(args: station.approve_arguments): station.approve_result {
+    const c = this.config.get()!; this.requireCouncil(c, args.signer);
+    const p = this.openProposal(args.id);
+    for (let i = 0; i < p.approvals.length; i++) System.require(!Arrays.equal(p.approvals[i], args.signer!), "already approved");
+    p.approvals.push(args.signer!);
+    this.propEvent(p, args.signer!, "approved");
+    this.maybeReady(c, p, this.now(), args.signer!);
+    this.proposals.put(u32Key(p.id), p);
+    return new station.approve_result(p.ready_at);
+  }
+  cancel_proposal(args: station.cancel_proposal_arguments): station.cancel_proposal_result {
+    const c = this.config.get()!; this.requireCouncil(c, args.signer);
+    const p = this.openProposal(args.id);
+    p.cancelled = true; p.cancelled_by = args.signer; this.closeProposal(p);
+    this.propEvent(p, args.signer!, "cancelled");
+    return new station.cancel_proposal_result();
+  }
+  /** Ready = threshold reached, delay passed, and still enough approvals from CURRENT council members. */
+  isReady(c: station.config_object, p: station.proposal_object, now: u64): bool {
+    return p.ready_at > 0 && now >= p.ready_at && this.validCount(c, p) >= c.threshold;
+  }
+  execute(args: station.execute_arguments): station.execute_result {
+    const c = this.config.get()!; const now = this.now();
+    const p = this.openProposal(args.id); const a = p.action!;
+    System.require(a.kind != 1, "upgrades run by uploading the approved bytecode to the station");
+    System.require(p.ready_at > 0, "not enough approvals yet");
+    System.require(now >= p.ready_at, "waiting period not over");
+    System.require(this.validCount(c, p) >= c.threshold, "not enough approvals from current council members");
+    p.executed = true; this.closeProposal(p);                            // state first, then any transfer
+    if (a.kind == 2) {
+      const bal = this.koinBalance();
+      System.require(bal >= a.amount && bal - a.amount >= c.koin_amount, "would leave less KOIN than koin_amount (lower koin_amount first)");
+      this.koinSend(a.to!, a.amount);
+    } else if (a.kind == 3) {
+      const held = this.escrowTot.get(a.token!)!.held; const bal = this.tokenBalance(a.token!);
+      System.require(bal >= held && a.amount <= bal - held, "only tokens above what escrow holds can be rescued");
+      this.send(a.token!, a.to!, a.amount);
+    } else {
+      if (a.kind == 4) { this.checkCouncil(a.council, a.threshold, c.guard_delay_ms); c.council = a.council; c.threshold = a.threshold; }
+      else if (a.kind == 5) c.guard_delay_ms = a.delay_ms;
+      else if (a.kind == 6) c.treasury = a.to;
+      else if (a.kind == 7) c.ticket_fee_bp = a.fee_bp;
+      else if (a.kind == 8) c.owner = a.to;
+      this.config.put(c);
+    }
+    this.propEvent(p, new Uint8Array(0), "executed");
+    return new station.execute_result();
+  }
+  /** authorize(contract_upload): only the exact bytecode of a ready upgrade proposal, keeping all three overrides. */
+  upgradeOk(): bool {
+    const c = this.config.get()!;
+    if (!isAddress(c.owner)) return false;
+    if (!BUILD_FOR_TESTING) System.setSystemBufferSize(BIG_TX_BUFFER);  // the tx carries the new bytecode (see init)
+    const ops = txOps(); let up: protocol.upload_contract_operation | null = null;
+    for (let i = 0; i < ops.length; i++) { const u = ops[i].upload_contract; if (u != null && Arrays.equal(u.contract_id, this.contractId)) up = u; }
+    if (up == null) return false;
+    if (!up.authorizes_call_contract || !up.authorizes_transaction_application || !up.authorizes_upload_contract) return false;
+    const h = System.hash(Crypto.multicodec.sha2_256, up.bytecode); if (h == null) return false;
+    const now = this.now(); const reg = this.registry.get()!;
+    for (let i = 0; i < reg.open_proposals.length; i++) {
+      const p = this.proposals.get(u32Key(reg.open_proposals[i]));
+      if (p == null || p.action == null || p.action!.kind != 1 || !Arrays.equal(p.action!.hash, h)) continue;
+      if (!this.isReady(c, p, now) || now >= p.ready_at + UPGRADE_WINDOW_MS) continue;
+      p.executed = true; this.closeProposal(p);
+      this.propEvent(p, new Uint8Array(0), "executed");
+      return true;
+    }
+    return false;
+  }
+  get_proposal(args: station.get_proposal_arguments): station.get_proposal_result {
+    const r = new station.get_proposal_result(); r.proposal = this.proposals.get(u32Key(args.id)); return r;
+  }
+  list_proposals(args: station.list_proposals_arguments): station.list_proposals_result {
+    const r = new station.list_proposals_result(); const reg = this.registry.get()!;
+    for (let i = 0; i < reg.open_proposals.length; i++) { const p = this.proposals.get(u32Key(reg.open_proposals[i])); if (p != null) r.proposals.push(p); }
+    return r;
   }
 }
