@@ -1,6 +1,6 @@
 // Mana Station TESTNET (Harbinger) scenarios, v2 interface (escrow, 5% ticket fee, suspend, tickets, buffer, anti-spam).
-// Usage: RPC=https://harbinger-api.koinos.io node testnet/run_tests.mjs
-// SAFETY: refuses mainnet's chain id and any non-harbinger RPC; only uses throwaway keys from testnet/keys.testnet.json
+// Usage: RPC=https://testnet.koinosfoundation.org node testnet/run_tests.mjs
+// SAFETY: runs only against the Koinos testnet chain id (and refuses mainnet's); only uses throwaway keys from testnet/keys.testnet.json
 // (in CI written from the TESTNET_KEYS secret); the stablecoin is a worthless mock token deployed by this script.
 // Never prints private keys. Every check is recorded PASS/FAIL and the run continues, to keep reruns to a minimum.
 import { createRequire } from "module"; const require = createRequire(import.meta.url);
@@ -8,12 +8,13 @@ const { Provider, Signer, Contract, Transaction, utils } = require("../contracts
 import fs from "fs"; import crypto from "crypto";
 
 const MAINNET_ID_PREFIX = "EiBZK_GGVP0H_fXVAM3j6EAuz3-B-l3e";
-const RPC = process.env.RPC || "https://harbinger-api.koinos.io";
-if (!/harbinger/i.test(RPC)) throw new Error("RPC must be a Harbinger endpoint");
+const TESTNET_ID = "EiAIKVvm6-V2qmsmUvPJy09vCCLbtn9lHFpwrJbcTIEWRQ=="; // Koinos testnet (Carl, Oct 19 10:05 PM)
+const RPC = process.env.RPC || "https://testnet.koinosfoundation.org";
 const K = JSON.parse(fs.readFileSync(new URL("./keys.testnet.json", import.meta.url)));
 const provider = new Provider([RPC]);
 const chainId = await provider.getChainId();
 if (chainId.startsWith(MAINNET_ID_PREFIX)) throw new Error("MAINNET chain id: refusing");
+if (chainId !== TESTNET_ID) throw new Error(`not the Koinos testnet (chain id ${chainId}): refusing`);
 const M = 100_000_000n;
 const fmt = (v) => (typeof v === "bigint" ? `${v} (${(Number(v) / 1e8).toFixed(5)} Mana)` : String(v));
 const R = { chainId, rpc: RPC, started: new Date().toISOString(), checks: [], costs: {}, notes: [] };

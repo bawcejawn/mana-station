@@ -47,9 +47,9 @@ jobs:
       - name: Harbinger scenarios
         if: ${{ inputs.run_testnet == 'true' }}
         env:
-          # Harbinger's public RPC has been unreachable (ETIMEDOUT) since Oct 19. Preferred: the secret HARBINGER_RPC =
-          # https://api.harbinger.koinos.pro/jsonrpc?apikey=<free Koinos Pro key> (docs.koinos.io/developers/testnet).
-          RPC: ${{ secrets.HARBINGER_RPC || 'https://harbinger-api.koinos.io' }}
+          # Koinos Foundation public testnet node (Carl, Oct 19 10:05 PM). The script also refuses any chain id but the testnet's.
+          # Optional override: the HARBINGER_RPC secret.
+          RPC: ${{ secrets.HARBINGER_RPC || 'https://testnet.koinosfoundation.org' }}
         run: |
           set -o pipefail
           node testnet/run_tests.mjs 2>&1 | tee testnet/run.log
