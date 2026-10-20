@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Try free play: Mana Station</title>
+  <meta name="description" content="Tap a button and send a real Koinos testnet transaction with no KOIN and no Mana. Mana Station pays.">
+  <meta name="theme-color" content="#2f5bff">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Figtree:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .play { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: clamp(24px, 4vw, 48px); align-items: start; padding-block: 8px 80px; }
+    .stage { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-big); padding: clamp(24px, 4vw, 40px); display: grid; gap: 22px; justify-items: center; text-align: center; }
+    .tap {
+      width: min(220px, 60vw); aspect-ratio: 1; border-radius: 50%; border: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+      background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--mana) 70%, white) 0%, var(--mana) 60%); color: var(--mana-ink);
+      font: 800 1.6rem/1 var(--display); box-shadow: 0 14px 0 color-mix(in srgb, var(--mana) 60%, black), 0 22px 40px color-mix(in srgb, var(--mana) 35%, transparent);
+      transition: transform 90ms ease, box-shadow 90ms ease; max-width: 100%;
+    }
+    .tap small { font: 600 0.85rem/1.2 var(--body); opacity: 0.9; }
+    .tap:active:not(:disabled) { transform: translateY(10px); box-shadow: 0 4px 0 color-mix(in srgb, var(--mana) 60%, black), 0 10px 20px color-mix(in srgb, var(--mana) 30%, transparent); }
+    .tap:disabled { cursor: progress; filter: saturate(0.5); }
+    .count { font: 800 clamp(3rem, 8vw, 4.5rem)/1 var(--display); font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
+    .status { min-height: 3.2em; max-width: 46ch; }
+    .status.ok { color: var(--ok); } .status.err { color: #b3261e; }
+    .side { display: grid; gap: 18px; min-width: 0; }
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 22px; display: grid; gap: 12px; min-width: 0; }
+    .card h2 { font-size: var(--step-1); letter-spacing: -0.01em; }
+    .kv { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; margin: 0; font-size: var(--step--1); }
+    .kv dt { color: var(--muted); } .kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere; }
+    .zero { color: #b3261e; font-weight: 700; }
+    .bar { height: 10px; border-radius: 6px; background: var(--mana-soft); overflow: hidden; }
+    .bar > i { display: block; height: 100%; background: var(--mana); transition: width 400ms ease; }
+    .feed { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 280px; overflow: auto; }
+    .feed li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; padding: 10px 14px; border-radius: 12px; background: var(--paper); font-size: var(--step--1); text-align: left; }
+    .feed li span { white-space: nowrap; color: var(--muted); }
+    .feed b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.82rem; overflow-wrap: anywhere; }
+    .linkish { background: none; border: 0; color: var(--mana); font: inherit; font-weight: 600; cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 0.18em; }
+    @media (max-width: 860px) { .play { grid-template-columns: 1fr; } }
+    @media (prefers-reduced-motion: reduce) { .tap, .bar > i { transition: none; } }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="site-head">
+    <div class="wrap">
+      <a class="brand" href="index.html" aria-label="Mana Station home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--ink)"/><path d="M16 6c4 5 7 8.6 7 12.4A7 7 0 0 1 9 18.4C9 14.6 12 11 16 6Z" fill="var(--mana)"/><rect x="11" y="20" width="10" height="3" rx="1.5" fill="var(--spark)"/></svg>
+        Mana Station
+      </a>
+      <nav class="nav" aria-label="Main">
+        <a href="index.html">Home</a>
+        <a href="how-it-works.html">How it works</a>
+        <a href="play.html" aria-current="page">Try it</a>
+        <a href="console.html">Console</a>
+        <span class="status-pill">Koinos testnet</span>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" aria-labelledby="t">
+      <div class="wrap" style="grid-template-columns:minmax(0,1fr);padding-bottom:28px">
+        <div class="hero-copy">
+          <h1 id="t">Tap. It's free.</h1>
+          <p class="lede">You're a brand-new player: no KOIN, no Mana. Each tap is a real transaction on the Koinos testnet, and Mana Station pays for it.</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="wrap play">
+      <section class="stage" aria-labelledby="stage-t">
+        <h2 id="stage-t" class="small" style="font:600 var(--step--1)/1.3 var(--body);color:var(--muted)">Tap counter, a demo app</h2>
+        <div class="count" id="count" aria-live="polite">0</div>
+        <button class="tap" id="tap" type="button" disabled>Tap<small>free</small></button>
+        <p class="status" id="status" role="status" aria-live="polite">Connecting to the testnet…</p>
+        <ul class="feed" id="feed" aria-label="Your recent taps"></ul>
+      </section>
+
+      <aside class="side">
+        <section class="card" aria-labelledby="you-t">
+          <h2 id="you-t">You</h2>
+          <dl class="kv">
+            <dt>Test wallet</dt><dd class="mono" id="me">…</dd>
+            <dt>Your KOIN</dt><dd id="myKoin">…</dd>
+            <dt>Your Mana</dt><dd id="myMana">…</dd>
+            <dt>Free taps today</dt><dd id="myToday">…</dd>
+          </dl>
+          <p class="small">With no Mana you couldn't send a single transaction on your own. The station covers you.</p>
+          <p class="small"><button class="linkish" id="fresh" type="button">Start over as a new player</button></p>
+        </section>
+
+        <section class="card" aria-labelledby="st-t">
+          <h2 id="st-t">The station</h2>
+          <dl class="kv">
+            <dt>Station Mana</dt><dd id="stMana">…</dd>
+            <dt>This app's daily Mana</dt><dd id="appCap">…</dd>
+            <dt>Used in the last 24 h</dt><dd id="appUsed">…</dd>
+          </dl>
+          <div class="bar" role="img" id="appBarWrap" aria-label="Share of the app's daily Mana used"><i id="appBar" style="width:0%"></i></div>
+          <p class="small" id="limits">Fair-use limits keep one player from using it all.</p>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <footer class="site-foot"><div class="wrap"><span>Mana Station playground</span><p>Testnet only. Your test wallet lives in this browser; it holds nothing of value.</p></div></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/koilib@9.4.1/dist/koinos.min.js"></script>
+  <script src="abis.js"></script>
+  <script src="playground.js"></script>
+  <script src="wallets.js"></script>
+  <script>
+  (() => {
+    const PG = window.MS_PLAYGROUND || {}, ABI = window.MS_ABI || {};
+    const $ = (id) => document.getElementById(id);
+    const fmt = (v, d = 2) => (Number(BigInt(v || 0)) / 1e8).toLocaleString(undefined, { maximumFractionDigits: d });
+    const status = (t, k = "") => { const s = $("status"); s.textContent = t; s.className = "status " + k; };
+    if (!window.Signer || !PG.station || !PG.demoApp) { status(!window.Signer ? "Couldn't load koilib. Check your internet connection and reload." : "The playground isn't set up yet (no station address in playground.js).", "err"); return; }
+    const provider = new Provider([PG.rpc]);
+    const LIMIT = "19000000";                                  // 0.19 Mana: 1.1x a measured play (helper/payer.js)
+    let me = null, cfg = {};
+    const pickMe = () => { try { const a = localStorage.getItem("ms.player"); if (a && MSWallets.list().some((w) => w.address === a)) return a; } catch {} const w = MSWallets.create("Player " + new Date().toLocaleTimeString()); try { localStorage.setItem("ms.player", w.address); } catch {} return w.address; };
+    const station = new Contract({ id: PG.station, abi: ABI.station, provider });
+    const appRead = new Contract({ id: PG.demoApp, abi: ABI.app, provider });
+
+    async function refresh() {
+      try {
+        const [st, L, mine, cnt, rc, koin] = await Promise.all([
+          station.functions.get_status({}), station.functions.list_connected({}), station.functions.get_user({ user: me }),
+          appRead.functions.get({ user: me }), provider.getAccountRc(me),
+          provider.invokeGetContractAddress("koin").then((r) => new Contract({ id: r.value.address, abi: utils.tokenAbi, provider }).functions.balanceOf({ owner: me })).catch(() => ({ result: {} })),
+        ]);
+        cfg = st.result?.config || {};
+        $("count").textContent = String((cnt.result || {}).n || 0);
+        $("myKoin").innerHTML = '<span class="zero">' + fmt((koin.result || {}).value) + "</span>";
+        $("myMana").innerHTML = '<span class="zero">' + fmt(rc) + "</span>";
+        const u = (mine.result || {}).user || {}; const isNew = !u.first_seen || Date.now() - Number(u.first_seen) < 86_400_000;
+        $("myToday").textContent = String((mine.result || {}).actions_24h || 0) + " of " + ((isNew ? cfg.new_actions : cfg.day_actions) || "…") + (isNew ? " (new player)" : "");
+        $("stMana").textContent = fmt(st.result?.mana, 1);
+        const app = ((L.result || {}).free_apps || []).find((a) => a.contract_id === PG.demoApp) || {};
+        const cap = Number(BigInt(app.mana_per_day || 0)), used = Number(BigInt(app.used_24h || 0));
+        $("appCap").textContent = fmt(app.mana_per_day); $("appUsed").textContent = fmt(app.used_24h);
+        $("appBar").style.width = (cap ? Math.min(100, used / cap * 100) : 0).toFixed(1) + "%";
+        $("appBarWrap").setAttribute("aria-label", (cap ? Math.round(used / cap * 100) : 0) + "% of the app's daily Mana used");
+        if (cfg.per_min) $("limits").textContent = `Fair-use limits keep one player from using it all: up to ${cfg.per_min} taps a minute, then a ${Math.round(Number(cfg.cooldown_ms) / 60000)}-minute pause, and one tap per block (about 3 seconds).`;
+        if (cfg.paused) status("The station is paused right now, so free play is off.", "err");
+      } catch (e) { status("Couldn't read the testnet: " + (e.message || e), "err"); }
+    }
+
+    async function why() {
+      try {
+        const u = ((await station.functions.get_user({ user: me })).result || {}).user || {};
+        const now = Date.now();
+        if (cfg.paused) return "The station is paused.";
+        if (Number(u.cooldown_until || 0) > now) return `You hit the ${cfg.per_min}-a-minute limit. Free play is back in ${Math.ceil((Number(u.cooldown_until) - now) / 1000)} seconds.`;
+        return "Too soon after your last tap (one per block, about 3 seconds), or today's free Mana for this app is used up. Try again in a moment.";
+      } catch { return "The station said no this time. Try again in a moment."; }
+    }
+
+    async function tap() {
+      $("tap").disabled = true; status("Sending your tap…");
+      const app = new Contract({ id: PG.demoApp, abi: ABI.app, provider, signer: MSWallets.signer(me, provider) });
+      const t0 = performance.now();
+      try {
+        const { transaction, receipt } = await app.functions.play({ user: me }, { payer: PG.station, payee: me, rcLimit: LIMIT });
+        status("In the mempool. Waiting for a block…");
+        const w = await transaction.wait("byBlock", 60000);
+        const secs = ((performance.now() - t0) / 1000).toFixed(1);
+        status(`Done in ${secs} s. You paid nothing; the station paid ${fmt(receipt.rc_used, 3)} Mana.`, "ok");
+        const li = document.createElement("li");
+        li.innerHTML = '<span></span><b></b>'; li.firstChild.textContent = "Block " + (w?.blockNumber ?? "?") + " · " + new Date().toLocaleTimeString(); li.lastChild.textContent = fmt(receipt.rc_used, 3) + " Mana, paid by the station";
+        li.title = "Transaction " + transaction.id; $("feed").prepend(li);
+      } catch (e) {
+        const m = String(e?.message || e);
+        status(/has not authorized/.test(m) ? await why() : "That didn't go through: " + m.slice(0, 160), "err");
+      }
+      await refresh(); $("tap").disabled = false; $("tap").focus();
+    }
+
+    me = pickMe(); $("me").textContent = me;
+    $("tap").addEventListener("click", tap);
+    $("fresh").addEventListener("click", async () => { const w = MSWallets.create("Player " + new Date().toLocaleTimeString()); try { localStorage.setItem("ms.player", w.address); } catch {} me = w.address; $("me").textContent = me; $("feed").replaceChildren(); status("You're a brand-new player again."); await refresh(); });
+    refresh().then(() => { if (!cfg.paused) { $("tap").disabled = false; status("Ready. Tap the button."); } });
+  })();
+  </script>
+</body>
+</html>

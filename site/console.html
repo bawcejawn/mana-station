@@ -53,6 +53,7 @@
       <nav class="nav" aria-label="Main">
         <a href="index.html">Home</a>
         <a href="how-it-works.html">How it works</a>
+        <a href="play.html">Try it</a>
         <a href="console.html" aria-current="page">Console</a>
       </nav>
     </div>
@@ -73,8 +74,22 @@
         <button class="btn btn-main" id="load">Load</button>
       </div>
       <div class="row">
-        <button class="btn btn-quiet" id="wallet">Connect Kondor</button>
-        <span class="small" id="who">No wallet connected. You can still read everything.</span>
+        <div class="field" style="flex-basis:340px"><label for="signerSel">Sign as</label>
+          <select id="signerSel"><option value="">Nobody (read only)</option></select></div>
+        <button class="btn btn-quiet" id="newWallet" type="button">New test wallet</button>
+        <button class="btn btn-quiet" id="wallet" type="button">Use Kondor</button>
+      </div>
+      <div class="row">
+        <span class="small" id="who">Reading needs no wallet.</span>
+        <button class="btn btn-quiet btn-small" id="copyMe" type="button" hidden>Copy address</button>
+      </div>
+      <details id="handoverHelp">
+        <summary>Run this playground yourself</summary>
+        <div>
+          <p class="small">Create four test wallets here: Owner, Council 1, Council 2 and Council 3. Send their four addresses to Claude, who hands the playground over to them through the current council: 2 of 3 approvals, then the 2-minute wait. After that you can try every owner and council action from this page.</p>
+          <p class="small">Test wallets live only in this browser and hold nothing of value. Don't use them on mainnet.</p>
+        </div>
+      </details>
       </div>
       <div id="msg" class="msg" role="status" aria-live="polite" hidden></div>
     </section>
@@ -121,12 +136,15 @@
 
   <script src="https://cdn.jsdelivr.net/npm/koilib@9.4.1/dist/koinos.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/kondor-js@1.3.0/dist/kondor.min.js"></script>
+  <script src="abis.js"></script>
+  <script src="playground.js"></script>
+  <script src="wallets.js"></script>
   <script>
   (() => {
     const M = 100000000n;
     const KIND = { 1: "Upgrade the station's code", 2: "Withdraw KOIN", 3: "Rescue a token sent by mistake", 4: "Change the council", 5: "Change the waiting period", 6: "Change the treasury", 7: "Change the ticket fee", 8: "Change the owner" };
     const $ = (id) => document.getElementById(id);
-    let abi = null, station = null, provider = null, me = null, status = null;
+    let abi = (window.MS_ABI || {}).station || null, station = null, provider = null, me = null, status = null, useKondor = false;
     const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
     const mana = (v) => (Number(BigInt(v || 0)) / 1e8).toLocaleString(undefined, { maximumFractionDigits: 2 });
     const short = (a) => (a ? a.slice(0, 6) + "…" + a.slice(-4) : "");
@@ -139,12 +157,12 @@
       const addr = $("station").value.trim(); if (!addr) { say("Enter the station's address first.", "err"); return; }
       store.set("ms.station", addr); store.set("ms.net", $("net").value);
       try {
-        abi = abi || await (await fetch("station-abi.json")).json();
+        abi = abi || await (await fetch("station-abi.json")).json();          // abis.js normally provides it (works from disk)
         provider = new Provider([$("net").value]);
         station = new Contract({ id: addr, abi, provider });
         const [st, list, props] = await Promise.all([station.functions.get_status({}), station.functions.list_connected({}), station.functions.list_proposals({})]);
         status = st.result || {};
-        render(status, list.result || {}, (props.result || {}).proposals || []);
+        render(status, list.result || {}, (props.result || {}).proposals || []); pickSigner();
         say("Loaded " + new Date().toLocaleTimeString() + ".", "ok");
       } catch (e) { say("Couldn't read the station: " + (e.message || e) + ". Check the address and network.", "err"); }
     }
@@ -210,27 +228,55 @@
       if (!pr.children.length) pr.innerHTML = '<tr><td colspan="5" class="empty">No open proposals.</td></tr>';
     }
 
+    // Signing: a test wallet kept in this browser (testnet) or Kondor.
+    function fillSigners(selected) {
+      const sel = $("signerSel"); sel.replaceChildren(new Option("Nobody (read only)", ""));
+      for (const w of MSWallets.list()) sel.append(new Option(w.name + " · " + w.address.slice(0, 8) + "…", "test:" + w.address));
+      if (useKondor && me) sel.append(new Option("Kondor · " + me.slice(0, 8) + "…", "kondor:" + me));
+      sel.value = selected || ""; pickSigner();
+    }
+    function role(addr) {
+      const c = status?.config || {}; const r = [];
+      if (c.owner === addr) r.push("the owner");
+      if ((c.council || []).includes(addr)) r.push("a council member");
+      return r.length ? r.join(" and ") : "not the owner or on the council of this station";
+    }
+    function pickSigner() {
+      const v = $("signerSel").value; useKondor = v.startsWith("kondor:"); me = v ? v.split(":")[1] : null;
+      $("who").textContent = me ? `Signing as ${me}: ${role(me)}.` : "Reading needs no wallet.";
+      $("copyMe").hidden = !me; try { localStorage.setItem("ms.signer", v); } catch {}
+    }
     async function connectWallet() {
-      if (!window.kondor) { say("Kondor isn't available in this browser. Install the Kondor extension, then reload.", "err"); return; }
-      try { const accts = await kondor.getAccounts(); me = accts[0]?.address || null; $("who").textContent = me ? "Signing as " + me : "No account shared."; }
+      if (!window.kondor) { say("Kondor isn't available here. Install the Kondor extension (set to the testnet), or use a test wallet.", "err"); return; }
+      try { const accts = await kondor.getAccounts(); const a = accts[0]?.address; if (!a) { say("Kondor didn't share an account.", "err"); return; } useKondor = true; me = a; fillSigners("kondor:" + a); }
       catch (e) { say("Kondor didn't share an account: " + (e.message || e), "err"); }
     }
+    const signerFor = () => (useKondor ? kondor.getSigner(me) : MSWallets.signer(me, provider));
 
     // Operator writes are paid by the station when it allows (operator path); otherwise by your own Mana.
     async function write(fn, args, done, anyone = false) {
       if (!station) { say("Load a station first.", "err"); return; }
-      if (!me) { await connectWallet(); if (!me) return; }
-      const c = new Contract({ id: station.getId(), abi, provider, signer: kondor.getSigner(me) });
-      say("Waiting for Kondor…");
+      if (!me) { say("Choose who signs first (Sign as), or create a test wallet.", "err"); return; }
+      const c = new Contract({ id: station.getId(), abi, provider, signer: signerFor() });
+      say(useKondor ? "Waiting for Kondor…" : "Sending…");
       const tries = anyone ? [{ rcLimit: String(M / 2n) }] : [{ payer: station.getId(), payee: me, rcLimit: String(M) }, { rcLimit: String(M) }];
       let last = null;
       for (const opts of tries) {
         try { const { transaction } = await c.functions[fn](args, opts); say("Sent. Waiting for the block…"); await transaction.wait("byBlock", 60000); say(done, "ok"); await load(); return; }
         catch (e) { last = e; if (!/has not authorized|insufficient/i.test(String(e.message || e))) break; }
       }
-      say("Not done: " + (last?.message || last), "err");
+      say("Not done: " + friendly(last), "err");
     }
     const council = (fn, args, done) => write(fn, { signer: me, ...args }, done);
+    // Plain-language versions of the chain's most common answers.
+    function friendly(e) {
+      const m = String(e?.message || e || "");
+      const why = (m.match(/transaction reverted: ([^"\]]+)/) || [])[1];
+      if (why) return "the station said: " + why + ".";
+      if (/insufficient pending account resources|"code":104|insufficient rc/.test(m)) return `this wallet has no Mana of its own, and the station only pays for actions by its owner or council (this wallet is ${role(me)}).`;
+      if (/has not authorized/.test(m)) return "the station declined to pay for this, and this wallet can't pay for it either.";
+      return m.slice(0, 200);
+    }
 
     $("load").addEventListener("click", load);
     $("wallet").addEventListener("click", connectWallet);
@@ -243,13 +289,24 @@
     $("withdrawForm").addEventListener("submit", (e) => {
       e.preventDefault();
       const v = Number($("wAmt").value); if (!(v > 0)) { say("Enter how much KOIN.", "err"); return; }
-      if (!me) { say("Connect a council member's wallet first.", "err"); return; }
+      if (!me) { say("Choose a council member's wallet under Sign as first.", "err"); return; }
       council("propose", { action: { kind: 2, to: $("wTo").value.trim(), amount: String(BigInt(Math.round(v * 1e8))) } }, "Proposed. It needs the council's approval, then the waiting period.");
     });
+    $("signerSel").addEventListener("change", pickSigner);
+    $("newWallet").addEventListener("click", () => {
+      const names = ["Owner", "Council 1", "Council 2", "Council 3"]; const have = MSWallets.list().map((w) => w.name);
+      const w = MSWallets.create(names.find((n) => !have.includes(n)));
+      fillSigners("test:" + w.address); say(`Created ${w.name}: ${w.address}. It lives only in this browser.`, "ok");
+    });
+    $("copyMe").addEventListener("click", async () => { try { await navigator.clipboard.writeText(me); say("Address copied.", "ok"); } catch { say(me); } });
+    const PG = window.MS_PLAYGROUND || {};
+    let sig0 = ""; try { sig0 = localStorage.getItem("ms.signer") || ""; } catch {}
+    fillSigners(sig0.startsWith("test:") ? sig0 : "");
     const s0 = store.get("ms.station"), n0 = store.get("ms.net");
-    if (n0) $("net").value = n0;
+    if (n0) $("net").value = n0; else if (PG.rpc) $("net").value = PG.rpc;
     const hash = location.hash.slice(1); if (/^1[1-9A-HJ-NP-Za-km-z]{25,34}$/.test(hash)) { $("station").value = hash; load(); }
     else if (s0) { $("station").value = s0; load(); }
+    else if (PG.station) { $("station").value = PG.station; load(); }
   })();
   </script>
 </body>

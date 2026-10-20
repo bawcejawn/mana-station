@@ -1,0 +1,8 @@
+{
+  "network": "https://testnet.koinosfoundation.org",
+  "chain_id": "EiAIKVvm6-V2qmsmUvPJy09vCCLbtn9lHFpwrJbcTIEWRQ==",
+  "station": "1D5GC6nPqVV2WFV5hGRy86bzgezErHz5TD",
+  "demo_app": "1JF71KYwaRa4XTfuL8fi4fkH8j4qUrN3Kn",
+  "test_stablecoin": "1G85uRcAKiMPQjXv7jYc7VQWMe37NtNT2q",
+  "koin": "1FaSvLjQJsCJKq5ybmGsMMQs8RQYyVv8ju"
+}
