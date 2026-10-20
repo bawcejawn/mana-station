@@ -218,7 +218,7 @@ await cmSend(2, "approve", { signer: A(council(2)), id: vetoId });
 { const x = await admin("set_config", { config: { ...base, treasury: U1 } }); check("council", "owner alone can't change the treasury (council only)", !x.ok, errOf(x) || "ACCEPTED"); }
 
 let r;
-r = await admin("set_app", { app: 1, value: { reserved_mana: String(20n * M), active: true } }); check("init", "set_app 1 (measurement app)", r.ok, (r.viaSelf ? "owner self-paid " : "station-sponsored owner path ") + errOf(r));
+r = await admin("set_app", { app: 1, value: { reserved_mana: String(koinAmt * 2000n / 10000n - M), active: true } }); // the daily budget minus Stories' 0.5 and a margin check("init", "set_app 1 (measurement app)", r.ok, (r.viaSelf ? "owner self-paid " : "station-sponsored owner path ") + errOf(r));
 r = await admin("set_app", { app: 2, value: { reserved_mana: String(M / 2n), active: true } }); check("init", "set_app 2 (Stories)", r.ok, errOf(r));
 check("init", "set_exempt testapp → app 1, strict", (await admin("set_exempt", { contract_id: APP, value: { app: 1, strict: true } })).ok);
 for (const fn of ["play", "heavy", "boom"]) check("init", `set_entry ${fn}`, (await admin("set_entry", { contract_id: APP, entry_point: ep(abiA, fn), value: { app: 1, cap: String(2n * M), max_args: 64 } })).ok);
