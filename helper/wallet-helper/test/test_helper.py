@@ -2,7 +2,7 @@
 # answer is stubbed. Checks every rule of when the helper changes the payer and when it leaves a request alone.
 from playwright.sync_api import sync_playwright
 import json, base64
-PAGE = open(__import__("os").path.join(__import__("os").path.dirname(__file__), "..", "extension", "page.js")).read()
+PAGE = open(__import__("os").path.join(__import__("os").path.dirname(__file__), "..", "dist", "testnet", "page.js")).read()
 ST = "1JnSnBNHrKxWGwWeriuhK1DrG5rv3KRFqc"; ME = "1FkkngqWktuen41Exa13XUfHsGNrvwHm3Y"; OTHER = "1N6yd5SzAQaHe484vkV7pFhmYiGfQh2Cuy"
 CHAIN = "EiAIKVvm6-V2qmsmUvPJy09vCCLbtn9lHFpwrJbcTIEWRQ=="
 YES = base64.urlsafe_b64encode(bytes([0x08, 0x01, 0x12, 0x04]) + b"pass").decode().rstrip("=")
@@ -11,13 +11,17 @@ def rpc(route):
     state["calls"] += 1
     route.fulfill(status=200, content_type="application/json", headers={"access-control-allow-origin": "*"}, body=json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"result": state["answer"]}}))
 MOCK = """
+window.__answer = true; window.__asked = 0;
+window.addEventListener('message', (e) => { const d = e.data; if (!d || d.__manaStation !== 'ask' || window.__noBridge) return; window.__asked++;
+  const cap = BigInt(d.rcLimit) > 200000000n ? '200000000' : d.rcLimit;
+  window.postMessage({ __manaStation: 'answer', id: d.id, pay: window.__answer, rcLimit: cap }, '*'); });
 window.__seen = [];
 window.addEventListener('message', (e) => { const d = e.data; if (!d || d.to !== 'popup' || !d.command) return;
   window.__seen.push(JSON.parse(JSON.stringify(d.args.transaction)));
   const fail = window.__failNext; window.__failNext = false; setTimeout(() => window.postMessage(fail ? { id: d.id, error: 'has not authorized' } : { id: d.id, result: { ok: true } }, '*'), 10); });
 window.req = (header, extra = {}) => new Promise((res) => { const id = 'r' + Math.random(); const done = (e) => { if (e.data && e.data.id === id && !e.data.command) { window.removeEventListener('message', done); res(window.__seen[window.__seen.length - 1]); } };
   window.addEventListener('message', done);
-  window.postMessage({ id, command: 'signer:sendTransaction', to: 'popup', args: { signerAddress: '%s', transaction: { header, operations: [{ call_contract: { contract_id: '1MKjQ9zfcLetsQZD9g4JgdxoEpW6Z3kiQX', entry_point: 1, args: 'ChkA' } }], ...extra } } }, '*'); });
+  window.postMessage({ id, command: 'signer:sendTransaction', to: 'popup', args: { signerAddress: header.payer && header.payer.startsWith('1PWe') ? header.payer : '%s', transaction: { header, operations: [{ call_contract: { contract_id: '1MKjQ9zfcLetsQZD9g4JgdxoEpW6Z3kiQX', entry_point: 1, args: 'ChkA' } }], ...extra } } }, '*'); });
 """ % ME
 with sync_playwright() as p:
     b = p.chromium.launch(); pg = b.new_page()
@@ -33,11 +37,12 @@ with sync_playwright() as p:
         print(("PASS " if ok else "FAIL ") + name, json.dumps(h))
     run("station says yes: station pays, user is payee", H(), True)
     run("a large limit is capped at the station's maximum", H(rc_limit="3000000000"), True, rc="200000000")
-    state["answer"] = ""; run("station says no: left alone", H(), False); state["answer"] = YES
-    c0 = state["calls"]; run("someone else already pays (app sponsor / free mana): left alone, station not asked", H(payer=OTHER), False); print(("PASS " if state["calls"] == c0 else "FAIL ") + "no question asked for it")
+    pg.evaluate("window.__answer = false"); run("station says no: left alone", H(), False); pg.evaluate("window.__answer = true")
+    c0 = pg.evaluate("window.__asked"); run("someone else already pays (app sponsor / free mana): left alone, station not asked", H(payer=OTHER), False); print(("PASS " if pg.evaluate("window.__asked") == c0 else "FAIL ") + "no question asked for it")
     run("another network: left alone", H(chain_id="EiBZK_GGVP0H_fXVAM3j6EAuz3-B-l3ejxRSewi7qIBfSA=="), False)
     run("already signed by someone: left alone", H(), False, {"signatures": ["abc"]})
     pg.evaluate("window.__failNext = true"); run("rewritten, then refused on landing", H(), True)
     run("after a refusal: stands aside (user's own Mana)", H(), False)
-    print("page errors:", pg.evaluate("window.__manaStationHelper && window.__manaStationHelper.network"))
+    pg.evaluate("window.__noBridge = true"); run("helper part of the extension doesn't answer within 3 s: left alone", {"chain_id": CHAIN, "rc_limit": "100000000", "payer": "1PWeFG4pPtjZZoYvcmGb6mYhMYJjnkHrmz"}, False)
+    print("helper marker:", pg.evaluate("window.__manaStationHelper && window.__manaStationHelper.network"))
     b.close()

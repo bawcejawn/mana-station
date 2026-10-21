@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Mana Station helper</title>
+<style>
+  :root { --ink:#1d1838; --muted:#5f5a80; --mana:#2f5bff; --paper:#f5f3ff; --line:#dcd8f0; --ok:#138a5e; }
+  @media (prefers-color-scheme: dark) { :root { --ink:#efecff; --muted:#aaa5cc; --mana:#7d97ff; --paper:#13112a; --line:#322e57; --ok:#4fd1a0; } }
+  body { margin:0; width:300px; padding:16px; font:14px/1.5 system-ui, "Segoe UI", sans-serif; background:var(--paper); color:var(--ink); }
+  h1 { font-size:16px; margin:0 0 4px; } p { margin:6px 0; } .muted { color:var(--muted); font-size:12px; }
+  .row { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 0; border-top:1px solid var(--line); }
+  .mono { font-family: ui-monospace, Consolas, monospace; font-size:12px; }
+  a { color:var(--mana); }
+</style></head>
+<body>
+  <h1>Mana Station helper</h1>
+  <p class="muted" id="net"></p>
+  <div class="row"><label for="on">Use my pass and supported apps</label><input type="checkbox" id="on"></div>
+  <div class="row"><span>Covered today in this browser</span><b id="count">0</b></div>
+  <p class="muted">It asks the Mana Station before your wallet opens, and sets the station as payer when it will pay. You still approve every transaction in your wallet. It holds no keys and signs nothing.</p>
+  <p class="muted"><a id="more" target="_blank" rel="noopener">How it works</a> · <a id="privacy" target="_blank" rel="noopener">Privacy</a></p>
+  <script src="config.js"></script>
+  <script src="popup.js"></script>
+</body></html>
