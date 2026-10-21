@@ -128,8 +128,8 @@ p { margin: 0; max-width: var(--measure); }
 .audience { display: grid; gap: 14px; align-content: start; }
 .audience .tag { justify-self: start; font-size: var(--step--1); font-weight: 700; color: var(--mana); background: var(--mana-soft); padding: 4px 12px; border-radius: 999px; }
 .ticks { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
-.ticks li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; }
-.ticks li::before { content: ""; width: 14px; height: 14px; margin-top: 6px; border-radius: 50%; border: 3px solid var(--mana); }
+.ticks li { position: relative; padding-left: 32px; }
+.ticks li::before { content: ""; position: absolute; left: 0; top: 6px; width: 14px; height: 14px; border-radius: 50%; border: 3px solid var(--mana); }
 
 /* ---------- prices ---------- */
 .price-table-wrap { overflow-x: auto; border-radius: var(--radius-big); border: 1px solid var(--line); background: var(--surface); }

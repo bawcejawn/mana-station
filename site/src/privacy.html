@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+{{HEAD}}
+  <title>Privacy notice: Mana Station</title>
+  <meta name="description" content="What the Mana Station website, contract and browser helper collect and share: no accounts, no tracking, public blockchain data, and one read-only question to a Koinos node.">
+</head>
+<body>
+{{TOP:help}}
+
+  <main id="main" class="wrap page legal">
+    <div class="page-head">
+      <h1>Privacy notice</h1>
+      <p class="msg">Draft for legal review, version 2026-10-21.</p>
+      <p class="lede">Short version: no accounts, no tracking, no ads. What you do on a blockchain is public by design.</p>
+    </div>
+
+    <section class="panel" aria-labelledby="p1"><h2 id="p1">The website</h2>
+      <ul class="ticks">
+        <li>It has no accounts, no analytics, no ads and no tracking cookies.</li>
+        <li>To show the station and send your transactions, your browser talks directly to a public Koinos node (on mainnet, api.koinos.io). That node sees your IP address and the requests, like any website you visit.</li>
+        <li>The page loads its fonts from Google Fonts and its blockchain library from the jsDelivr CDN, which see your IP address when you load the page.</li>
+        <li>Settings such as the wallet you picked are kept in your browser's own storage and never sent to us. On the testnet playground, test wallets are kept the same way; they hold nothing of value.</li>
+        <li>The site is hosted on GitHub Pages, which keeps standard server logs.</li>
+      </ul>
+    </section>
+
+    <section class="panel" aria-labelledby="p2"><h2 id="p2">The station (blockchain)</h2>
+      <p>Purchases, refunds and the transactions the station pays for are recorded on the Koinos blockchain, which is public and permanent: anyone can see the wallet addresses, amounts and times involved. We can't change or delete that data. The station keeps per-wallet usage counts on chain to apply its limits.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="p3"><h2 id="p3">The browser helper</h2>
+      <ul class="ticks">
+        <li>When a site asks your wallet to sign a transaction, the helper sends one read-only question to a public Koinos node: your wallet address and that transaction's operations (which contracts and functions it calls, with their arguments). The node answers whether the station would pay. Nothing is sent to us.</li>
+        <li>It stores only its on/off setting and a count of transactions covered today, in your browser.</li>
+        <li>It never reads your keys, passwords, page contents or browsing history, and never sends anything anywhere else.</li>
+        <li>It needs permission to run on all websites so it can act on any Koinos app you use. Its code is open source.</li>
+      </ul>
+    </section>
+
+    <section class="panel" aria-labelledby="p4"><h2 id="p4">Contact</h2>
+      <p>Questions: [contact email]. Operator: [Operator legal name].</p>
+    </section>
+  </main>
+
+{{FOOT}}
+</body>
+</html>
