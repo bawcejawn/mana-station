@@ -30,15 +30,14 @@ Productivity (Chrome) / Productivity (Edge)
 Set the Mana Station as the fee payer of Koinos transactions it will pay for, before the user's wallet asks them to approve.
 
 ## Permission justifications
-- **Content scripts on all sites (`<all_urls>`):** Koinos apps can be on any website. The helper must see a site's signing request to the wallet on whichever Koinos site the user visits. It acts only on Koinos signing requests and ignores everything else on the page.
+- **Content scripts on web pages (`https://*/*`, plus localhost for developers):** Koinos apps can be on any website. The helper must see a site's signing request to the wallet on whichever Koinos site the user visits. It acts only on Koinos wallet signing requests and passes everything else straight through, unchanged.
 - **`storage`:** keeps the on/off setting and today's count of covered transactions, in the browser only.
 - **Host permission for the Koinos node (`https://api.koinos.io/*`):** to ask the Mana Station contract the read-only question "would you pay for this transaction?".
 - **Remote code:** none. All code ships in the package.
 
 ## Data use disclosures
-- Collects: none of the store's listed categories is collected by the developer.
-- Sends to a third party: when a site asks the wallet to sign, the wallet address and the transaction's operations go to the public Koinos node, only to ask the station whether it will pay. Nothing is sent to the developer.
-- Not sold, not used for unrelated purposes, not used for creditworthiness.
+- Declare: **Financial and payment information** (the wallet address and the transaction about to be signed) and **Website content** (the transaction's operations, which the site created). Both are sent only to the public Koinos node, only to ask the station whether it will pay, before the user approves. Nothing is sent to the developer.
+- Not sold, not used for unrelated purposes, not used for creditworthiness. Complies with the Limited Use requirements.
 
 ## Privacy policy URL
 `<site>/privacy.html`

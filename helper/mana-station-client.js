@@ -16,6 +16,7 @@
   const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
   function b58decode(s) {
+    if (typeof s !== "string" || s.length > 64) throw new Error("bad base58");   // addresses are ~34 characters
     let n = 0n; for (const ch of s) { const i = B58.indexOf(ch); if (i < 0) throw new Error("bad base58"); n = n * 58n + BigInt(i); }
     const out = []; while (n > 0n) { out.unshift(Number(n % 256n)); n /= 256n; }
     for (const ch of s) { if (ch !== "1") break; out.unshift(0); }
@@ -34,19 +35,20 @@
     else if (b.length - i === 2) { const n = (b[i] << 16) | (b[i + 1] << 8); s += B64[n >> 18] + B64[(n >> 12) & 63] + B64[(n >> 6) & 63]; }
     return s;
   }
-  const bytesOf = (v) => (v instanceof Uint8Array ? v : typeof v === "string" ? (/^0x/i.test(v) ? hex(v) : fromB64url(v)) : Uint8Array.from(v || []));
-  const hex = (h) => Uint8Array.from((h.slice(2).match(/../g) || []).map((x) => parseInt(x, 16)));
+  // koilib / Kondor JSON carries bytes as base64url strings (never hex).
+  const bytesOf = (v) => (v instanceof Uint8Array ? v : typeof v === "string" ? fromB64url(v) : Uint8Array.from(v || []));
   const addr = (v) => (v instanceof Uint8Array ? v : b58decode(String(v)));
 
   // protobuf writer (only what would_pay_arguments needs)
-  function varint(n) { n = BigInt(n); const out = []; do { let b = Number(n & 127n); n >>= 7n; if (n > 0n) b |= 128; out.push(b); } while (n > 0n); return out; }
+  function varint(n) { n = BigInt(n); if (n < 0n) throw new Error("negative"); const out = []; do { let b = Number(n & 127n); n >>= 7n; if (n > 0n) b |= 128; out.push(b); } while (n > 0n); return out; }
   const key = (field, wire) => varint((field << 3) | wire);
   const lenField = (field, bytes) => [...key(field, 2), ...varint(bytes.length), ...bytes];
   function opInfo(op) {
     const out = [];
     if (op.call_contract) {
       const c = op.call_contract;
-      out.push(...lenField(1, addr(c.contract_id)), ...key(2, 0), ...varint(c.entry_point >>> 0));
+      if (!Number.isInteger(c.entry_point) || c.entry_point < 0 || c.entry_point > 0xffffffff) throw new Error("bad entry point");
+      out.push(...lenField(1, addr(c.contract_id)), ...key(2, 0), ...varint(c.entry_point));
       const a = bytesOf(c.args); if (a.length) out.push(...lenField(3, a));
     } else if (op.upload_contract) { out.push(...lenField(1, addr(op.upload_contract.contract_id)), ...key(4, 0), 1); }
     else out.push(...key(5, 0), 1);
@@ -84,7 +86,7 @@
   }
   /** Pick the payer. maxRc caps the limit offered to the station (its per-transaction maximum). */
   async function choosePayer({ rpc, station, payee, operations, rcLimit, maxRc }) {
-    let rc = BigInt(rcLimit || 100000000); if (maxRc && rc > BigInt(maxRc)) rc = BigInt(maxRc);
+    let rc = BigInt(rcLimit && String(rcLimit) !== "0" ? rcLimit : 50000000); if (maxRc && rc > BigInt(maxRc)) rc = BigInt(maxRc);
     const w = await wouldPay({ rpc, station, payee, operations, rcLimit: rc });
     if (w.pay) return { payer: station, payee, rcLimit: String(rc), route: w.route };
     return { payer: payee, rcLimit: String(rcLimit || rc), route: "", unknown: !!w.unknown };

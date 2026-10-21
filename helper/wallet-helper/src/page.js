@@ -5,59 +5,90 @@
  * then shows the transaction as usual and the user approves it.
  *
  * It holds no keys and signs nothing. It never changes what a transaction does, only who pays its Mana. It leaves
- * alone any transaction that already has another payer or payee, other signatures, or is for another network.
- * If the station refuses a transaction it changed, it stands aside for that wallet for two minutes.
- * If the extension doesn't answer within 3 seconds, the request goes to Kondor unchanged.
+ * alone any request that already has another payer or payee (in the transaction or in its send options), other
+ * signatures, uploads, or another network. If the station refuses a transaction it changed, it stands aside for that
+ * wallet for two minutes. If the extension doesn't answer within 3 seconds, the request goes to Kondor unchanged.
+ * Audit 2026-10-21: every check is made on one private copy of the request, with built-ins saved before any site code
+ * runs; requests it won't change are passed on at once, unchanged and synchronously.
  */
 (function () {
   "use strict";
   const CFG = __CONFIG__;
-  if (window.__manaStationHelper) return;
-  Object.defineProperty(window, "__manaStationHelper", { value: Object.freeze({ version: CFG.version, network: CFG.network, station: CFG.station }) });
-  const post = window.postMessage.bind(window);
-  const TARGETS = CFG.targets;                       // "popup" = Kondor (+ "ms-standin" on the testnet playground)
-  const standAside = new Map(), ours = new Map(), asks = new Map();
-
-  const isSignRequest = (d) => !!(d && typeof d === "object" && TARGETS.includes(d.to) &&
-    (d.command === "signer:sendTransaction" || d.command === "signer:signTransaction") &&
-    d.args && d.args.transaction && d.args.transaction.header && typeof d.args.signerAddress === "string");
-
-  function ask(payee, operations, rcLimit) {        // → { pay, rcLimit } from the extension, or null
-    return new Promise((resolve) => {
-      const id = "ms-" + Math.random().toString(36).slice(2) + Date.now();
-      const t = setTimeout(() => { asks.delete(id); resolve(null); }, 3000);
-      asks.set(id, (a) => { clearTimeout(t); resolve(a); });
-      post({ __manaStation: "ask", id, payee, operations, rcLimit }, window.location.origin === "null" ? "*" : window.location.origin);
-    });
+  // Built-ins saved now, before any site script can replace them.
+  const W = window, nativePost = W.postMessage, call = Function.prototype.call.bind(Function.prototype.call), rApply = Reflect.apply;
+  const parse = JSON.parse, stringify = JSON.stringify, now = Date.now.bind(Date), rand = Math.random.bind(Math);
+  const setT = W.setTimeout.bind(W), clearT = W.clearTimeout.bind(W), addListener = W.addEventListener.bind(W);
+  const origin = W.location.origin, target = origin === "null" ? "*" : origin;
+  const post = (msg) => call(nativePost, W, msg, target);
+  const standAside = Object.create(null), ours = Object.create(null), asks = Object.create(null);
+  let enabled = true;
+  const isTarget = (to) => { for (let i = 0; i < CFG.targets.length; i++) if (CFG.targets[i] === to) return true; return false; };
+  const isWalletRequest = (d) => !!(d && typeof d === "object" && isTarget(d.to) &&
+    (d.command === "signer:sendTransaction" || d.command === "signer:signTransaction"));
+  // Our own site may ask "is the helper on?" (for its check page). Other sites learn nothing.
+  if (CFG.siteOrigins.indexOf(origin) >= 0 || (CFG.network !== "mainnet" && W.location.protocol === "file:")) {
+    try { Object.defineProperty(W, "__manaStationHelper", { value: true }); } catch (e) { /* already defined */ }
   }
-  async function maybeRewrite(d) {
-    const tx = d.args.transaction, h = tx.header, me = d.args.signerAddress;
-    if (h.chain_id !== CFG.chainId) return d;
-    if (h.payer && h.payer !== me) return d;
-    if (h.payee && h.payee !== me) return d;
-    if (tx.signatures && tx.signatures.length) return d;
-    if ((standAside.get(me) || 0) > Date.now()) return d;
-    const a = await ask(me, tx.operations || [], String(h.rc_limit || CFG.maxRc));
-    if (!a || a.pay !== true) return d;
-    const c = JSON.parse(JSON.stringify(d));
-    c.args.transaction.header.payer = CFG.station;
-    c.args.transaction.header.payee = me;
-    c.args.transaction.header.rc_limit = a.rcLimit;
-    delete c.args.transaction.id;
-    ours.set(c.id, me);
-    post({ __manaStation: "covered" }, window.location.origin === "null" ? "*" : window.location.origin);
+
+  // One private copy; returns null when the helper must leave the request alone.
+  function candidate(d) {
+    let c; try { c = parse(stringify(d)); } catch (e) { return null; }
+    const a = c && c.args, tx = a && a.transaction, h = tx && tx.header, me = a && a.signerAddress;
+    if (!enabled || !h || typeof me !== "string" || h.chain_id !== CFG.chainId) return null;
+    if (h.payer && h.payer !== me) return null;                         // someone else already pays
+    if (h.payee && h.payee !== me) return null;
+    if (tx.signatures && tx.signatures.length) return null;             // already signed: can't be changed
+    const o = a.optsSend || a.options;
+    if (o && (o.payer || o.payee || o.rcLimit)) return null;           // the site chose a payer / limit itself
+    const ops = tx.operations;
+    if (!Array.isArray(ops) || ops.length < 1 || ops.length > 10) return null;
+    for (let i = 0; i < ops.length; i++) if (!ops[i] || !ops[i].call_contract) return null;   // calls only (uploads use tickets on the site)
+    if ((standAside[me] || 0) > now()) return null;
     return c;
   }
-  window.postMessage = function (data, ...rest) {
-    if (!isSignRequest(data)) return post(data, ...rest);
-    maybeRewrite(data).then((d) => post(d, ...rest), () => post(data, ...rest));
-  };
-  window.addEventListener("message", (ev) => {
-    if (ev.source !== window) return;
+  // The limit to ask about: the site's own, if it's a sensible size; otherwise the configured default. A limit worked
+  // out from the user's balance (very large, or 0 for a wallet with no Mana) is never carried over. Kondor's
+  // "optimize mana" then sets the final limit to about 1.1x what the transaction really uses.
+  function rcFor(h) {
+    const v = typeof h.rc_limit === "string" || typeof h.rc_limit === "number" ? String(h.rc_limit) : "";
+    if (/^[0-9]{1,20}$/.test(v)) { const n = BigInt(v); if (n >= BigInt(CFG.minRc) && n <= BigInt(CFG.defaultRc)) return v; }
+    return CFG.defaultRc;
+  }
+  function ask(payee, operations, rcLimit) {
+    return new Promise((resolve) => {
+      const id = "ms-" + rand().toString(36).slice(2) + now().toString(36);
+      const t = setT(() => { delete asks[id]; resolve(null); }, 3000);
+      asks[id] = (a) => { clearT(t); resolve(a); };
+      post({ __manaStation: "ask", id, payee, operations, rcLimit });
+    });
+  }
+  async function rewrite(c) {
+    const tx = c.args.transaction, h = tx.header, me = c.args.signerAddress;
+    const a = await ask(me, tx.operations, rcFor(h));
+    if (!a || a.pay !== true || typeof a.rcLimit !== "string" || !/^[0-9]{1,20}$/.test(a.rcLimit)) return null;
+    h.payer = CFG.station; h.payee = me; h.rc_limit = a.rcLimit;
+    delete tx.id;                                                       // the wallet recomputes it
+    ours[c.id] = me;
+    return c;
+  }
+  function wrapper(data) {
+    const args = arguments;
+    if ((this !== W && this !== undefined && this !== null) || !isWalletRequest(data)) return rApply(nativePost, this, args);
+    const c = candidate(data);
+    if (!c) return rApply(nativePost, W, args);                        // unchanged, synchronously
+    const rest = []; for (let i = 1; i < args.length; i++) rest[rest.length] = args[i];
+    const send = (msg) => { try { rApply(nativePost, W, [msg].concat(rest)); } catch (e) { post({ id: data.id, error: String(e && e.message || e) }); } };
+    rewrite(c).then((r) => send(r || data), () => send(data));
+  }
+  try { Object.defineProperty(wrapper, "length", { value: nativePost.length }); } catch (e) { /* cosmetic */ }
+  W.postMessage = wrapper;
+  addListener("message", (ev) => {
+    if (ev.source !== W) return;
     const d = ev.data; if (!d || typeof d !== "object") return;
-    if (d.__manaStation === "answer" && asks.has(d.id)) { const f = asks.get(d.id); asks.delete(d.id); f(d); return; }
-    if (d.command || !ours.has(d.id)) return;      // a wallet's reply to a request we changed
-    const me = ours.get(d.id); ours.delete(d.id);
-    if (d.error) standAside.set(me, Date.now() + 120000);
+    if (d.__manaStation === "answer" && typeof d.id === "string" && asks[d.id]) { const f = asks[d.id]; delete asks[d.id]; f(d); return; }
+    if (d.__manaStation === "state") { enabled = d.enabled !== false; return; }
+    if (d.command || typeof d.id !== "string" || !ours[d.id]) return;  // a wallet's reply to a request we changed
+    const me = ours[d.id]; delete ours[d.id];
+    if (d.error) standAside[me] = now() + 120000;
   });
 })();

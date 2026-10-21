@@ -114,7 +114,7 @@
 
     async function checks() {
       const me = MS.active()?.address; const H = window.__manaStationHelper;
-      const rows = [["Helper", H ? (H.station === MS.ST ? "On (testnet)" : "On, other station") : "Not installed"]];
+      const rows = [["Helper", H ? "On" : "Not installed, or switched off for this page"]];
       if (me) {
         const L = await MS.read("list_connected").catch(() => ({}));
         const p = (L.paid || []).find((x) => x.target === me && x.kind === 2 && Number(x.expiry) > Date.now());

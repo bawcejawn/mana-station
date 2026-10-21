@@ -55,8 +55,9 @@
 
     <section class="panel" aria-labelledby="p3"><h2 id="p3">The browser helper</h2>
       <ul class="ticks">
-        <li>When a site asks your wallet to sign a transaction, the helper sends one read-only question to a public Koinos node: your wallet address and that transaction's operations (which contracts and functions it calls, with their arguments). The node answers whether the station would pay. Nothing is sent to us.</li>
-        <li>It stores only its on/off setting and a count of transactions covered today, in your browser.</li>
+        <li>When a site asks your wallet to sign a transaction, before you approve it, the helper sends one read-only question to a public Koinos node (on mainnet, api.koinos.io): your wallet address and that transaction's operations (which contracts and functions it calls, with their arguments). The node, like any website, also sees your IP address. It answers whether the station would pay. Nothing is sent to us.</li>
+        <li>It runs only on web pages (https), not on other kinds of pages, and it doesn't tell the sites you visit that it is installed (except this website, so its check page can show it's on).</li>
+        <li>It stores only its on/off setting and a count of transactions offered to the station today, in your browser.</li>
         <li>It never reads your keys, passwords, page contents or browsing history, and never sends anything anywhere else.</li>
         <li>It needs permission to run on all websites so it can act on any Koinos app you use. Its code is open source.</li>
       </ul>

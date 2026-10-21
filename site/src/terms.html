@@ -26,7 +26,8 @@
         <li><b>App plan:</b> a daily amount of Mana for one app contract, shared by all its users. The station pays a transaction only when every top-level operation calls that app. Per-user limits apply. The app's own key must approve the purchase.</li>
         <li><b>Upload ticket:</b> Mana reserved for one wallet for 24 hours, at the full price whether used or not, to upload or call that wallet's own contract.</li>
       </ul>
-      <p>Each wallet may hold a limited number of open purchases at a time. Purchases are paid in the stablecoins the station accepts (vUSDT or vUSDC on mainnet). You see the exact price before you buy, and the price of a term you have paid never changes.</p>
+      <p>A transaction counts against a pass or plan by its Mana limit (the most it may use, set when it is signed), not by what it finally uses, because the station decides before the transaction runs. Wallets that estimate the limit, such as Kondor with "optimize mana", keep it close to real use.</p>
+            <p>Each wallet may hold a limited number of open purchases at a time. Purchases are paid in the stablecoins the station accepts (vUSDT or vUSDC on mainnet). You see the exact price before you buy, and the price of a term you have paid never changes.</p>
       <p>Purchases are prepaid service credit for transaction fees. They are not money, not a deposit, not an investment, not a token and not transferable, and they can't be redeemed for crypto or cash except through the refunds below.</p>
     </section>
 
