@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Mana Station helper (testnet)",
+  "version": "0.1.0",
+  "description": "Your Mana Station pass pays your Koinos transactions when it covers them. Holds no keys, signs nothing, only sets who pays.",
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "page.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ]
+}

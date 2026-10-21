@@ -89,7 +89,7 @@ On each transaction it is asked to pay for, the station checks `authorize(transa
    - unknown apps, for wallets without a pass;
    - anything that would take the station below its safety floor.
 
-A refused transaction costs the player nothing. The player's app can then offer to use their own Mana instead (`helper/payer.js` → `sendAction`).
+A refused transaction costs the player nothing. Apps and the pass helper ask first with the read-only `would_pay` (same rules, records nothing), so the user signs once: the station when it agrees, their own Mana otherwise (`helper/payer.js` → `sendWithStation`; `helper/mana-station-client.js` → `choosePayer`).
 
 ## 3. Integrating Knode and SwarmTales (free play for your own apps)
 
@@ -109,7 +109,7 @@ Do this from the console or with `admin/station-admin.mjs connect`. Both are own
 ```js
 const tx = new lib.Transaction({ signer, provider: W.provider,
   options: { payer: STATION, payee: W.address, rcLimit: "19000000" } });   // tight limit: 1.1× a measured action
-// on "has not authorized" / insufficient rc → offer the player's own Mana (helper/payer.js sendAction does this)
+// better: helper/payer.js sendWithStation asks the station first (would_pay) and falls back to the player's own Mana
 ```
 
 **SwarmTales** (`swarmtales/web/src/wallet.js` → `signAndSend`). Today it sets `payer: address` with an `rcLimit` of up to 30 Mana. Try the station first:
@@ -165,3 +165,11 @@ Pick your wallet once, top right; every page uses it.
 | `owner.html` | As Owner: give any contract free Mana (Small / Medium / Large or custom), change or remove it; see customers; pause. As a council member: pause, approve, veto, carry out. |
 
 Old links (`buy.html`, `console.html`, `how-it-works.html`) forward to the new pages.
+
+## 6. Paying without changing the app (Oct 21)
+
+Something has to name the station as payer; the chain only asks the named payer. Two ways, both built on `would_pay`:
+
+- **App snippet (covers every user, nothing to install):** `sendWithStation` in `helper/payer.js`. It asks the station first; if the plan is active the station pays, otherwise the user's own Mana pays. When a plan ends the app needs no change.
+- **Pass helper (for pass holders, any app):** `helper/wallet-helper/`, a userscript and an unpacked Chrome extension built from the same code (`node helper/wallet-helper/build.mjs testnet`). It sees a site's signing request to Kondor, asks `would_pay`, and if yes sets payer = station, payee = the user before Kondor opens. Holds no keys, signs nothing, changes only who pays; leaves alone requests with another payer (Kondor free mana, app sponsors) or existing signatures; stands aside 2 minutes after a refusal. Offline rule tests: `helper/wallet-helper/test/test_helper.py` (9/9).
+- **Kondor and this testnet:** Kondor's public code knows only mainnet and the older Harbinger testnet (chain id `EiBncD4p…`), so on this testnet the playground's helper page uses a stand-in wallet that answers signing requests the way Kondor does. Real-Kondor testing happens on mainnet.

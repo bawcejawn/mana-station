@@ -88,6 +88,10 @@
         <h2 id="k-title">Council</h2>
         <p class="hint">Moving KOIN, upgrading the code and changing the owner or council need two of the three council members, then a waiting period. During the wait any one member can veto.</p>
       </div>
+      <div id="upgradeBox" class="checkout" hidden>
+        <div class="what"><b>A new station version is ready</b><span class="hint" id="upNotes"></span><span class="hint">Fingerprint <span class="mono" id="upHash"></span></span><span class="hint" id="upState"></span></div>
+        <div class="row" id="upActs"></div>
+      </div>
       <ul class="items" id="props"><li class="empty">Loading…</li></ul>
       <details class="disclose" id="wBox"><summary>Propose a KOIN withdrawal</summary><div>
         <form id="wForm" class="row" style="align-items:end">
@@ -107,6 +111,7 @@
   <script src="playground.js"></script>
   <script src="wallets.js"></script>
   <script src="ms.js"></script>
+  <script src="station-code.js"></script>
   <script>
   (() => {
     const { $ } = MS;
@@ -208,7 +213,7 @@
       const isC = (c.council || []).includes(MS.active()?.address);
       for (const p of P) {
         const a = p.action || {}; const li = document.createElement("li"); li.className = "item";
-        let what = KIND[a.kind] || "Proposal"; if (a.kind === 2) what += `: ${MS.mana(a.amount)} KOIN to ${MS.short(a.to)}`; if (a.kind === 8) what += ` to ${MS.short(a.to)}`;
+        let what = KIND[a.kind] || "Proposal"; if (a.kind === 1 && window.MS_UPGRADE && String(a.hash || "").toLowerCase() === window.MS_UPGRADE.hash.toLowerCase()) what += " (the new version above)"; if (a.kind === 2) what += `: ${MS.mana(a.amount)} KOIN to ${MS.short(a.to)}`; if (a.kind === 8) what += ` to ${MS.short(a.to)}`;
         const ready = p.ready_at && p.ready_at !== "0", due = ready && Number(p.ready_at) <= Date.now();
         li.innerHTML = `<div class="stack" style="gap:4px"><h3></h3><div class="meta"></div></div><div class="acts"></div>`;
         li.querySelector("h3").textContent = `#${p.id} ${what}`;
@@ -221,6 +226,37 @@
       }
       if (!pr.children.length) pr.innerHTML = '<li class="empty">No open proposals.</li>';
       $("wBox").hidden = role !== "council";
+      upgradeState();
+    }
+    // Upgrades: the council approves a code fingerprint; after the wait anyone installs exactly that code.
+    async function upgradeState() {
+      const U = window.MS_UPGRADE, box = $("upgradeBox"); if (!U) { box.hidden = true; return; }
+      const meta = await MS.provider.invokeGetContractMetadata(MS.ST).catch(() => null);
+      if ((meta?.value?.hash || "").toLowerCase() === U.hash.toLowerCase()) { box.hidden = true; return; }
+      box.hidden = false; $("upNotes").textContent = U.notes; $("upHash").textContent = U.hash.slice(0, 14) + "…" + U.hash.slice(-6);
+      const p = P.find((x) => x.action?.kind === 1 && String(x.action.hash || "").toLowerCase() === U.hash.toLowerCase());
+      const acts = $("upActs"); acts.replaceChildren(); const c = st.config || {};
+      const ready = p && p.ready_at && p.ready_at !== "0", due = ready && Number(p.ready_at) <= Date.now();
+      if (!p) {
+        $("upState").textContent = "Step 1 of 3: a council member proposes it.";
+        if (role === "council") acts.append(btn("Propose this upgrade", (b) => council(b, "propose", { action: { kind: 1, hash: U.hash } }, "Proposed. A second council member approves it next (in the list below)."), true));
+      } else if (!ready) $("upState").textContent = `Step 2 of 3: needs ${c.threshold} council approvals (it has ${(p.approvals || []).length}). Approve it in the list below.`;
+      else if (!due) $("upState").textContent = `Step 3 of 3: approved. It can be installed after ${MS.when(p.ready_at)}, unless a council member vetoes it.`;
+      else {
+        $("upState").textContent = "Step 3 of 3: approved and the wait is over. Anyone can install it now; the wallet that installs pays the Mana (about 14).";
+        if (MS.active()) acts.append(btn("Install now", (b) => MS.run(b, "councilMsg", install), true));
+      }
+    }
+    async function install() {
+      const U = window.MS_UPGRADE, me = MS.active()?.address; if (!me) throw new Error("Choose a wallet first (top right).");
+      const code = Uint8Array.from(atob(U.code), (ch) => ch.charCodeAt(0));
+      const lim = (await MS.provider.call("chain.get_resource_limits", {})).resource_limit_data;
+      const rc = (BigInt(code.length) * (BigInt(lim.disk_storage_cost) + BigInt(lim.network_bandwidth_cost)) + MS.M) * 3n / 2n + 2n * MS.M;
+      if (BigInt(await MS.provider.getAccountRc(me)) < rc) throw new Error(`This wallet needs about ${MS.mana(rc, 0)} Mana of its own to install. Switch to Owner, which holds test KOIN.`);
+      const c = new Contract({ id: MS.ST, abi: MS.ABI.station, provider: MS.provider, signer: MS.signerFor(me), bytecode: code });
+      const { transaction, receipt } = await c.deploy({ payer: me, rcLimit: String(rc), authorizesCallContract: true, authorizesTransactionApplication: true, authorizesUploadContract: true });
+      await transaction.wait("byBlock", 180000); await load();
+      return `Installed. The station now runs the new version (used ${MS.mana(receipt.rc_used, 1)} Mana from this wallet).`;
     }
     function btn(label, fn, main = false) { const b = document.createElement("button"); b.type = "button"; b.className = "btn btn-small " + (main ? "btn-main" : "btn-quiet"); b.textContent = label; b.addEventListener("click", () => fn(b)); return b; }
     const council = (b, fn, args, done) => MS.run(b, "councilMsg", async () => { await MS.send([[MS.station(), fn, { signer: MS.active().address, ...args }]]); await load(); return done; });

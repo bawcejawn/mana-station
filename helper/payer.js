@@ -1,23 +1,37 @@
-// Mana Station payer helper (shared by Knode and SwarmTales). Design of 2026-10-19 4:05 PM, tight limits Oct 20.
-// DEFAULT = the user's own Mana when they have enough. The station is used when they don't, or when they choose it.
-// pref: "auto" (default) | "station" (user chose free play). The station is only "available", not the default payer.
+// Mana Station payer helper for apps (Knode, SwarmTales, any Koinos dApp using koilib).
+// Oct 21 (Carl): try the station first; if it can't or won't pay, the user's own Mana pays, as if the station weren't
+// there. The app never has to change this code when its plan ends: the station simply answers "no" and the user pays.
+// One signature per action: the station is asked first (would_pay, read-only), then the payer is chosen.
 //
-// Tight limits (Carl, Oct 20): the mempool holds a tx's full Mana LIMIT while it waits, and a big-upload ticket is
-// charged the LIMIT, not the Mana actually used (the station approves before the tx runs). So every limit here is
-// sized from real testnet costs plus a small margin, never a round "safe" number.
+// Tight limits (Carl, Oct 20): the mempool holds a tx's full Mana LIMIT while it waits, and the station counts the
+// LIMIT against plans and passes, not the Mana actually used. So limits are sized from real testnet costs plus a small
+// margin, never a round "safe" number.
+import "./mana-station-client.js";
+const MSC = globalThis.ManaStation;
 export const STATION = "<station address>";               // set at launch
 
 // Measured on the Koinos testnet, Oct 20 2026: a sponsored play used 16,684,696 (0.167 Mana). Limit = 1.1x, rounded up
 // to 0.01 Mana. The station's per-action cap for the entry point (set_entry) must be at least this.
 export const EP_CAP = { play: 19_000_000n };              // per action, in Mana base units (1 Mana = 1e8)
 
-export async function payerOptions({ provider, user, action, pref = "auto" }) {
-  const cap = EP_CAP[action];
-  if (cap === undefined) throw new Error("unknown action " + action);
-  const own = BigInt(await provider.getAccountRc(user));  // chain.get_account_rc (current Mana)
-  const enough = own >= cap * 13n / 10n;                  // 30% cushion: the mempool reserves the full rc_limit of pending txs
-  if (pref !== "station" && enough) return { mode: "own", options: { payer: user, rcLimit: String(cap) } };
-  return { mode: "station", options: { payer: STATION, payee: user, rcLimit: String(cap) } };
+/** Choose who pays: { payer, payee?, rcLimit, route }. route "" = the user's own Mana. */
+export async function payerOptions({ provider, user, operations, rcLimit, station = STATION }) {
+  return MSC.choosePayer({ rpc: provider, station, payee: user, operations, rcLimit });
+}
+
+/** Send with the station when it agrees, else the user's own Mana. A refusal on landing (rare: the answer was a
+ *  snapshot) is retried once with the user's own Mana; a refusal by the user in their wallet is passed through. */
+export async function sendWithStation({ provider, signer, user, operations, rcLimit, station = STATION, Transaction }) {
+  if (!Transaction) ({ Transaction } = await import("koilib"));
+  const pick = await payerOptions({ provider, user, operations, rcLimit, station });
+  const build = async (opts) => { const tx = new Transaction({ signer, provider, options: opts }); for (const op of operations) await tx.pushOperation(op); return tx; };
+  const first = pick.payer === station ? { payer: station, payee: user, rcLimit: pick.rcLimit } : { payer: user, rcLimit: String(rcLimit) };
+  try { const tx = await build(first); const receipt = await tx.send(); return { paidBy: pick.route ? "station" : "user", route: pick.route, receipt, wait: () => tx.wait() }; }
+  catch (e) {
+    if (first.payer !== station || !/has not authorized/i.test(String(e?.message || e))) throw e;
+    const tx = await build({ payer: user, rcLimit: String(rcLimit) });
+    return { paidBy: "user", route: "", receipt: await tx.send(), wait: () => tx.wait() };
+  }
 }
 
 // Big uploads paid by a ticket. The ticket is charged the rc LIMIT, so estimate it from the chain's live resource prices:
@@ -43,24 +57,3 @@ export async function uploadOptions({ provider, user, bytecode, abi = "" }) {
   return { payer: STATION, payee: user, rcLimit: String(rcLimit) };
 }
 
-// Send with one fallback: if the station refuses (limits, floor, pause) and the user has some Mana, offer their own.
-// A wallet refusal (the user cancelled in Kondor) is passed through as-is, never shown as "free play is busy".
-export async function sendAction({ provider, signer, user, action, operations, pref, confirmOwn }) {
-  const { Transaction } = await import("koilib");
-  const first = await payerOptions({ provider, user, action, pref });
-  try {
-    const tx = new Transaction({ signer, provider, options: first.options });
-    for (const op of operations) await tx.pushOperation(op);
-    const receipt = await tx.send();
-    return { mode: first.mode, receipt, wait: () => tx.wait() };
-  } catch (e) {
-    if (first.mode !== "station" || !/has not authorized|insufficient rc/i.test(String(e?.message || e))) throw e;
-    const own = BigInt(await provider.getAccountRc(user));
-    if (own >= EP_CAP[action] && (await confirmOwn?.())) { // "Free play limit reached. Use your own Mana?"
-      const tx = new Transaction({ signer, provider, options: { payer: user, rcLimit: String(EP_CAP[action]) } });
-      for (const op of operations) await tx.pushOperation(op);
-      return { mode: "own-fallback", receipt: await tx.send(), wait: () => tx.wait() };
-    }
-    throw new Error("Free play is busy right now. Try again in a few minutes."); // refused txs cost nothing
-  }
-}

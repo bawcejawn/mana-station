@@ -188,7 +188,9 @@
       const p = me && planFor(me, 2);
       $("passForm").hidden = !!p; $("passActive").hidden = !p;
       if (!p) return;
-      $("passActive").replaceChildren(itemCard(p, "Your pass is active", true, await refundOf(p)));
+      const tip = document.createElement("p"); tip.className = "hint";
+      tip.innerHTML = window.__manaStationHelper ? 'The pass helper is on: your pass pays on any Koinos app it covers. <a href="helper.html">Check it</a>.' : '<b>Next: use your pass on any Koinos app.</b> Add the free <a href="helper.html">pass helper</a> to your browser. It holds no keys and only sets who pays.';
+      $("passActive").replaceChildren(itemCard(p, "Your pass is active", true, await refundOf(p)), tip);
     }
     async function appState() {
       const apps = myApps(), sel = $("appSel"), keep = sel.value || MS.store.get("ms.app");

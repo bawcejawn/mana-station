@@ -85,7 +85,12 @@ window.MS = (() => {
   async function send(ops, { from, cosign, rc = M / 2n, stationPays = true, fallback = true } = {}) {
     from = from || active()?.address; if (!from) throw new Error("Choose a wallet first (top right).");
     const isKondor = active()?.kind === "kondor" && active().address === from;
-    const tries = !stationPays ? [{ payer: from }] : fallback ? [{ payer: ST, payee: from }, { payer: from }] : [{ payer: ST, payee: from }];
+    let tries = !stationPays ? [{ payer: from }] : fallback ? [{ payer: ST, payee: from }, { payer: from }] : [{ payer: ST, payee: from }];
+    // Ask first (would_pay): if the station already says no, go straight to the wallet's own Mana, one signature.
+    if (stationPays) {
+      const w = await wouldPay(from, ops, rc);
+      if (w.known && !w.pay) { if (!fallback) throw new Error("STATION_WONT_PAY"); tries = [{ payer: from }]; }
+    }
     let last;
     for (const t of tries) {
       try { return await sendOnce(ops, from, isKondor, cosign, { rcLimit: String(rc), ...t }); }
@@ -98,6 +103,18 @@ window.MS = (() => {
       }
     }
     throw last;
+  }
+  // would_pay: the station's own rules as a dry run. { known: false } when the station predates it.
+  async function wouldPay(from, ops, rc) {
+    try {
+      const infos = [];
+      for (const [c, fn, a] of ops) {
+        const { operation } = await c.functions[fn](a, { onlyOperation: true }); const cc = operation.call_contract;
+        infos.push({ contract_id: cc.contract_id, entry_point: cc.entry_point, args: "0x" + utils.toHexString(typeof cc.args === "string" ? utils.decodeBase64url(cc.args) : cc.args) });
+      }
+      const r = (await station().functions.would_pay({ payee: from, operations: infos, rc_limit: String(rc) })).result || {};
+      return { known: true, pay: !!r.pay, route: r.route || "" };
+    } catch { return { known: false }; }
   }
   async function sendOnce(ops, from, isKondor, cosign, options) {
     if (!isKondor) {
@@ -121,6 +138,7 @@ window.MS = (() => {
     const m = String(e?.message || e || "");
     const why = (m.match(/transaction reverted: ([^"\]]+)/) || [])[1] || (m.match(/"message":"([^"]+)"/) || [])[1];
     if (/user rejected|denied|cancel/i.test(m) && !why) return "You cancelled it in your wallet. Nothing was sent.";
+    if (/STATION_WONT_PAY/.test(m)) return "The station won't cover this right now: your pass may be used up for today, or this kind of transaction isn't covered. Nothing was sent.";
     if (/not mined/i.test(m)) return "Sent, but the network is slow to put it in a block. It usually lands within a few minutes and will then show under Your Mana. Don't send it again.";
     if (/insufficient balance/i.test(m)) return "This wallet doesn't have enough tUSDT for that.";
     if (/insufficient pending account resources|"code":104|insufficient rc/i.test(m)) return "The station didn't cover this one and this wallet has no Mana of its own. Wait a minute and try again.";
@@ -146,5 +164,5 @@ window.MS = (() => {
   document.addEventListener("DOMContentLoaded", renderChip);
   if (document.readyState !== "loading") setTimeout(renderChip);
   return { PG, ABI, M, ST, TOK, provider, store, $, mana, usd, short, when, units, actions, station, token, appC, read,
-    active, use, onWallet, newWallet, connectKondor, signerFor, send, friendly, say, run, roleOf, renderChip };
+    active, use, onWallet, newWallet, connectKondor, signerFor, send, wouldPay, friendly, say, run, roleOf, renderChip };
 })();
