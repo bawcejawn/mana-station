@@ -290,6 +290,20 @@ export class Station {
     return res;
   }
 
+  would_pay(args: station.would_pay_arguments): station.would_pay_result {
+    // const payee = args.payee;
+    // const operations = args.operations;
+    // const rc_limit = args.rc_limit;
+
+    // YOUR CODE HERE
+
+    const res = new station.would_pay_result();
+    // res.pay = ;
+    // res.route = ;
+
+    return res;
+  }
+
   init(args: station.init_arguments): station.init_result {
     // const config = args.config;
 

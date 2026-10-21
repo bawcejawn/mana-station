@@ -155,6 +155,10 @@ export class Station {
   proposals: Storage.Map<Uint8Array, station.proposal_object> = new Storage.Map(System.getContractId(), S_PROPOSALS, station.proposal_object.decode, station.proposal_object.encode, null);
   overflowWin: Storage.Obj<station.window_object> = new Storage.Obj(System.getContractId(), S_OVERFLOWWIN, station.window_object.decode, station.window_object.encode, () => new station.window_object());
   lastNew: bool = false;
+  // would_pay (Oct 21): run the sponsorship rules as a dry run. Nothing is written and no event is emitted; `route`
+  // says which rule would pay ("checkout", "operator", "ticket", "free_app", "app_plan", "pass").
+  dry: bool = false;
+  route: string = "";
 
   // ───── environment ─────
   mana(): u64 { return BUILD_FOR_TESTING ? TEST_MANA : System.getAccountRC(this.contractId); }
@@ -319,6 +323,7 @@ export class Station {
   alertLevel(c: station.config_object): u64 { return c.alert_mana > 0 ? c.alert_mana : DEFAULT_ALERT_MANA; }
   /** One station.reserve_low event per dip below the alert level; re-armed once Mana is back at or above it. */
   watchReserve(c: station.config_object, after: u64): void {
+    if (this.dry) return;
     const lvl = this.alertLevel(c); const b = this.big.get()!;
     if (after < lvl && !b.low_alerted) {
       b.low_alerted = true; this.big.put(b);
@@ -424,20 +429,26 @@ export class Station {
     const rc = System.getTransactionField("header.rc_limit")!.uint64_value;
     const pf = System.getTransactionField("header.payee");
     const payee = pf == null ? new Uint8Array(0) : pf.bytes_value;
+    if (payee.length == 0) return false;
+    // The SDK's system-call buffer is 1 KiB by default: reading the operations of a bigger tx (a contract upload, long
+    // args) would fail. Enlarge it; a big-upload ticket holder may send a whole contract (UNVERIFIED max tx size:
+    // measure on testnet).
+    System.setSystemBufferSize(this.tickets.has(payee) ? BIG_TX_BUFFER : TX_BUFFER);
+    return this.decide(c, payee, rc, txOps());
+  }
+
+  /** The sponsorship rules, shared by authorize (real: records use) and would_pay (dry: records nothing). */
+  decide(c: station.config_object, payee: Uint8Array, rc: u64, ops: protocol.operation[]): bool {
+    this.route = "";
     const mana = this.mana();
     if (rc > mana) return false;
     // Audit #1: the station never pays for its OWN transactions (payee = the station). There is no station-key path:
     // setup happens in the upload transaction itself (see init), which the chain authorizes before this code exists.
     if (payee.length == 0 || Arrays.equal(payee, this.contractId)) return false;
     if (!isAddress(c.owner)) return false;                              // everything else needs an initialized station
-    // The SDK's system-call buffer is 1 KiB by default: reading the operations of a bigger tx (a contract upload, long
-    // args) would fail. Enlarge it; a big-upload ticket holder may send a whole contract (UNVERIFIED max tx size:
-    // measure on testnet).
-    System.setSystemBufferSize(this.tickets.has(payee) ? BIG_TX_BUFFER : TX_BUFFER);
-    const ops = txOps();
     if (ops.length < 1 || ops.length > i32(c.max_ops)) return false;
     // Free checkout (Oct 20): a wallet with no Mana can still buy, renew or cancel its own purchases.
-    if (this.checkoutOk(c, ops, payee, rc, mana)) return true;
+    if (this.checkoutOk(c, ops, payee, rc, mana)) { this.route = "checkout"; return true; }
     let allSelf = true, hasUpload = false, allCalls = true;
     for (let i = 0; i < ops.length; i++) {
       const o = ops[i].call_contract;
@@ -445,16 +456,18 @@ export class Station {
       if (!Arrays.equal(o.contract_id, this.contractId)) allSelf = false;
     }
     if (allSelf) { // owner admin and council votes (kill switch etc.): work while paused, down to rc <= mana
-      if (rc > c.hard_max || !this.isOperator(c, payee) || !System.checkAuthority(authority.authorization_type.contract_call, payee)) return false;
+      // (dry run: the payee's signature can't be checked yet; the real transaction still needs it)
+      if (rc > c.hard_max || !this.isOperator(c, payee) || (!this.dry && !System.checkAuthority(authority.authorization_type.contract_call, payee))) return false;
       // Review M1: the same per-user limits as players (per minute, per day), so no operator can drain the station.
       const u = this.userCheck(c, payee, this.now(), this.height(), rc); if (u == null) return false;
-      this.users.put(payee, u); return true;
+      if (!this.dry) this.users.put(payee, u);
+      this.route = "operator"; return true;
     }
     if (c.paused) return false;
     const now = this.now(), h = this.height();
     // Big upload ticket.
     const t = this.tickets.get(payee);
-    if (t != null && (rc > c.hard_max || hasUpload)) return this.bigOk(c, t, ops, rc, mana, now, payee);
+    if (t != null && (rc > c.hard_max || hasUpload)) { const ok = this.bigOk(c, t, ops, rc, mana, now, payee); if (ok) this.route = "ticket"; return ok; }
     if (!allCalls || rc > c.hard_max) return false;
     if (mana - rc < c.admin_min) return false;
     // Station-wide rolling 24 h cap: 20% of koin_amount (+ explicit owner boosts). App buffers are outside it (below).
@@ -490,15 +503,15 @@ export class Station {
         const used = sumMana(aw) + rc;
         if (used <= allow) {
           if (!globalRoom) return false;
-          add(gw, now / APP_SLOT, APP_N, rc, false); this.globalWin.put(gw);
+          add(gw, now / APP_SLOT, APP_N, rc, false); if (!this.dry) this.globalWin.put(gw);
         } else {
           if (used > limit) return false;
           if (mana - rc < this.bigFloor(c) + this.big.get()!.ticket_open) return false; // hard floor + tickets' locked Mana untouchable (H1)
           const bw = this.bufferWin.get()!; roll(bw, now / APP_SLOT, APP_N, false);
-          add(bw, now / APP_SLOT, APP_N, rc, false); this.bufferWin.put(bw);
-          System.event("station.buffer_used", Protobuf.encode(new station.buffer_event(ex.app, payee, rc, used, allow, limit, mana - rc), station.buffer_event.encode), [payee]);
+          add(bw, now / APP_SLOT, APP_N, rc, false); if (!this.dry) this.bufferWin.put(bw);
+          if (!this.dry) System.event("station.buffer_used", Protobuf.encode(new station.buffer_event(ex.app, payee, rc, used, allow, limit, mana - rc), station.buffer_event.encode), [payee]);
         }
-        add(aw, now / APP_SLOT, APP_N, rc, isNew); this.appWin.put(u32Key(ex.app), aw);
+        add(aw, now / APP_SLOT, APP_N, rc, isNew); if (!this.dry) this.appWin.put(u32Key(ex.app), aw);
       } else {
         // Exempt project without a reservation: only the unsold part of the sellable slice (unchanged rule).
         if (!globalRoom) return false;
@@ -508,12 +521,12 @@ export class Station {
         const ow = this.overflowWin.get()!;
         roll(ow, now / APP_SLOT, APP_N, false);
         if (sumMana(ow) + rc > free) return false;
-        add(ow, now / APP_SLOT, APP_N, rc, false); this.overflowWin.put(ow);
-        add(gw, now / APP_SLOT, APP_N, rc, false); this.globalWin.put(gw);
+        add(ow, now / APP_SLOT, APP_N, rc, false); if (!this.dry) this.overflowWin.put(ow);
+        add(gw, now / APP_SLOT, APP_N, rc, false); if (!this.dry) this.globalWin.put(gw);
       }
-      this.users.put(payee, u);
+      if (!this.dry) this.users.put(payee, u);
       this.watchReserve(c, mana - rc);
-      return true;
+      this.route = "free_app"; return true;
     }
     // Route B: sold APP allowances only (Carl, 9:09 PM: "only usable through the apps that are paying for the Mana
     // usage"). Every op must call the one paying app contract; Mana is drawn from that app's allowance. No account
@@ -534,10 +547,9 @@ export class Station {
     let u: station.user_object | null = null;
     if (kind == 1) { u = this.userCheck(c, payee, now, h, rc); if (u == null) return false; }
     add(s.day!, now / USER_SLOT, USER_N, rc, false); add(gw, now / APP_SLOT, APP_N, rc, false);
-    this.allowances.put(u32Key(s.id), s); this.globalWin.put(gw);
-    if (u != null) this.users.put(payee, u);
+    if (!this.dry) { this.allowances.put(u32Key(s.id), s); this.globalWin.put(gw); if (u != null) this.users.put(payee, u); }
     this.watchReserve(c, mana - rc);
-    return true;
+    this.route = "app_plan"; return true;
   }
 
   /** Free checkout: [token.approve(owner = payee, spender = the station), station.buy_allowance | buy_big_upload | renew
@@ -571,7 +583,7 @@ export class Station {
       if (!isAddress(who) || !Arrays.equal(who!, payee) || tok == null || !Arrays.equal(tok!, ap.contract_id)) return false;
     }
     const u = this.userCheck(c, payee, this.now(), this.height(), rc); if (u == null) return false;
-    this.users.put(payee, u);
+    if (!this.dry) this.users.put(payee, u);
     return true;
   }
 
@@ -593,9 +605,9 @@ export class Station {
     roll(s.day!, now / USER_SLOT, USER_N, false);
     if (sumMana(s.day!) + rc > s.mana_per_day) return false;
     add(s.day!, now / USER_SLOT, USER_N, rc, false); add(gw, now / APP_SLOT, APP_N, rc, false);
-    this.allowances.put(u32Key(s.id), s); this.globalWin.put(gw);
+    if (!this.dry) { this.allowances.put(u32Key(s.id), s); this.globalWin.put(gw); }
     this.watchReserve(c, mana - rc);
-    return true;
+    this.route = "pass"; return true;
   }
 
   bigOk(c: station.config_object, t: station.ticket_object, ops: protocol.operation[], rc: u64, mana: u64, now: u64, payee: Uint8Array): bool {
@@ -610,8 +622,8 @@ export class Station {
       return false;                                                     // set_system_* never
     }
     t.remaining -= rc;
-    this.tickets.put(payee, t);
-    b.ticket_open = b.ticket_open > rc ? b.ticket_open - rc : 0; this.big.put(b); // used: no longer locked
+    b.ticket_open = b.ticket_open > rc ? b.ticket_open - rc : 0;  // used: no longer locked
+    if (!this.dry) { this.tickets.put(payee, t); this.big.put(b); }
     this.watchReserve(c, mana - rc);
     return true;
   }
@@ -1109,6 +1121,26 @@ export class Station {
   }
   get_escrow_totals(args: station.get_escrow_totals_arguments): station.get_escrow_totals_result {
     const r = new station.get_escrow_totals_result(); r.totals = this.escrowTot.get(args.token!); return r;
+  }
+  /** Oct 21: the sponsorship decision as a dry run (nothing written, no events). A snapshot: the real transaction can
+   *  still be refused if something changes before it lands, so callers keep the own-Mana fallback for that case. */
+  would_pay(args: station.would_pay_arguments): station.would_pay_result {
+    const r = new station.would_pay_result();
+    const c = this.config.get()!;
+    if (!isAddress(args.payee)) return r;
+    const ops = new Array<protocol.operation>();
+    for (let i = 0; i < args.operations.length; i++) {
+      const x = args.operations[i]; const o = new protocol.operation();
+      const cid = x.contract_id != null ? x.contract_id! : new Uint8Array(0); const xa = x.args != null ? x.args! : new Uint8Array(0);
+      if (x.upload) o.upload_contract = new protocol.upload_contract_operation(cid, new Uint8Array(0));
+      else if (!x.other) o.call_contract = new protocol.call_contract_operation(cid, x.entry_point, xa);
+      ops.push(o);
+    }
+    this.dry = true;
+    r.pay = this.decide(c, args.payee!, args.rc_limit, ops);
+    this.dry = false;
+    r.route = r.pay ? this.route : "";
+    return r;
   }
 
   // ═══════ connected apps (Carl, Oct 20): one list, one-step connect / disconnect ═══════

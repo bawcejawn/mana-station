@@ -687,6 +687,63 @@ describe("free checkout (Oct 20): a wallet with no Mana can buy, renew and cance
   });
 });
 
+function infoOf(ops: protocol.operation[]): station.op_info[] {
+  const out = new Array<station.op_info>();
+  for (let i = 0; i < ops.length; i++) {
+    const x = new station.op_info(); const o = ops[i];
+    if (o.call_contract != null) { x.contract_id = o.call_contract!.contract_id; x.entry_point = o.call_contract!.entry_point; x.args = o.call_contract!.args; }
+    else if (o.upload_contract != null) { x.contract_id = o.upload_contract!.contract_id; x.upload = true; }
+    else x.other = true;
+    out.push(x);
+  }
+  return out;
+}
+/** would_pay must give exactly the answer authorize then gives for the same transaction (asked first: it records nothing). */
+function same(s: Station, payee: Uint8Array, rc: u64, ops: protocol.operation[], expectPay: bool, route: string = ""): void {
+  tx(payee, rc, ops);
+  const w = s.would_pay(new station.would_pay_arguments(payee, infoOf(ops), rc));
+  expect(w.pay).toBe(expectPay);
+  if (expectPay) expect(w.route).toBe(route);
+  expect(ok(s)).toBe(expectPay);
+}
+describe("would_pay (Oct 21): the same rules as a dry run", () => {
+  it("agrees with authorize on every route and every refusal", () => {
+    const s = setup();
+    same(s, user(1), 2 * M, [op(KNODE, EP_PLAY)], true, "free_app");
+    at(NOW + 3000); same(s, user(2), 2 * M, [op(OTHER, EP_PLAY)], false);              // unknown app, no pass
+    at(NOW + 3000); same(s, user(2), 2 * M, [op(USDT, EP_TRANSFER)], false);           // token transfer
+    at(NOW + 3000); same(s, user(2), 4 * M, [op(KNODE, EP_PLAY)], false);              // above hard_max
+    buyAccount(s, SOLDAPP, 10 * M, 1);
+    at(NOW + 3000); same(s, user(3), 2 * M, [op(SOLDAPP, EP_PLAY)], true, "app_plan");
+    signedBy([U1]); s.buy_allowance(new station.buy_allowance_arguments(U1, 2, U1, 10 * M, 1, USDT, 1000 * USD)); signedBy([]);
+    at(NOW + 3000); same(s, U1, 2 * M, [op(OTHER, EP_PLAY)], true, "pass");
+    at(NOW + 3000); same(s, U1, 2 * M, [op(OTHER, EP_TRANSFER)], false);               // a pass never moves tokens
+    at(NOW + 3000); same(s, U2, 1 * M, [approveOp(USDT, U2, STATION), buyOp(U2, 2, U2, USDT)], true, "checkout");
+    at(NOW + 3000); signedBy([OWNER]); same(s, OWNER, 1 * M, [op(STATION, 0x11111111)], true, "operator"); signedBy([]);
+    signedBy([BUYER]); s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U2, 100 * M, USDT, 1000 * USD, true)); signedBy([]);
+    const up = new protocol.operation(); up.upload_contract = new protocol.upload_contract_operation(U2, new Uint8Array(4));
+    at(NOW + 3000); same(s, U2, 10 * M, [up], true, "ticket");
+    at(NOW + 3000); same(s, U1, 2 * M, [up], false);                                     // someone else's upload
+  });
+  it("records nothing: no use, no limits, no events, however often it is asked", () => {
+    const s = setup();
+    signedBy([U1]); const r = s.buy_allowance(new station.buy_allowance_arguments(U1, 2, U1, 3 * M, 1, USDT, 1000 * USD)); signedBy([]);
+    testSetMana(500 * M);                                                // below the alert level: a real payment would emit reserve_low
+    const ev0 = MockVM.getEvents().length;
+    for (let i = 0; i < 10; i++) {
+      expect(s.would_pay(new station.would_pay_arguments(U1, infoOf([op(OTHER, EP_PLAY)]), 2 * M)).pay).toBe(true);
+      expect(s.would_pay(new station.would_pay_arguments(user(7), infoOf([op(KNODE, EP_PLAY)]), 2 * M)).pay).toBe(true);
+    }
+    expect(MockVM.getEvents().length).toBe(ev0);
+    expect(s.get_allowance(new station.get_allowance_arguments(r.id)).used_24h).toBe(0);
+    expect(s.get_app(new station.get_app_arguments(1)).used_24h).toBe(0);
+    for (let i = 0; i < 5; i++) { at(NOW + 3000); expect(play(s, user(7))).toBe(true); }   // the full per-minute allowance is still there
+    expect(s.would_pay(new station.would_pay_arguments(user(7), infoOf([op(KNODE, EP_PLAY)]), 2 * M)).pay).toBe(false); // 6th: per-minute limit
+    expect(s.would_pay(new station.would_pay_arguments(U1, infoOf([op(OTHER, EP_PLAY)]), 4 * M)).pay).toBe(false);       // above hard_max
+    expect(s.would_pay(new station.would_pay_arguments(U1, infoOf([op(OTHER, EP_PLAY)]), 3 * M)).pay).toBe(true);        // exactly the pass
+  });
+});
+
 describe("ticket fee config and stablecoin-only money paths", () => {
   it("fee is owner-adjustable in bp, capped at 20%; only vUSDT/vUSDC can be priced (so refunds are never KOIN or Mana)", () => {
     const s = setup(); gS = s;

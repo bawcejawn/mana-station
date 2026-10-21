@@ -556,6 +556,30 @@ message get_escrow_totals_result {
   escrow_totals_object totals = 1;
 }
 
+// One operation of a transaction, as would_pay needs it (Oct 21). A call: contract_id + entry_point + args.
+// upload = true: an upload of contract_id's code. other = true: any other operation (set_system_call, …).
+message op_info {
+  bytes contract_id = 1 [(koinos.btype) = CONTRACT_ID];
+  uint32 entry_point = 2;
+  bytes args = 3 [(koinos.btype) = HEX];
+  bool upload = 4;
+  bool other = 5;
+}
+
+// @description Would the station pay for this transaction right now? The same rules as the real decision, run without
+// recording anything, so an app or wallet helper can choose the payer before the user signs once.
+// @read-only true
+message would_pay_arguments {
+  bytes payee = 1 [(koinos.btype) = ADDRESS];          // the wallet that signs (the user)
+  repeated op_info operations = 2;
+  uint64 rc_limit = 3 [jstype = JS_STRING];
+}
+
+message would_pay_result {
+  bool pay = 1;
+  string route = 2;                                     // checkout | operator | ticket | free_app | app_plan | pass
+}
+
 // ════════ Admin (owner only) ════════
 
 // @description First-time setup. Only valid inside the transaction that uploads the station (so nobody can front-run it).

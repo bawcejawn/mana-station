@@ -133,6 +133,13 @@
       "read_only": true,
       "description": "Escrow totals for a token."
     },
+    "would_pay": {
+      "entry_point": 3659520245,
+      "argument": "station.would_pay_arguments",
+      "return": "station.would_pay_result",
+      "read_only": true,
+      "description": "Would the station pay for this transaction right now? The same rules as the real decision, run without"
+    },
     "init": {
       "entry_point": 3142846090,
       "argument": "station.init_arguments",
@@ -2191,6 +2198,71 @@
               "totals": {
                 "type": "escrow_totals_object",
                 "id": 1
+              }
+            }
+          },
+          "op_info": {
+            "fields": {
+              "contract_id": {
+                "type": "bytes",
+                "id": 1,
+                "options": {
+                  "(koinos.btype)": "CONTRACT_ID"
+                }
+              },
+              "entry_point": {
+                "type": "uint32",
+                "id": 2
+              },
+              "args": {
+                "type": "bytes",
+                "id": 3,
+                "options": {
+                  "(koinos.btype)": "HEX"
+                }
+              },
+              "upload": {
+                "type": "bool",
+                "id": 4
+              },
+              "other": {
+                "type": "bool",
+                "id": 5
+              }
+            }
+          },
+          "would_pay_arguments": {
+            "fields": {
+              "payee": {
+                "type": "bytes",
+                "id": 1,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "operations": {
+                "rule": "repeated",
+                "type": "op_info",
+                "id": 2
+              },
+              "rc_limit": {
+                "type": "uint64",
+                "id": 3,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              }
+            }
+          },
+          "would_pay_result": {
+            "fields": {
+              "pay": {
+                "type": "bool",
+                "id": 1
+              },
+              "route": {
+                "type": "string",
+                "id": 2
               }
             }
           },

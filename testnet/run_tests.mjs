@@ -84,6 +84,10 @@ async function sendOps(signer, ops, { payer, payee, rcLimit, cosigner } = {}) {
 }
 const sponsored = (who, rcLimit) => ({ payer: ST, payee: who, rcLimit });
 const read = async (c, fn, a = {}) => (await c.functions[fn](a)).result || {};
+// would_pay (Oct 21): describe a call as the station's op_info and ask the station before sending.
+const opInfo = async (c, fn, a) => { const { operation } = await c.functions[fn](a, { onlyOperation: true }); const cc = operation.call_contract;
+  return { contract_id: cc.contract_id, entry_point: cc.entry_point, args: "0x" + utils.toHexString(typeof cc.args === "string" ? utils.decodeBase64url(cc.args) : cc.args) }; };
+const wp = async (payee, ops, rc) => { try { return await read(sta(), "would_pay", { payee, operations: ops, rc_limit: String(rc) }); } catch (e) { return { error: String(e?.message || e).slice(0, 200) }; } };
 const sta = (who) => C(ST, abiS, who), app = (who) => C(APP, abiA, who), tok = (who) => C(TOK, abiT, who);
 // Owner admin: try the station-sponsored owner path (kill-switch route) first, else owner self-paid.
 async function admin(fn, args, rcLimit = 2n * M) {
@@ -383,6 +387,8 @@ const APP3 = A("app3");
 { const L = await read(sta(), "list_connected"); const f = (L.free_apps || []).find((a) => a.contract_id === APP3);
   check("connect", "list_connected shows it with its daily Mana", !!f && BigInt(f.mana_per_day || 0) === M, JSON.stringify({ free: (L.free_apps || []).length, paid: (L.paid || []).length, sellable: L.sellable, sold: L.sold }));
   note(`list_connected: ${(L.free_apps || []).length} free apps, ${(L.paid || []).length} paid allowances, daily budget ${L.daily_budget}, reserved ${L.reserved}, sellable ${L.sellable}, sold ${L.sold}`); }
+{ const w = await wp(A("player3"), [await opInfo(C(APP3, abiA), "play", { user: A("player3") })], L);
+  check("would_pay", "asked first, the station says it would pay (free app)", w.pay === true && w.route === "free_app", JSON.stringify(w)); }
 { const x = await send(C(APP3, abiA, "player3"), "play", { user: A("player3") }, sponsored(A("player3"), L)); check("connect", "its users play free right away", x.ok, x.error || `rc ${x.rc}`); }
 { const x = await admin("disconnect_app", { contract_id: APP3 }); check("connect", "disconnect_app in one step", x.ok, errOf(x)); }
 { const x = await send(C(APP3, abiA, "player3"), "play", { user: A("player3") }, sponsored(A("player3"), L)); check("connect", "after disconnect its users are no longer sponsored", refusedNot104(x), x.error || "ACCEPTED"); }
@@ -392,6 +398,12 @@ const APP3 = A("app3");
   const pp = BigInt(qp.price || 0);
   const bp = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(pp) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 2, target: U1, mana_per_day: String(AU), days: "1", token: TOK, max_price: String(pp) }]], { rcLimit: M / 2n, cosigner: "user1" });
   check("pass", "buy a 1 Mana/day pass for user1 (user1 co-signs)", bp.ok && bp.events.includes("station.allowance_bought"), bp.error || bp.events);
+  { const w = await wp(U1, [await opInfo(C(APP3, abiA), "play", { user: U1 })], L);
+    check("would_pay", "for a pass holder calling an app nobody pays for: yes, by the pass", w.pay === true && w.route === "pass", JSON.stringify(w));
+    const t = await wp(U1, [await opInfo(tok(), "transfer", { from: U1, to: BUY, value: "1" })], L);
+    check("would_pay", "for the same wallet moving tokens: no", t.pay !== true && !t.error, JSON.stringify(t));
+    const o = await wp(A("player3"), [await opInfo(C(APP3, abiA), "play", { user: A("player3") })], L);
+    check("would_pay", "for a wallet with no pass on that app: no", o.pay !== true && !o.error, JSON.stringify(o)); }
   const own = await send(C(APP3, abiA, "user1"), "play", { user: U1 }, sponsored(U1, L));
   check("pass", "user1's call to an app nobody pays for is sponsored by the pass", own.ok, own.error || `rc ${own.rc}`);
   const other = await send(C(APP3, abiA, "player3"), "play", { user: A("player3") }, sponsored(A("player3"), L));

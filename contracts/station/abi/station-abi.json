@@ -133,6 +133,13 @@
             "entryPoint": 2122584740,
             "readOnly": true
         },
+        "would_pay": {
+            "input": "station.would_pay_arguments",
+            "output": "station.would_pay_result",
+            "description": "Would the station pay for this transaction right now? The same rules as the real decision, run without",
+            "entryPoint": 3659520245,
+            "readOnly": true
+        },
         "init": {
             "input": "station.init_arguments",
             "output": "station.init_result",
@@ -2191,6 +2198,71 @@
                             "totals": {
                                 "type": "escrow_totals_object",
                                 "id": 1
+                            }
+                        }
+                    },
+                    "op_info": {
+                        "fields": {
+                            "contractId": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "CONTRACT_ID"
+                                }
+                            },
+                            "entryPoint": {
+                                "type": "uint32",
+                                "id": 2
+                            },
+                            "args": {
+                                "type": "bytes",
+                                "id": 3,
+                                "options": {
+                                    "(koinos.btype)": "HEX"
+                                }
+                            },
+                            "upload": {
+                                "type": "bool",
+                                "id": 4
+                            },
+                            "other": {
+                                "type": "bool",
+                                "id": 5
+                            }
+                        }
+                    },
+                    "would_pay_arguments": {
+                        "fields": {
+                            "payee": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "operations": {
+                                "rule": "repeated",
+                                "type": "op_info",
+                                "id": 2
+                            },
+                            "rcLimit": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "would_pay_result": {
+                        "fields": {
+                            "pay": {
+                                "type": "bool",
+                                "id": 1
+                            },
+                            "route": {
+                                "type": "string",
+                                "id": 2
                             }
                         }
                     },

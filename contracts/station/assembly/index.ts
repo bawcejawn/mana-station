@@ -217,6 +217,16 @@ export function main(): i32 {
       break;
     }
 
+    case 0xda1fd8f5: {
+      const args = Protobuf.decode<ProtoNamespace.would_pay_arguments>(
+        contractArgs.args,
+        ProtoNamespace.would_pay_arguments.decode
+      );
+      const res = c.would_pay(args);
+      retbuf = Protobuf.encode(res, ProtoNamespace.would_pay_result.encode);
+      break;
+    }
+
     case 0xbb54068a: {
       const args = Protobuf.decode<ProtoNamespace.init_arguments>(
         contractArgs.args,

@@ -1,5 +1,5 @@
 
-Ùb
+¶e
 assembly/proto/station.protostationkoinos/options.proto"Ö
 config_object
 owner (B€µRowner
@@ -399,7 +399,24 @@ releasable"9
 get_escrow_totals_arguments
 token (B€µRtoken"Q
 get_escrow_totals_result5
-totals (2.station.escrow_totals_objectRtotals"@
+totals (2.station.escrow_totals_objectRtotals"™
+op_info%
+contract_id (B€µR
+contractId
+entry_point (R
+entryPoint
+args (B€µRargs
+upload (Rupload
+other (Rother"‚
+would_pay_arguments
+payee (B€µRpayee0
+
+operations (2.station.op_infoR
+operations
+rc_limit (B0RrcLimit":
+would_pay_result
+pay (Rpay
+route (	Rroute"@
 init_arguments.
 config (2.station.config_objectRconfig"
 init_result"F

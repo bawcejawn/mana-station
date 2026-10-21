@@ -4925,6 +4925,205 @@ export namespace station {
     }
   }
 
+  export class op_info {
+    static encode(message: op_info, writer: Writer): void {
+      const unique_name_contract_id = message.contract_id;
+      if (unique_name_contract_id !== null) {
+        writer.uint32(10);
+        writer.bytes(unique_name_contract_id);
+      }
+
+      if (message.entry_point != 0) {
+        writer.uint32(16);
+        writer.uint32(message.entry_point);
+      }
+
+      const unique_name_args = message.args;
+      if (unique_name_args !== null) {
+        writer.uint32(26);
+        writer.bytes(unique_name_args);
+      }
+
+      if (message.upload != false) {
+        writer.uint32(32);
+        writer.bool(message.upload);
+      }
+
+      if (message.other != false) {
+        writer.uint32(40);
+        writer.bool(message.other);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): op_info {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new op_info();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.contract_id = reader.bytes();
+            break;
+
+          case 2:
+            message.entry_point = reader.uint32();
+            break;
+
+          case 3:
+            message.args = reader.bytes();
+            break;
+
+          case 4:
+            message.upload = reader.bool();
+            break;
+
+          case 5:
+            message.other = reader.bool();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    contract_id: Uint8Array | null;
+    entry_point: u32;
+    args: Uint8Array | null;
+    upload: bool;
+    other: bool;
+
+    constructor(
+      contract_id: Uint8Array | null = null,
+      entry_point: u32 = 0,
+      args: Uint8Array | null = null,
+      upload: bool = false,
+      other: bool = false
+    ) {
+      this.contract_id = contract_id;
+      this.entry_point = entry_point;
+      this.args = args;
+      this.upload = upload;
+      this.other = other;
+    }
+  }
+
+  export class would_pay_arguments {
+    static encode(message: would_pay_arguments, writer: Writer): void {
+      const unique_name_payee = message.payee;
+      if (unique_name_payee !== null) {
+        writer.uint32(10);
+        writer.bytes(unique_name_payee);
+      }
+
+      const unique_name_operations = message.operations;
+      for (let i = 0; i < unique_name_operations.length; ++i) {
+        writer.uint32(18);
+        writer.fork();
+        op_info.encode(unique_name_operations[i], writer);
+        writer.ldelim();
+      }
+
+      if (message.rc_limit != 0) {
+        writer.uint32(24);
+        writer.uint64(message.rc_limit);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): would_pay_arguments {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new would_pay_arguments();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.payee = reader.bytes();
+            break;
+
+          case 2:
+            message.operations.push(op_info.decode(reader, reader.uint32()));
+            break;
+
+          case 3:
+            message.rc_limit = reader.uint64();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    payee: Uint8Array | null;
+    operations: Array<op_info>;
+    rc_limit: u64;
+
+    constructor(
+      payee: Uint8Array | null = null,
+      operations: Array<op_info> = [],
+      rc_limit: u64 = 0
+    ) {
+      this.payee = payee;
+      this.operations = operations;
+      this.rc_limit = rc_limit;
+    }
+  }
+
+  export class would_pay_result {
+    static encode(message: would_pay_result, writer: Writer): void {
+      if (message.pay != false) {
+        writer.uint32(8);
+        writer.bool(message.pay);
+      }
+
+      const unique_name_route = message.route;
+      if (unique_name_route !== null) {
+        writer.uint32(18);
+        writer.string(unique_name_route);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): would_pay_result {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new would_pay_result();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.pay = reader.bool();
+            break;
+
+          case 2:
+            message.route = reader.string();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    pay: bool;
+    route: string | null;
+
+    constructor(pay: bool = false, route: string | null = null) {
+      this.pay = pay;
+      this.route = route;
+    }
+  }
+
   export class init_arguments {
     static encode(message: init_arguments, writer: Writer): void {
       const unique_name_config = message.config;
