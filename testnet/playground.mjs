@@ -162,7 +162,8 @@ if (cmd === "recover") {                    // recover <run id>: take a finished
   ok(`owner lowers koin_amount to ${Number(keep) / 1e8} tKOIN`, await viaFunder(own, "set_config", { config: { ...c, koin_amount: String(keep) } }));
   const mem = ["council1", "council2", "council3"].filter((r) => (c.council || []).includes(dk(r).getAddress()));
   if (mem.length < 2) throw new Error("fewer than 2 of that run's council keys are still on its council");
-  const amount = (await kbal(RS)) - keep - M / 10n;
+  // KOIN can only leave an account up to its current Mana, so take at most that (less a little for the fee).
+  let amount = (await kbal(RS)) - keep - M / 10n; const rsMana = BigInt(await provider.getAccountRc(RS)) - M / 10n; if (rsMana < amount) amount = rsMana;
   const [m1, m2] = mem.map(dk);
   ok(`propose returning ${Number(amount) / 1e8} tKOIN`, await viaFunder(m1, "propose", { signer: m1.getAddress(), action: { kind: 2, to: FUN, amount: String(amount) } }));
   const P = (await c0().functions.list_proposals({})).result?.proposals || []; const id = P.filter((p) => p.proposer === m1.getAddress()).slice(-1)[0]?.id;
