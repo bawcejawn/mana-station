@@ -54,8 +54,14 @@
       <p class="hint">What it sends, and to whom: see the <a href="privacy.html">privacy notice</a>. Using it means you accept the <a href="terms.html">terms</a>. Always check each transaction in your wallet before approving it.</p>
     </section>
 
+    <section class="panel" aria-labelledby="phone-t" id="phoneBox">
+      <h2 id="phone-t">On a phone</h2>
+      <p>Most phone browsers can't add extensions (Chrome and Safari on phones, for example), so the helper is for computers: Chrome, Brave, Edge and other Chrome-based browsers. On your phone, your pass still works in every app that supports Mana Station: those apps ask the station first and it covers you automatically, with nothing to install.</p>
+    </section>
+
     <section class="panel" aria-labelledby="inst-t">
-      <h2 id="inst-t">Install it (testnet version)</h2>
+      <h2 id="inst-t">Install it on a computer (testnet version)</h2>
+      <p class="hint">Works in Chrome, Brave, Microsoft Edge, Opera and other Chrome-based browsers. Once published it's one click from the Chrome Web Store (also used by Brave and Opera) or Microsoft Edge Add-ons.</p>
       <p class="hint">The helper isn't in the Chrome Web Store yet. Until it is, load it yourself in Chrome. It's the "Mana Station helper" folder next to these pages.</p>
       <ol class="small" style="display:grid;gap:8px;padding-left:20px;margin:0">
         <li>In Chrome, open <span class="mono">chrome://extensions</span> and switch on <b>Developer mode</b> (top right).</li>
@@ -133,6 +139,8 @@
       return by === MS.ST ? `Paid by Mana Station: your pass covered it (${MS.mana(r.receipt.rc_used, 3)} Mana). Your wallet paid nothing.`
         : `Paid by your own wallet (${MS.mana(r.receipt?.rc_used, 3)} Mana). ${window.__manaStationHelper ? "Your pass didn't cover this one." : "The helper isn't installed."}`;
     }));
+    const phone = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    $("phoneBox").hidden = !phone;
     MS.onWallet(checks); checks();
   })();
   </script>

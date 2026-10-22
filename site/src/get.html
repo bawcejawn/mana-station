@@ -191,7 +191,8 @@
       $("passForm").hidden = !!p; $("passActive").hidden = !p;
       if (!p) return;
       const tip = document.createElement("p"); tip.className = "hint";
-      tip.innerHTML = window.__manaStationHelper ? 'The pass helper is on: your pass pays on any Koinos app it covers. <a href="helper.html">Check it</a>.' : '<b>Next: use your pass on any Koinos app.</b> Add the free <a href="helper.html">pass helper</a> to your browser. It holds no keys and only sets who pays.';
+      if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) tip.innerHTML = '<b>On this phone</b>, your pass works in every app that supports Mana Station: they cover you automatically. On a computer, add the free <a href="helper.html">pass helper</a> so it works in any Koinos app.';
+      else tip.innerHTML = window.__manaStationHelper ? 'The pass helper is on: your pass pays on any Koinos app it covers. <a href="helper.html">Check it</a>.' : '<b>Next: use your pass on any Koinos app.</b> Add the free <a href="helper.html">pass helper</a> to your browser. It holds no keys and only sets who pays.';
       $("passActive").replaceChildren(itemCard(p, "Your pass is active", true, await refundOf(p)), tip);
     }
     async function appState() {

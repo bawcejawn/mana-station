@@ -1,5 +1,14 @@
 # Store listing: Mana Station helper
 
+## Where it's published (one package, $0)
+- **Chrome Web Store** (one-time $5 developer fee): Chrome, **Brave**, Opera, Vivaldi and other Chrome-based browsers
+  install from here.
+- **Microsoft Edge Add-ons** (free): Edge on computers. Edge for Android only offers a short list Microsoft picks.
+- **Phones:** Chrome and Safari on phones can't add extensions (Safari would need a paid Apple developer account and an
+  App Store app). On phones the station reaches users through the apps instead: apps that add the station check
+  (`helper/payer.js` → `sendWithStation`) cover pass holders and their own users in any browser, with nothing to install.
+- Firefox (desktop and Android) could take the same code with small changes, once a Koinos wallet is available there.
+
 Everything the Edge Add-ons and Chrome Web Store forms ask for. Upload `dist/mana-station-helper-mainnet-<version>.zip`
 (built with `node helper/wallet-helper/build.mjs mainnet <station> <hard_max> <site url>`) once the station is on mainnet.
 

@@ -29,8 +29,8 @@
   },
   "_derived_at_30k": {
     "daily_budget": "6,000 Mana a day (20% of 30,000 KOIN), about 37,000 simple actions a day",
-    "DECISION_NEEDED": "Reservations for Knode + Stories come out of the same 6,000. At 3,000 + 3,000 nothing is left to sell (no passes, plans or upload tickets). Suggested: 1,500 + 1,500 -> 3,000 Mana a day sellable; the owner can change it any time on the Owner page.",
-    "reserve": "80% of koin_amount; big floor = admin_min + daily budget"
+    "reserve": "80% of koin_amount; big floor = admin_min + daily budget",
+    "split": "DECIDED by Carl (Oct 21, 5:44 PM): Knode 1,500 + Stories 1,500 free a day; 3,000 Mana a day left to sell (passes, app plans, upload tickets). Owner-adjustable on the Owner page."
   },
   "apps": {
     "1_knode": {
@@ -41,7 +41,7 @@
       "reserved_mana": "150000000000",
       "active": true
     },
-    "_note": "SUGGESTED 1,500 + 1,500 (was 3,000 + 3,000, which leaves 0 to sell at 30k KOIN). Carl to confirm."
+    "_note": "DECIDED by Carl (Oct 21): 1,500 + 1,500."
   },
   "exempt": {
     "1Mpmf2ERhjYpX7CCiM11WERuM4j17uT1sr": {
