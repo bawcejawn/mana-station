@@ -3,6 +3,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://testnet.koinosfoundation.org https://harbinger-api.koinos.io https://api.koinos.io; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#17114a">
   <meta name="color-scheme" content="light dark">
@@ -14,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Figtree:wght@400;600;700&display=swap">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css">
   <title>What is Koinos Mana? Free, gasless Koinos transactions explained</title>
   <meta name="description" content="A plain guide to Koinos Mana: why Koinos has no gas fees, how Mana comes from KOIN and refills 20% a day, and how someone else can pay so you transact for free.">
   <link rel="canonical" href="https://bawcejawn.github.io/mana-station/koinos-mana.html">
@@ -58,7 +59,7 @@
     <a href="get.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3.6 4.4 6 7.6 6 11a6 6 0 0 1-12 0c0-3.4 2.4-6.6 6-11Z"/></svg>Get Mana</a>
     <a href="play.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="m10 8.5 5.5 3.5-5.5 3.5z"/></svg>Try it</a>
     <a href="help.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M9.6 9.6a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.6M12 16.6v.4"/></svg>Help</a>
-  </nav>
+  </nav>
 
   <main id="main" class="wrap page">
     <article class="guide stack-lg">
@@ -125,8 +126,9 @@
       <p class="fine">Prepaid transaction-fee credit: not an investment, not money and not transferable. Payments are held by the station contract until a term ends; cancel any time for the unused part. The station's key alone can't move funds: that takes two of three council members, a public wait and no veto. Smart contracts and blockchains carry risk; always check transactions in your wallet. Nothing here is financial advice. Draft terms, under legal review. Mana Station is independent and not affiliated with the Koinos Group or Koinos Foundation.</p>
     </div>
   </footer>
-  <script src="https://cdn.jsdelivr.net/npm/koilib@9.4.1/dist/koinos.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/kondor-js@1.3.0/dist/kondor.min.js"></script>
+  <!-- AB-019: pinned files with Subresource Integrity (sha384 checked against cdn.jsdelivr.net and unpkg.com, 2026-10-22). -->
+  <script src="https://cdn.jsdelivr.net/npm/koilib@9.4.1/dist/koinos.min.js" integrity="sha384-IAL9o3r4bQJvWhvszkorFINY2ct4LBA/LvyXE9NSOPCyYB25BsFV12JITA7Gxbk6" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/kondor-js@1.3.0/dist/kondor.min.js" integrity="sha384-WOeNFfSdOron0s4x9jdzLtA7Ic7RSqZCXZAaeQd6HRL6WezQp0KAtIF2XSa+11TL" crossorigin="anonymous"></script>
   <script src="abis.js"></script>
   <script src="playground.js"></script>
   <script src="wallets.js"></script>
