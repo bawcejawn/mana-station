@@ -53,6 +53,10 @@ message config_object {
   repeated bytes council = 29 [(koinos.btype) = ADDRESS];
   uint32 threshold = 30;
   uint64 guard_delay_ms = 31 [jstype = JS_STRING];
+  // AB-002 follow-up (audit-fixes-1): the most open allowances the station accepts, 1 to 256 (the code's fixed cap).
+  // Launch low (50) and raise only after measuring buy_allowance and the heaviest authorize route on a node at the new
+  // value. 0 (configs stored before this field) reads as 50. Renewals of open allowances are never refused by it.
+  uint32 open_cap = 32;
 }
 
 // Carl's reserved app: a fixed RESERVATION of Mana per rolling 24 h (absolute, so adding KOIN never changes it;

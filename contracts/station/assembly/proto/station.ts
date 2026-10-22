@@ -152,6 +152,11 @@ export namespace station {
         writer.uint32(248);
         writer.uint64(message.guard_delay_ms);
       }
+
+      if (message.open_cap != 0) {
+        writer.uint32(256);
+        writer.uint32(message.open_cap);
+      }
     }
 
     static decode(reader: Reader, length: i32): config_object {
@@ -277,6 +282,10 @@ export namespace station {
             message.guard_delay_ms = reader.uint64();
             break;
 
+          case 32:
+            message.open_cap = reader.uint32();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -315,6 +324,7 @@ export namespace station {
     council: Array<Uint8Array>;
     threshold: u32;
     guard_delay_ms: u64;
+    open_cap: u32;
 
     constructor(
       owner: Uint8Array | null = null,
@@ -345,7 +355,8 @@ export namespace station {
       max_per_buyer: u32 = 0,
       council: Array<Uint8Array> = [],
       threshold: u32 = 0,
-      guard_delay_ms: u64 = 0
+      guard_delay_ms: u64 = 0,
+      open_cap: u32 = 0
     ) {
       this.owner = owner;
       this.paused = paused;
@@ -376,6 +387,7 @@ export namespace station {
       this.council = council;
       this.threshold = threshold;
       this.guard_delay_ms = guard_delay_ms;
+      this.open_cap = open_cap;
     }
   }
 

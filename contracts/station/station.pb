@@ -1,6 +1,6 @@
 
-÷g
-assembly/proto/station.protostationkoinos/options.proto"Ö
+’h
+assembly/proto/station.protostationkoinos/options.proto"ñ
 config_object
 owner (B€µRowner
 paused (Rpaused#
@@ -38,7 +38,8 @@ alert_mana (B0R	alertMana"
 max_per_buyer (RmaxPerBuyer
 council (B€µRcouncil
 	threshold (R	threshold(
-guard_delay_ms (B0RguardDelayMsJJ"•
+guard_delay_ms (B0RguardDelayMs
+open_cap  (RopenCapJJ"•
 
 app_object'
 reserved_mana (B0RreservedMana

@@ -454,6 +454,10 @@
                                 "options": {
                                     "jstype": "JS_STRING"
                                 }
+                            },
+                            "openCap": {
+                                "type": "uint32",
+                                "id": 32
                             }
                         },
                         "reserved": [
