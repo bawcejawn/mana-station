@@ -672,6 +672,13 @@
                 "options": {
                   "jstype": "JS_STRING"
                 }
+              },
+              "pass_min_purchase": {
+                "type": "uint64",
+                "id": 12,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
               }
             },
             "reserved": [
@@ -777,6 +784,20 @@
                 "rule": "repeated",
                 "type": "uint32",
                 "id": 14
+              },
+              "used_total": {
+                "type": "uint64",
+                "id": 15,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "cap_total": {
+                "type": "uint64",
+                "id": 16,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
               }
             }
           },
@@ -1414,6 +1435,13 @@
                 "options": {
                   "jstype": "JS_STRING"
                 }
+              },
+              "day_price": {
+                "type": "uint64",
+                "id": 17,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
               }
             }
           },
@@ -1686,6 +1714,10 @@
                 "options": {
                   "jstype": "JS_STRING"
                 }
+              },
+              "kind": {
+                "type": "uint32",
+                "id": 4
               }
             }
           },
@@ -1721,6 +1753,13 @@
               "unit_price": {
                 "type": "uint64",
                 "id": 4,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "min_charge": {
+                "type": "uint64",
+                "id": 8,
                 "options": {
                   "jstype": "JS_STRING"
                 }
@@ -1777,6 +1816,20 @@
               "unit_price": {
                 "type": "uint64",
                 "id": 4,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "min_charge": {
+                "type": "uint64",
+                "id": 8,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "lifetime_ms": {
+                "type": "uint64",
+                "id": 9,
                 "options": {
                   "jstype": "JS_STRING"
                 }
@@ -1998,6 +2051,13 @@
               "allow_upload": {
                 "type": "bool",
                 "id": 6
+              },
+              "min_lifetime_ms": {
+                "type": "uint64",
+                "id": 7,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
               }
             }
           },

@@ -79,6 +79,7 @@ export class Station {
     // const token = args.token;
     // const mana_per_day = args.mana_per_day;
     // const days = args.days;
+    // const kind = args.kind;
 
     // YOUR CODE HERE
 
@@ -90,6 +91,7 @@ export class Station {
     // res.available = ;
     // res.reason = ;
     // res.unit_price = ;
+    // res.min_charge = ;
 
     return res;
   }
@@ -110,6 +112,8 @@ export class Station {
     // res.available = ;
     // res.reason = ;
     // res.unit_price = ;
+    // res.min_charge = ;
+    // res.lifetime_ms = ;
 
     return res;
   }
@@ -186,6 +190,7 @@ export class Station {
     // const token = args.token;
     // const max_price = args.max_price;
     // const allow_upload = args.allow_upload;
+    // const min_lifetime_ms = args.min_lifetime_ms;
 
     // YOUR CODE HERE
 

@@ -27,8 +27,10 @@ message config_object {
   uint64 big_cooldown_ms = 17 [jstype = JS_STRING]; // between big-upload purchases, PER BUYER (was station-wide: audit #2)
   uint64 big_week_cap = 18 [jstype = JS_STRING];    // total big uploads per rolling 7 days (Mana)
   uint64 big_max_debt = 19 [jstype = JS_STRING];    // reserve that big uploads may owe at once (Mana)
-  uint64 big_ticket_ms = 20 [jstype = JS_STRING];   // ticket lifetime; 0 = default 24 h (Carl, 8:02 PM). Owner-adjustable
-  uint32 max_allowances = 21;                       // sold allowances open at once (bounded loops)
+  uint64 big_ticket_ms = 20 [jstype = JS_STRING];   // ticket lifetime; 0 = default 24 h (Carl, 8:02 PM). Owner-adjustable, 1 h to 7 days (AB-001)
+  // IGNORED since audit-fixes-1 (AB-002): open allowances are limited by Mana sold (sellable capacity) and a fixed
+  // safety cap of 256 in the contract, no longer by this count. Kept so stored configs still decode.
+  uint32 max_allowances = 21;
   uint64 max_days = 22 [jstype = JS_STRING];        // longest prepaid period per buy / renew
   // Where ESCROW RELEASES go (Carl, 7:47 PM: payments are held in the station's escrow until the term ends).
   // Empty = the owner wallet. Must not be the station itself. Owner-changeable.
@@ -112,6 +114,9 @@ message price_object {
   uint64 big_min_mana = 10 [jstype = JS_STRING];    // smallest big-upload order (Mana, 8 decimals)
   // Audit #3: every purchase (allowance term or big-upload ticket) costs at least this much, in token units. 0 = none.
   uint64 min_purchase = 11 [jstype = JS_STRING];
+  // AB-002 (audit-fixes-1): minimum charge for a Mana pass (kind 2) purchase or renewal, in token units. A pass costs at
+  // least max(min_purchase, pass_min_purchase). Shown in the quote and kept on a buyer cancel. 0 = none.
+  uint64 pass_min_purchase = 12 [jstype = JS_STRING];
 }
 
 // A sold daily allowance. kind 1 = calls into contract `target`; kind 2 = txs whose payee is account `target`.
@@ -131,6 +136,10 @@ message allowance_object {
   uint64 term_start = 12 [jstype = JS_STRING];
   uint64 total_paid = 13 [jstype = JS_STRING];       // all terms together
   repeated uint32 purchase_ids = 14;                  // escrow purchases (terms) of this allowance
+  // AB-006 (audit-fixes-1): total Mana sponsored over all terms, and the most the paid days allow (mana_per_day × days,
+  // less refunded days). 0 cap = not tracked (allowances bought before audit-fixes-1).
+  uint64 used_total = 15 [jstype = JS_STRING];
+  uint64 cap_total = 16 [jstype = JS_STRING];
 }
 
 // A prepaid big upload for `payee`: up to `mana` in total, each tx up to `mana`, until expiry.
@@ -286,6 +295,9 @@ message escrow_object {
   uint64 released = 14 [jstype = JS_STRING];
   bool closed = 15;
   uint64 min_keep = 16 [jstype = JS_STRING];         // review M3: buyer cancels never refund below this (min charge at purchase)
+  // AB-010 (audit-fixes-1): the 1-day price for this size at purchase (allowance terms). A buyer cancel charges the days
+  // used at this price. 0 = not recorded (purchases before audit-fixes-1): plain pro rata.
+  uint64 day_price = 17 [jstype = JS_STRING];
 }
 
 // Per token: held = Σ (amount − refunded − released) over all purchases; must equal the station's token balance.
@@ -301,7 +313,7 @@ message escrow_event {
   escrow_object purchase = 1;
   uint64 amount = 2 [jstype = JS_STRING];
   bytes to = 3 [(koinos.btype) = ADDRESS];
-  string action = 4;                                 // "cancel", "owner_refund", "ticket_settle", "release"
+  string action = 4;                                 // "cancel", "owner_refund", "suspend_refund", "ticket_settle", "release"
 }
 
 message revenue_object {
@@ -371,6 +383,7 @@ message quote_allowance_arguments {
   bytes token = 1 [(koinos.btype) = CONTRACT_ID];
   uint64 mana_per_day = 2 [jstype = JS_STRING];
   uint64 days = 3 [jstype = JS_STRING];
+  uint32 kind = 4;                                   // 1 app plan, 2 Mana pass (0 = not said: the pass minimum is shown too)
 }
 
 message quote_allowance_result {
@@ -382,6 +395,7 @@ message quote_allowance_result {
   bool available = 2;
   string reason = 3;
   uint64 unit_price = 4 [jstype = JS_STRING]; // tier price per 1,000 Mana(/day) used
+  uint64 min_charge = 8 [jstype = JS_STRING];  // AB-002: the minimum charge that applies (kept on a buyer cancel)
 }
 
 // @description Price of a big upload and whether the reserve can take it now.
@@ -400,6 +414,8 @@ message quote_big_upload_result {
   bool available = 2;
   string reason = 3;
   uint64 unit_price = 4 [jstype = JS_STRING];
+  uint64 min_charge = 8 [jstype = JS_STRING];      // AB-002: the minimum charge that applies (kept on a cancel)
+  uint64 lifetime_ms = 9 [jstype = JS_STRING];     // AB-001: how long a ticket bought now stays valid (send it as min_lifetime_ms)
 }
 
 // @description A sold allowance by id.
@@ -469,6 +485,9 @@ message buy_big_upload_arguments {
   bytes token = 4 [(koinos.btype) = CONTRACT_ID];
   uint64 max_price = 5 [jstype = JS_STRING];
   bool allow_upload = 6;
+  // AB-001 (audit-fixes-1): the shortest ticket lifetime the buyer accepts (the quote's lifetime_ms). A shorter one is
+  // refused, so a lifetime change between quote and purchase can't cut the ticket short. 0 = any.
+  uint64 min_lifetime_ms = 7 [jstype = JS_STRING];
 }
 
 message buy_big_upload_result {

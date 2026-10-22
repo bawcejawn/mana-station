@@ -847,6 +847,11 @@ export namespace station {
         writer.uint32(88);
         writer.uint64(message.min_purchase);
       }
+
+      if (message.pass_min_purchase != 0) {
+        writer.uint32(96);
+        writer.uint64(message.pass_min_purchase);
+      }
     }
 
     static decode(reader: Reader, length: i32): price_object {
@@ -888,6 +893,10 @@ export namespace station {
             message.min_purchase = reader.uint64();
             break;
 
+          case 12:
+            message.pass_min_purchase = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -905,6 +914,7 @@ export namespace station {
     big_per_1000: u64;
     big_min_mana: u64;
     min_purchase: u64;
+    pass_min_purchase: u64;
 
     constructor(
       active: bool = false,
@@ -914,7 +924,8 @@ export namespace station {
       price_30d: u64 = 0,
       big_per_1000: u64 = 0,
       big_min_mana: u64 = 0,
-      min_purchase: u64 = 0
+      min_purchase: u64 = 0,
+      pass_min_purchase: u64 = 0
     ) {
       this.active = active;
       this.max_per_purchase = max_per_purchase;
@@ -924,6 +935,7 @@ export namespace station {
       this.big_per_1000 = big_per_1000;
       this.big_min_mana = big_min_mana;
       this.min_purchase = min_purchase;
+      this.pass_min_purchase = pass_min_purchase;
     }
   }
 
@@ -1007,6 +1019,16 @@ export namespace station {
           writer.uint32(unique_name_purchase_ids[i]);
         }
       }
+
+      if (message.used_total != 0) {
+        writer.uint32(120);
+        writer.uint64(message.used_total);
+      }
+
+      if (message.cap_total != 0) {
+        writer.uint32(128);
+        writer.uint64(message.cap_total);
+      }
     }
 
     static decode(reader: Reader, length: i32): allowance_object {
@@ -1072,6 +1094,14 @@ export namespace station {
             message.purchase_ids.push(reader.uint32());
             break;
 
+          case 15:
+            message.used_total = reader.uint64();
+            break;
+
+          case 16:
+            message.cap_total = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -1095,6 +1125,8 @@ export namespace station {
     term_start: u64;
     total_paid: u64;
     purchase_ids: Array<u32>;
+    used_total: u64;
+    cap_total: u64;
 
     constructor(
       id: u32 = 0,
@@ -1110,7 +1142,9 @@ export namespace station {
       paid: u64 = 0,
       term_start: u64 = 0,
       total_paid: u64 = 0,
-      purchase_ids: Array<u32> = []
+      purchase_ids: Array<u32> = [],
+      used_total: u64 = 0,
+      cap_total: u64 = 0
     ) {
       this.id = id;
       this.buyer = buyer;
@@ -1126,6 +1160,8 @@ export namespace station {
       this.term_start = term_start;
       this.total_paid = total_paid;
       this.purchase_ids = purchase_ids;
+      this.used_total = used_total;
+      this.cap_total = cap_total;
     }
   }
 
@@ -2554,6 +2590,11 @@ export namespace station {
         writer.uint32(128);
         writer.uint64(message.min_keep);
       }
+
+      if (message.day_price != 0) {
+        writer.uint32(136);
+        writer.uint64(message.day_price);
+      }
     }
 
     static decode(reader: Reader, length: i32): escrow_object {
@@ -2627,6 +2668,10 @@ export namespace station {
             message.min_keep = reader.uint64();
             break;
 
+          case 17:
+            message.day_price = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -2652,6 +2697,7 @@ export namespace station {
     released: u64;
     closed: bool;
     min_keep: u64;
+    day_price: u64;
 
     constructor(
       id: u32 = 0,
@@ -2669,7 +2715,8 @@ export namespace station {
       refunded: u64 = 0,
       released: u64 = 0,
       closed: bool = false,
-      min_keep: u64 = 0
+      min_keep: u64 = 0,
+      day_price: u64 = 0
     ) {
       this.id = id;
       this.kind = kind;
@@ -2687,6 +2734,7 @@ export namespace station {
       this.released = released;
       this.closed = closed;
       this.min_keep = min_keep;
+      this.day_price = day_price;
     }
   }
 
@@ -3390,6 +3438,11 @@ export namespace station {
         writer.uint32(24);
         writer.uint64(message.days);
       }
+
+      if (message.kind != 0) {
+        writer.uint32(32);
+        writer.uint32(message.kind);
+      }
     }
 
     static decode(reader: Reader, length: i32): quote_allowance_arguments {
@@ -3411,6 +3464,10 @@ export namespace station {
             message.days = reader.uint64();
             break;
 
+          case 4:
+            message.kind = reader.uint32();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -3423,15 +3480,18 @@ export namespace station {
     token: Uint8Array | null;
     mana_per_day: u64;
     days: u64;
+    kind: u32;
 
     constructor(
       token: Uint8Array | null = null,
       mana_per_day: u64 = 0,
-      days: u64 = 0
+      days: u64 = 0,
+      kind: u32 = 0
     ) {
       this.token = token;
       this.mana_per_day = mana_per_day;
       this.days = days;
+      this.kind = kind;
     }
   }
 
@@ -3473,6 +3533,11 @@ export namespace station {
         writer.uint32(32);
         writer.uint64(message.unit_price);
       }
+
+      if (message.min_charge != 0) {
+        writer.uint32(64);
+        writer.uint64(message.min_charge);
+      }
     }
 
     static decode(reader: Reader, length: i32): quote_allowance_result {
@@ -3510,6 +3575,10 @@ export namespace station {
             message.unit_price = reader.uint64();
             break;
 
+          case 8:
+            message.min_charge = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -3526,6 +3595,7 @@ export namespace station {
     available: bool;
     reason: string | null;
     unit_price: u64;
+    min_charge: u64;
 
     constructor(
       refundable: bool = false,
@@ -3534,7 +3604,8 @@ export namespace station {
       price: u64 = 0,
       available: bool = false,
       reason: string | null = null,
-      unit_price: u64 = 0
+      unit_price: u64 = 0,
+      min_charge: u64 = 0
     ) {
       this.refundable = refundable;
       this.auto_renew = auto_renew;
@@ -3543,6 +3614,7 @@ export namespace station {
       this.available = available;
       this.reason = reason;
       this.unit_price = unit_price;
+      this.min_charge = min_charge;
     }
   }
 
@@ -3631,6 +3703,16 @@ export namespace station {
         writer.uint32(32);
         writer.uint64(message.unit_price);
       }
+
+      if (message.min_charge != 0) {
+        writer.uint32(64);
+        writer.uint64(message.min_charge);
+      }
+
+      if (message.lifetime_ms != 0) {
+        writer.uint32(72);
+        writer.uint64(message.lifetime_ms);
+      }
     }
 
     static decode(reader: Reader, length: i32): quote_big_upload_result {
@@ -3668,6 +3750,14 @@ export namespace station {
             message.unit_price = reader.uint64();
             break;
 
+          case 8:
+            message.min_charge = reader.uint64();
+            break;
+
+          case 9:
+            message.lifetime_ms = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -3684,6 +3774,8 @@ export namespace station {
     available: bool;
     reason: string | null;
     unit_price: u64;
+    min_charge: u64;
+    lifetime_ms: u64;
 
     constructor(
       refundable: bool = false,
@@ -3692,7 +3784,9 @@ export namespace station {
       price: u64 = 0,
       available: bool = false,
       reason: string | null = null,
-      unit_price: u64 = 0
+      unit_price: u64 = 0,
+      min_charge: u64 = 0,
+      lifetime_ms: u64 = 0
     ) {
       this.refundable = refundable;
       this.auto_renew = auto_renew;
@@ -3701,6 +3795,8 @@ export namespace station {
       this.available = available;
       this.reason = reason;
       this.unit_price = unit_price;
+      this.min_charge = min_charge;
+      this.lifetime_ms = lifetime_ms;
     }
   }
 
@@ -4215,6 +4311,11 @@ export namespace station {
         writer.uint32(48);
         writer.bool(message.allow_upload);
       }
+
+      if (message.min_lifetime_ms != 0) {
+        writer.uint32(56);
+        writer.uint64(message.min_lifetime_ms);
+      }
     }
 
     static decode(reader: Reader, length: i32): buy_big_upload_arguments {
@@ -4248,6 +4349,10 @@ export namespace station {
             message.allow_upload = reader.bool();
             break;
 
+          case 7:
+            message.min_lifetime_ms = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -4263,6 +4368,7 @@ export namespace station {
     token: Uint8Array | null;
     max_price: u64;
     allow_upload: bool;
+    min_lifetime_ms: u64;
 
     constructor(
       buyer: Uint8Array | null = null,
@@ -4270,7 +4376,8 @@ export namespace station {
       mana: u64 = 0,
       token: Uint8Array | null = null,
       max_price: u64 = 0,
-      allow_upload: bool = false
+      allow_upload: bool = false,
+      min_lifetime_ms: u64 = 0
     ) {
       this.buyer = buyer;
       this.payee = payee;
@@ -4278,6 +4385,7 @@ export namespace station {
       this.token = token;
       this.max_price = max_price;
       this.allow_upload = allow_upload;
+      this.min_lifetime_ms = min_lifetime_ms;
     }
   }
 

@@ -1,5 +1,5 @@
 
-∂e
+˜g
 assembly/proto/station.protostationkoinos/options.proto"÷
 config_object
 owner (BÄµRowner
@@ -72,7 +72,7 @@ last_block (B0R	lastBlock
 minute (B0Rminute
 n_min (RnMin)
 cooldown_until (B0RcooldownUntil(
-day (2.station.window_objectRday"∏
+day (2.station.window_objectRday"Ë
 price_object
 active (Ractive,
 max_per_purchase (B0RmaxPerPurchase
@@ -84,7 +84,8 @@ bigPer1000$
 big_min_mana
  (B0R
 bigMinMana%
-min_purchase (B0RminPurchaseJJJ"Ω
+min_purchase (B0RminPurchase.
+pass_min_purchase (B0RpassMinPurchaseJJJ"Å
 allowance_object
 id (Rid
 buyer (BÄµRbuyer
@@ -104,7 +105,10 @@ unit_price
 term_start (B0R	termStart!
 
 total_paid (B0R	totalPaid!
-purchase_ids (RpurchaseIds"Ω
+purchase_ids (RpurchaseIds!
+
+used_total (B0R	usedTotal
+	cap_total (B0RcapTotal"Ω
 ticket_object
 buyer (BÄµRbuyer
 mana (B0Rmana 
@@ -217,7 +221,7 @@ manaPerDay
 expiry (B0Rexpiry
 used_24h (B0Rused24h
 	suspended (R	suspended
-kind (Rkind"∫
+kind (Rkind"€
 escrow_object
 id (Rid
 kind (Rkind
@@ -235,7 +239,8 @@ manaPerDay
 refunded (B0Rrefunded
 released (B0Rreleased
 closed (Rclosed
-min_keep (B0RminKeep"ê
+min_keep (B0RminKeep
+	day_price (B0RdayPrice"ê
 escrow_totals_object
 held (B0Rheld 
 	collected (B0R	collected
@@ -285,12 +290,13 @@ contractId
 entry_point (R
 entryPoint"?
 get_entry_result+
-entry (2.station.entry_objectRentry"u
+entry (2.station.entry_objectRentry"â
 quote_allowance_arguments
 token (BÄµRtoken$
 mana_per_day (B0R
 manaPerDay
-days (B0Rdays"‡
+days (B0Rdays
+kind (Rkind"É
 quote_allowance_result
 
 refundable (R
@@ -302,10 +308,12 @@ auto_renew (R	autoRenew
 	available (R	available
 reason (	Rreason!
 
-unit_price (B0R	unitPrice"P
+unit_price (B0R	unitPrice!
+
+min_charge (B0R	minCharge"P
 quote_big_upload_arguments
 token (BÄµRtoken
-mana (B0Rmana"·
+mana (B0Rmana"©
 quote_big_upload_result
 
 refundable (R
@@ -317,7 +325,11 @@ auto_renew (R	autoRenew
 	available (R	available
 reason (	Rreason!
 
-unit_price (B0R	unitPrice")
+unit_price (B0R	unitPrice!
+
+min_charge (B0R	minCharge#
+lifetime_ms	 (B0R
+lifetimeMs")
 get_allowance_arguments
 id (Rid"n
 get_allowance_result7
@@ -350,14 +362,15 @@ manaPerDay
 expiry (B0Rexpiry
 paid (B0Rpaid!
 
-unit_price (B0R	unitPrice" 
+unit_price (B0R	unitPrice"ˆ
 buy_big_upload_arguments
 buyer (BÄµRbuyer
 payee (BÄµRpayee
 mana (B0Rmana
 token (BÄµRtoken
 	max_price (B0RmaxPrice!
-allow_upload (RallowUpload"K
+allow_upload (RallowUpload*
+min_lifetime_ms (B0RminLifetimeMs"K
 buy_big_upload_result
 expiry (B0Rexpiry
 paid (B0Rpaid"4
