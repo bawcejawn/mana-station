@@ -127,12 +127,18 @@ function setupA(): Station {
 }
 
 function buyTicket(s: Station): station.buy_big_upload_result {
-  signedBy([BUYER]);
+  signedBy([BUYER, U2]);
   const r = s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U2, 100 * M, USDT, 1000 * USD, true));
   signedBy([]); return r;
 }
+// audit-fixes-1 adjustment: the fix REFUSES the attacker's setup step (it used to be accepted), so that step is now
+// asserted with toThrow instead of being run bare (a bare refused call aborts the test). Every original SAFE assertion is kept.
+let gTS: Station | null = null; let gTC: station.config_object | null = null;
 function ownerTicketMs(s: Station, ms: u64): void {
-  signedBy([OWNER]); const c = cfg(); c.big_ticket_ms = ms; s.set_config(new station.set_config_arguments(c)); signedBy([]);
+  gTS = s; signedBy([OWNER]); const c = cfg(); c.big_ticket_ms = ms; gTC = c; MockVM.commitTransaction();
+  expect(() => { gTS!.set_config(new station.set_config_arguments(gTC)); })
+    .toThrow("BROKEN (checkConfig, Station.ts:841-850): owner set big_ticket_ms = " + ms.toString() + " (no bound)");
+  signedBy([]);
 }
 
 describe("red team INSIDER: the owner shortens the ticket lifetime so a paid ticket is dead on arrival", () => {

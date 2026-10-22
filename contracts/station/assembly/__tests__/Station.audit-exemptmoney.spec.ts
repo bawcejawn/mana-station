@@ -128,8 +128,11 @@ describe("AUDIT exempt money: set_exempt on a token contract", () => {
       .toThrow("AB exempt money: set_exempt accepted vUSDT as a free app");
   });
   it("(impact) no stablecoin transfer is station-paid", () => {
-    const s = setup(); signedBy([OWNER]);
-    s.set_exempt(new station.set_exempt_arguments(USDT, new station.exempt_object(0, false), false)); signedBy([]);
+    // audit-fixes-1 adjustment: the fix REFUSES the attacker's setup step (it used to be accepted), so that step is now
+    // asserted with toThrow instead of being run bare (a bare refused call aborts the test). Every original SAFE assertion is kept.
+    const s = setup(); gS2 = s; signedBy([OWNER]); MockVM.commitTransaction();
+    expect(() => { gS2!.set_exempt(new station.set_exempt_arguments(USDT, new station.exempt_object(0, false), false)); })
+      .toThrow("AB exempt money: set_exempt accepted vUSDT as a free app"); signedBy([]);
     tx(U2, 1 * M, [op(USDT, EP_TRANSFER)]);
     expect(ok(s)).toBe(false, "AB exempt money: the station paid for a vUSDT transfer");
   });

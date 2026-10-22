@@ -122,19 +122,23 @@ function setupA(): Station {
   signedBy([]); return s;
 }
 
-describe("VERIFY AB-002 baseline: suspension already lets the owner keep a whole ticket price", () => {
-  it("owner suspends the buyer (reason 1), the ticket ends, owner close_ticket: refund 0, full price to the owner", () => {
+// audit-fixes-1 adjustment: this verifier test PASSED at 4343f83 because it pinned the confiscation power (suspend, then
+// keep the whole price). The owner decided (AB-001) to remove that power: reasons 1, 3 and 4 now refund the unused share
+// at once. Its assertions are therefore inverted to the decided SAFE behaviour; the scenario is unchanged.
+describe("VERIFY AB-002 baseline: suspension no longer lets the owner keep a whole ticket price", () => {
+  it("owner suspends the buyer (reason 1) right after purchase: the unused price is refunded at once, nothing to the owner", () => {
     const s = setup();
-    signedBy([BUYER]);
+    signedBy([BUYER, U2]);
     const r = s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U2, 100 * M, USDT, 1000 * USD, true));
     signedBy([]);
     expect(r.paid).toBeGreaterThan(0, "setup: ticket paid");
+    const buyer0 = testGetToken(USDT, BUYER), before = testGetToken(USDT, OWNER);
     signedBy([OWNER]); s.suspend_allowance(new station.suspend_allowance_arguments(BUYER, 1)); signedBy([]);
-    const before = testGetToken(USDT, OWNER);
+    expect(testGetToken(USDT, BUYER) - buyer0).toBe(r.paid, "suspended at once: the whole unused, unexpired price comes back (no fee)");
+    expect(testGetToken(USDT, OWNER) - before).toBe(0, "nothing was served, so nothing goes to the owner");
+    expect(s.get_ticket(new station.get_ticket_arguments(U2)).ticket).toBeNull("the ticket was settled at suspension");
     at(NOW + 3 * DAYMS + 1);                                           // cfg(): big_ticket_ms = 3 days
-    signedBy([OWNER]); const x = s.close_ticket(new station.close_ticket_arguments(U2)); signedBy([]);
-    expect(x.refund).toBe(0, "suspended: no refund");
-    expect(x.released).toBe(r.paid, "whole price released");
-    expect(testGetToken(USDT, OWNER) - before).toBe(r.paid, "treasury defaults to the owner wallet");
+    gS = s; signedBy([OWNER]); MockVM.commitTransaction();
+    expect(() => { gS!.close_ticket(new station.close_ticket_arguments(U2)); }).toThrow("nothing left to settle or confiscate"); signedBy([]);
   });
 });

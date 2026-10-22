@@ -163,7 +163,7 @@ describe("THIEF: refunds never exceed payment, never go to the wrong wallet, nev
   });
   it("3. ticket: one refund only, fee kept; all Mana used -> no refund", () => {
     const s = setup(); gS = s;
-    signedBy([BUYER]); s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U1, 100 * M, USDT, 1000 * USD, false)); // 500,000
+    signedBy([BUYER, U1]); s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U1, 100 * M, USDT, 1000 * USD, false)); // 500,000
     expect(s.cancel_big_upload(new station.cancel_big_upload_arguments(BUYER, U1)).refund).toBe(475_000, "SAFE: immediate cancel keeps the 5% fee");
     MockVM.commitTransaction(); expect(() => { gS!.cancel_big_upload(new station.cancel_big_upload_arguments(BUYER, U1)); }).toThrow("SAFE: no second cancel");
     signedBy([]);
@@ -171,7 +171,7 @@ describe("THIEF: refunds never exceed payment, never go to the wrong wallet, nev
     expect(testGetToken(USDT, BUYER)).toBe(1000 * USD - 25_000, "SAFE: exactly the fee lost");
     inv(s, USDT);
     const B2 = user(77); testSetToken(USDT, B2, 10 * USD);
-    signedBy([B2]); s.buy_big_upload(new station.buy_big_upload_arguments(B2, U2, 100 * M, USDT, 1000 * USD, false)); signedBy([]);
+    signedBy([B2, U2]); s.buy_big_upload(new station.buy_big_upload_arguments(B2, U2, 100 * M, USDT, 1000 * USD, false)); signedBy([]);
     at(NOW + 3000); tx(U2, 100 * M, [op(U2, EP_PLAY)]); expect(ok(s)).toBe(true, "ticket spends all 100 Mana in one tx");
     signedBy([B2]); expect(s.cancel_big_upload(new station.cancel_big_upload_arguments(B2, U2)).refund).toBe(0, "SAFE: used-up ticket refunds nothing"); signedBy([]);
     expect(testGetToken(USDT, B2)).toBe(10 * USD - 500_000);
@@ -191,7 +191,7 @@ describe("THIEF: refunds never exceed payment, never go to the wrong wallet, nev
   });
   it("5. a stranger's buy sweeps an expired ticket: buyer gets 0, treasury gets the price, stranger gets nothing", () => {
     const s = setup(); const T = NOW;
-    signedBy([BUYER]); s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U1, 100 * M, USDT, 1000 * USD, false)); signedBy([]);
+    signedBy([BUYER, U1]); s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U1, 100 * M, USDT, 1000 * USD, false)); signedBy([]);
     at(T + 3 * DAYMS + 1000);
     const B2 = user(77); testSetToken(USDT, B2, 10 * USD); gX = B2;
     signedBy([B2]); const p = s.buy_allowance(new station.buy_allowance_arguments(B2, 2, B2, 5 * M, 1, USDT, 1000 * USD)); signedBy([]);

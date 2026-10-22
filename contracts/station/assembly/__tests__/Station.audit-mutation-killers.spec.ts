@@ -125,11 +125,11 @@ describe("AUDIT mutation killers", () => {
     const q = gS!.quote_big_upload(new station.quote_big_upload_arguments(USDT, 50 * M));
     expect(q.available).toBe(true, "setup: ticket quote available");
     gArgs = new station.buy_big_upload_arguments(BUYER, U2, 50 * M, USDT, q.price - 1, true);
-    signedBy([BUYER]);
+    signedBy([BUYER, U2]);                                  // audit-fixes-1 (AB-005): the payee signs its ticket too
     expect(() => { gS!.buy_big_upload(gArgs!); }).toThrow("M0003: ticket bought above max_price");
   });
   it("M0022: a suspended buyer can't cancel their own ticket", () => {
-    gS = setup(); signedBy([BUYER]);
+    gS = setup(); signedBy([BUYER, U2]);                    // audit-fixes-1 (AB-005): the payee signs its ticket too
     gS!.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U2, 50 * M, USDT, 1000 * USD, true));
     signedBy([OWNER]); gS!.suspend_allowance(new station.suspend_allowance_arguments(BUYER, 1));
     signedBy([BUYER]);

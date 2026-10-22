@@ -129,6 +129,7 @@ function setupA(): Station {
 }
 
 let gId: u32 = 0;
+let gA3: station.guarded_action | null = null;
 function upAuthAll(s: Station, bytes: Uint8Array): bool {
   const t = new protocol.transaction(); const o = new protocol.operation();
   o.upload_contract = new protocol.upload_contract_operation(STATION, bytes, "", true, true, true); t.operations = [o];
@@ -160,9 +161,13 @@ describe("red team INSIDER: two colluding council members override the third mem
     at(NOW + 2 * DAYMS); s.execute(new station.execute_arguments(id2));
     MockVM.clearEvents();
     // Round 3: the same upgrade again; nobody left can veto.
-    const a3 = act(1); a3.hash = h;
-    signedBy([C1]); const id3 = s.propose(new station.propose_arguments(C1, a3)).id;
-    signedBy([cm(4)]); s.approve(new station.approve_arguments(cm(4), id3)); signedBy([]);
+    // audit-fixes-1 adjustment: the fix REFUSES the attacker's setup step (it used to be accepted), so that step is now
+    // asserted with toThrow instead of being run bare (a bare refused call aborts the test). Every original SAFE assertion is kept.
+    const a3 = act(1); a3.hash = h; gA3 = a3;
+    signedBy([C1]); MockVM.commitTransaction();
+    expect(() => { gS!.propose(new station.propose_arguments(C1, gA3)); })
+      .toThrow("BROKEN: the vetoed upgrade was proposed again right after the vetoing member was removed");
+    signedBy([]);
     at(NOW + 2 * DAYMS);
     expect(upAuthAll(s, evil)).toBe(false,
       "BROKEN (terms.html:46 'any one member can veto'): C1 + C2 removed the vetoing member and now upload code C3 vetoed; that code can take the escrowed buyer funds");

@@ -152,7 +152,11 @@ describe("red team INSIDER: the owner silently stops paid service without the pa
     const s = setup();
     const r = buyAccount(s, SOLDAPP, 10 * M, 7);
     tx(U1, 2 * M, [op(SOLDAPP, EP_PLAY)]); expect(ok(s)).toBe(true, "control: the paid app plan is sponsored");
-    signedBy([OWNER]); s.connect_app(new station.connect_app_arguments(SOLDAPP, M, true)); signedBy([]);
+    // audit-fixes-1 adjustment: the fix REFUSES the attacker's setup step (it used to be accepted), so that step is now
+    // asserted with toThrow instead of being run bare (a bare refused call aborts the test). Every original SAFE assertion is kept.
+    gS = s; signedBy([OWNER]); MockVM.commitTransaction();
+    expect(() => { gS!.connect_app(new station.connect_app_arguments(SOLDAPP, M, true)); })
+      .toThrow("BROKEN: connect_app accepted a target with a live paid plan"); signedBy([]);
     at(NOW + 70_000); tx(U2, 2 * M, [op(SOLDAPP, EP_PLAY)]);
     expect(ok(s)).toBe(true,
       "BROKEN: owner's connect_app(strict, no entries) on the paid target makes Route A refuse every call (Station.ts:482-488); plan " + r.id.toString() + " is dead, no pause credit");

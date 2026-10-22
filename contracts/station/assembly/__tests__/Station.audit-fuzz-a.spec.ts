@@ -192,7 +192,7 @@ describe("AUDIT fuzz: escrow money always adds up", () => {
         const mana = u64(50 + pick(100)) * M; const q = s.quote_big_upload(new station.quote_big_upload_arguments(USDT, mana));
         if (!paused && q.available && openFor(s, b) < 5 && (lastTicketBuy[b] == 0 || NOW >= lastTicketBuy[b] + DAYMS)) {
           const payee = user(300 + nextPayee); nextPayee++;
-          signedBy([B]); s.buy_big_upload(new station.buy_big_upload_arguments(B, payee, mana, USDT, q.price, true)); signedBy([]);
+          signedBy([B, payee]); s.buy_big_upload(new station.buy_big_upload_arguments(B, payee, mana, USDT, q.price, true)); signedBy([]);
           tPayees.push(payee); tBuyer.push(b); lastTicketBuy[b] = NOW; nPurch++; what = "buy_big";
         }
       } else if (k == 7 && tPayees.length > 0) {

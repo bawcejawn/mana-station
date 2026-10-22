@@ -138,7 +138,7 @@ describe("red team INSIDER: an owner boost spends the Mana locked for a paid big
   it("a paid ticket stays usable after the owner boosts and plays its own free app", () => {
     const s = setup();
     // 1. A customer buys a 100-Mana ticket for payee U2. Mana 1,000; big floor 205 (admin_min 5 + budget 200).
-    signedBy([BUYER]);
+    signedBy([BUYER, U2]);
     const r = s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U2, 100 * M, USDT, 1000 * USD, true));
     signedBy([]);
     expect(r.paid).toBeGreaterThan(0, "setup: ticket bought and paid into escrow");
@@ -148,7 +148,14 @@ describe("red team INSIDER: an owner boost spends the Mana locked for a paid big
     const c = cfg(); c.hard_max = 100 * M; c.new_mana = 1000 * M; c.day_mana = 1000 * M;
     s.set_config(new station.set_config_arguments(c));
     s.set_entry(new station.set_entry_arguments(KNODE, EP_PLAY, new station.entry_object(1, 100 * M, 256), false));
-    s.set_app(new station.set_app_arguments(1, new station.app_object(80 * M, true, 900 * M, NOW + DAYMS)));
+    // audit-fixes-1 adjustment: the fix REFUSES the attacker's setup step (it used to be accepted), so that step is now
+    // asserted with toThrow instead of being run bare (a bare refused call aborts the test). Every original SAFE assertion is kept.
+    // The 900-Mana boost (4.5x the 200-Mana budget) is refused; the largest boost allowed (buffer_bp = 20% of the
+    // budget, 40 Mana) is set instead and the owner's wallets then play as much as the station lets them.
+    gS = s; MockVM.commitTransaction();
+    expect(() => { gS!.set_app(new station.set_app_arguments(1, new station.app_object(80 * M, true, 900 * M, NOW + DAYMS))); })
+      .toThrow("BROKEN: a 900-Mana boost (4.5x the daily budget) was accepted");
+    s.set_app(new station.set_app_arguments(1, new station.app_object(80 * M, true, 40 * M, NOW + DAYMS)));
     signedBy([]);
     // 3. Fresh wallets of the owner play the boosted app; each accepted tx really uses its Mana (simulated).
     let mana: u64 = 1000 * M; let n = 0;
@@ -156,7 +163,7 @@ describe("red team INSIDER: an owner boost spends the Mana locked for a paid big
       at(NOW + 3000); tx(user(500 + i), 100 * M, [op(KNODE, EP_PLAY)]);
       if (ok(s)) { n++; mana -= 100 * M; testSetMana(mana); }
     }
-    expect(n).toBe(7, "setup: the boosted free app was paid 700 Mana in one day (3.5x the 200-Mana daily budget)");
+    expect(n).toBeGreaterThanOrEqual(1, "setup: the boosted free app was paid");
     // 4. The promise: the ticket's Mana was reserved for the buyer and not spent by other services.
     expect(wouldUpload(s, 100 * M)).toBe(true,
       "BROKEN (BIG_TERMS, Station.ts:60): the owner's boosted free app spent the Mana locked for the paid ticket; its upload is now refused (Station.ts:504-506 never checks bigFloor + ticket_open)");
