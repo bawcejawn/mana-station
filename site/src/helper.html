@@ -66,17 +66,22 @@
     const { $ } = MS;
     // ---- the stand-in wallet: answers signing requests the way Kondor does (it builds the transaction from the
     // request's header and operations, so a payer set by the helper is respected), signs with the chosen test wallet.
+    // AB-015: only this page's own requests (same window, same origin) are signed, only on the playground's chain, and
+    // the answer goes back to this origin only.
+    const own = location.origin === "null" ? "*" : location.origin;     // file:// pages have an opaque origin
     window.addEventListener("message", async (ev) => {
+      if (ev.source !== window || ev.origin !== location.origin) return;
       const d = ev.data; if (!d || d.to !== "ms-standin" || d.command !== "signer:sendTransaction") return;
       try {
         const h = d.args.transaction.header, me = d.args.signerAddress;
+        if (!MS.PG.chainId || h.chain_id !== MS.PG.chainId) throw new Error("the stand-in wallet signs only on the playground's network");
         const tx = new Transaction({ signer: MSWallets.signer(me, MS.provider), provider: MS.provider,
-          options: { chainId: h.chain_id, rcLimit: h.rc_limit, payer: h.payer || me, ...(h.payee ? { payee: h.payee } : {}) } });
+          options: { chainId: MS.PG.chainId, rcLimit: h.rc_limit, payer: h.payer || me, ...(h.payee ? { payee: h.payee } : {}) } });
         tx.transaction.operations = d.args.transaction.operations;
         await tx.prepare();
         const receipt = await tx.send(); await tx.wait("byBlock", 180000);
-        window.postMessage({ id: d.id, result: { receipt, header: tx.transaction.header } }, "*");
-      } catch (e) { window.postMessage({ id: d.id, error: String(e?.message || e) }, "*"); }
+        window.postMessage({ id: d.id, result: { receipt, header: tx.transaction.header } }, own);
+      } catch (e) { window.postMessage({ id: d.id, error: String(e?.message || e) }, own); }
     });
     // ---- the "app": asks the wallet to sign, exactly like kondor-js does (window.postMessage to the wallet).
     function askWallet(me, operations, rcLimit) {
@@ -85,7 +90,7 @@
         const done = (e) => { const x = e.data; if (!x || x.id !== id || x.command) return; window.removeEventListener("message", done); x.error ? reject(new Error(x.error)) : resolve(x.result); };
         window.addEventListener("message", done);
         window.postMessage({ id, command: "signer:sendTransaction", to: "ms-standin",
-          args: { signerAddress: me, transaction: { header: { chain_id: MS.PG.chainId, rc_limit: rcLimit, payer: me }, operations } } }, "*");
+          args: { signerAddress: me, transaction: { header: { chain_id: MS.PG.chainId, rc_limit: rcLimit, payer: me }, operations } } }, own);
       });
     }
 
