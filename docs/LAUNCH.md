@@ -8,7 +8,7 @@ Status on 2026-10-20 (branch `fix/squat-freeze-stall`, PR #1):
 - **Three ways in (Oct 20):** a **Mana pass** for a wallet, an **app plan** for a contract, and **free Mana** the owner gives their own apps. A wallet with no KOIN and no Mana can buy, renew and cancel (free checkout).
 - **Not done yet:** mainnet deployment, a legal review of the terms, and a domain.
 - **Audit Bot audit (2026-10-22, commit 4343f83):** fixes on branch `audit-fixes-1` (AB-001 … AB-022). Unit tests: 78
-  original + 51 audit proof tests + 28 regression tests (157), all pass. The rules below are updated to match.
+  original + 51 audit proof tests + 30 regression tests (159), all pass. The rules below are updated to match.
 
 ## 1. Access: who can do what
 
@@ -35,7 +35,7 @@ accepted as a buyer or payer (AB-020).
 | `buy_big_upload`: a ticket (24 hours by default, 1 hour to 7 days) | The buyer **and the payee** (AB-005: nobody can put a ticket on another wallet or app and lock it out). The buyer passes the lifetime the quote showed (`min_lifetime_ms`); a shorter one is refused (AB-001). The ticket only ever pays for the payee's *own* contract, and the payee still signs those transactions. | unit "big-upload ticket only sponsors…", audit "rt-imp-ticketpayee", "rt-ins-ticket-lifetime"; testnet ticket section |
 | `cancel_allowance` / `cancel_big_upload` | The buyer. A buyer cancel charges the days used at the 1-day price for that size (AB-010). A suspended buyer can't self-cancel (the unused share was already refunded at suspension; sanctions: frozen). | unit escrow and refund tests; audit "rt-thief-tier-arbitrage"; testnet "suspended buyer cannot self-cancel" |
 | `close_ticket` after expiry, `release` after a term ends | Anyone. The money only ever goes to the treasury or back to the buyer. | unit "release before the end refused even for the owner" |
-| Limit per wallet | At most 5 open allowances and tickets together, counting allowances **for** the wallet too (AB-002). Station-wide, Mana sold decides whether a new allowance fits; the count has only a fixed safety cap (256 open allowances, 512 open purchases). Mana passes cost at least `pass_min_purchase` ($0.25 proposed). | unit "one wallet's open allowances…"; audit "squat", "fixes-1" |
+| Limit per wallet | At most 5 open allowances and tickets together, counting allowances **for** the wallet too (AB-002). Station-wide, Mana sold decides whether a new allowance fits, up to `open_cap` open allowances (owner setting, 1 to 256, proposed 50; renewals are never refused by it), with fixed safety caps of 256 open allowances and 512 open purchases. Mana passes cost at least `pass_min_purchase` ($0.25 proposed). | unit "one wallet's open allowances…"; audit "squat", "fixes-1" |
 
 ### Owner (day-to-day operator)
 
@@ -157,8 +157,22 @@ Once the station is serving Knode, switch off Knode's own sponsor: `set_sponsor_
 - [ ] **Check the exact file you upload** (AB-007): `npm run check:mainnet -- <file to upload>` rebuilds the release and
   refuses anything that isn't byte-identical (a `build:sim` test build now goes to `build/sim/`). Record its sha256 here
   and in the council's upgrade notes. audit-fixes-1 release build (2026-10-22):
-  `b857b18f07fea42de2e54858bf4e8aeea6b4aa641aa8281f0d252ba5f1dff5b0` (92,733 bytes). Rebuild and update this line after any further contract change.
+  `b624f2003c1431c1439c0c6a24174bfe8d3b6d7a8fe2abcea8e4f36847b9c8dc` (92,937 bytes). Rebuild and update this line after any further contract change.
 - [ ] **Deploy and init in one transaction:** upload with all three permissions plus `init`, exactly as `testnet/playground.mjs deploy` does. Fund the station's KOIN first.
+- [ ] **`open_cap` 50 at launch.** Raise open_cap only after measuring buy_allowance and the heaviest authorize route on a node at the new value. (MockVM system calls: buy_allowance 391 at 50 open, 741 at 100, 1,826 at 255; the heaviest authorize route, an unreserved free app, 77 / 127 / 283.)
+- [ ] **Known limit: renewals can fill the open purchases.** Each allowance may hold up to 8 open terms, and the station
+  holds at most 512 open purchases (terms and tickets together); when they are full, every new purchase is refused.
+  At `open_cap` 50 allowance terms can reach at most 400, so renewals alone can't fill 512. From `open_cap` 64 up,
+  64 one-Mana passes with 8 one-day terms each can: 512 terms at the $0.25 pass minimum = $128, covering 8 days,
+  about **$16 a day**. App plans pay only `min_purchase` (0 in the proposal), so the same with plans costs far less
+  (see the open question on app-plan targets). Watch `get_status` / `list_connected` and keep `open_cap` below 64
+  until this is decided.
+- [ ] **Open question: app plans on plain wallets.** An app plan's target only has to sign, so a wallet with no
+  contract can be a target. Such a plan sponsors nothing but still takes one of the `open_cap` slots, and app plans pay
+  `min_purchase` (0 proposed), not the $0.25 pass minimum: 50 one-Mana, 1-day plans cost about $0.0015 and would fill
+  `open_cap` 50 for a day. Before launch, choose one: set `min_purchase` (plans and tickets) to $0.25 too, apply the
+  pass minimum to app plans, or require the target to be a contract (`get_contract_metadata` on chain; MockVM can't
+  test it).
 - [ ] **Prices** (`set_price`) for vUSDT and vUSDC: introductory $0.03 / $0.20 / $0.75 per 1,000 Mana a day; big upload $0.05 per 1,000, minimum 5,000 Mana; Mana pass minimum charge `pass_min_purchase` $0.25 (AB-002).
 - [ ] **Connect Knode and Stories** in strict mode with per-function caps. Then step 3 of section 3.
 - [ ] **Watch** for `reserve_low` events, and for escrow totals equal to the station's token balance (`get_escrow_totals`).
