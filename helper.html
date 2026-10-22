@@ -1,0 +1,148 @@
+<!doctype html>
+<!-- Built from site/src/helper.html by site/tools/build-pages.mjs. Edit the source, not this file. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2f5bff">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Figtree:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+  <title>Pass helper: your Mana pass, everywhere</title>
+  <meta name="description" content="The free Mana Station helper lets your Mana pass pay your Koinos transactions on any app. It holds no keys, signs nothing and only sets who pays.">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <div class="testnet-bar"><div class="wrap"><span>Playground on the Koinos testnet. Nothing here costs real money.</span></div></div>
+  <header class="site-head">
+    <div class="wrap">
+      <a class="brand" href="index.html" aria-label="Mana Station home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--ink)"/><path d="M16 6c4 5 7 8.6 7 12.4A7 7 0 0 1 9 18.4C9 14.6 12 11 16 6Z" fill="var(--mana)"/><rect x="11" y="20" width="10" height="3" rx="1.5" fill="var(--spark)"/></svg>
+        Mana Station
+      </a>
+      <nav class="nav" aria-label="Main">
+        <a href="get.html" aria-current="page">Get Mana</a>
+        <a href="play.html">Try it</a>
+        <a href="help.html">Help</a>
+        <a href="owner.html">Owner</a>
+      </nav>
+      <div class="wallet-slot" id="walletChip"></div>
+    </div>
+  </header>
+
+  <main id="main" class="wrap page">
+    <div class="page-head">
+      <h1>Your pass, everywhere</h1>
+      <p class="lede">The free Mana Station helper lets your pass pay your transactions on any Koinos app. You keep using your wallet exactly as before.</p>
+    </div>
+
+    <section class="panel" aria-labelledby="how-t">
+      <h2 id="how-t">What it does</h2>
+      <ol class="flow">
+        <li><h3>An app asks you to sign</h3><p class="small">Any Koinos site that asks your wallet to approve a transaction.</p></li>
+        <li><h3>The helper asks the station</h3><p class="small">"Would you pay for this?" If your pass covers it, the helper sets the station as the payer.</p></li>
+        <li><h3>You approve as usual</h3><p class="small">Your wallet shows the transaction and you approve it. If the pass doesn't cover it, nothing changes and your own Mana pays.</p></li>
+      </ol>
+      <ul class="ticks">
+        <li>It holds no keys and can't sign anything.</li>
+        <li>It never changes what a transaction does, only who pays the Mana.</li>
+        <li>It leaves alone anything another sponsor already pays for, such as Kondor's free mana.</li>
+        <li>It's free, open source and small enough to read in a few minutes.</li>
+      </ul>
+      <p class="hint">What it sends, and to whom: see the <a href="privacy.html">privacy notice</a>. Using it means you accept the <a href="terms.html">terms</a>. Always check each transaction in your wallet before approving it.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="phone-t" id="phoneBox">
+      <h2 id="phone-t">On a phone</h2>
+      <p>Most phone browsers can't add extensions (Chrome and Safari on phones, for example), so the helper is for computers: Chrome, Brave, Edge and other Chrome-based browsers. On your phone, your pass still works in every app that supports Mana Station: those apps ask the station first and it covers you automatically, with nothing to install.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="inst-t">
+      <h2 id="inst-t">Install it on a computer (testnet version)</h2>
+      <p class="hint">Works in Chrome, Brave, Microsoft Edge, Opera and other Chrome-based browsers. Once published it's one click from the Chrome Web Store (also used by Brave and Opera) or Microsoft Edge Add-ons.</p>
+      <p class="hint">The helper isn't in the Chrome Web Store yet. Until it is, load it yourself in Chrome. It's the "Mana Station helper" folder next to these pages.</p>
+      <ol class="small" style="display:grid;gap:8px;padding-left:20px;margin:0">
+        <li>In Chrome, open <span class="mono">chrome://extensions</span> and switch on <b>Developer mode</b> (top right).</li>
+        <li>Click <b>Load unpacked</b> and choose the <b>Mana Station helper (testnet)</b> folder.</li>
+        <li>Reload this page. The check below should say the helper is on.</li>
+      </ol>
+      <p class="hint">Chrome warns that it can "read and change data on all websites": it has to run on any Koinos site to set the payer there. It does nothing else.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="try-t">
+      <h2 id="try-t">Check that it works</h2>
+      <div class="stats" id="checks"></div>
+      <p class="hint">Kondor's current version only knows Koinos mainnet and an older testnet, so on this playground a stand-in wallet built into this page plays Kondor's part: it receives the signing request exactly as Kondor would, after the helper has seen it, and signs with your test wallet (top right). On mainnet it's Kondor itself.</p>
+      <div class="checkout">
+        <div class="what"><b>Send a transaction like any app would</b><span class="hint">A call to an app nobody sponsors. With the helper and a pass, the station pays. Without them, your wallet pays.</span></div>
+        <button class="btn btn-main" id="tryBtn" type="button">Send it</button>
+      </div>
+      <p class="msg" id="tryMsg" hidden></p>
+    </section>
+  </main>
+
+  <footer class="site-foot"><div class="wrap"><span>Mana Station, built on Koinos · <a href="terms.html">Terms</a> · <a href="privacy.html">Privacy</a></span><p>Prepaid transaction-fee credit, not an investment, not money and not transferable. Payments are held by the station contract until a term ends; cancel any time for the unused part. The station's key alone can't move funds: that takes two of three council members, a public wait and no veto. Smart contracts and blockchains carry risk; always check transactions in your wallet. Nothing here is financial advice. Draft terms, under legal review.</p></div></footer>
+  <script src="https://cdn.jsdelivr.net/npm/koilib@9.4.1/dist/koinos.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/kondor-js@1.3.0/dist/kondor.min.js"></script>
+  <script src="abis.js"></script>
+  <script src="playground.js"></script>
+  <script src="wallets.js"></script>
+  <script src="ms.js"></script>
+  <script>
+  (() => {
+    const { $ } = MS;
+    // ---- the stand-in wallet: answers signing requests the way Kondor does (it builds the transaction from the
+    // request's header and operations, so a payer set by the helper is respected), signs with the chosen test wallet.
+    window.addEventListener("message", async (ev) => {
+      const d = ev.data; if (!d || d.to !== "ms-standin" || d.command !== "signer:sendTransaction") return;
+      try {
+        const h = d.args.transaction.header, me = d.args.signerAddress;
+        const tx = new Transaction({ signer: MSWallets.signer(me, MS.provider), provider: MS.provider,
+          options: { chainId: h.chain_id, rcLimit: h.rc_limit, payer: h.payer || me, ...(h.payee ? { payee: h.payee } : {}) } });
+        tx.transaction.operations = d.args.transaction.operations;
+        await tx.prepare();
+        const receipt = await tx.send(); await tx.wait("byBlock", 180000);
+        window.postMessage({ id: d.id, result: { receipt, header: tx.transaction.header } }, "*");
+      } catch (e) { window.postMessage({ id: d.id, error: String(e?.message || e) }, "*"); }
+    });
+    // ---- the "app": asks the wallet to sign, exactly like kondor-js does (window.postMessage to the wallet).
+    function askWallet(me, operations, rcLimit) {
+      return new Promise((resolve, reject) => {
+        const id = "app-" + Math.random().toString(36).slice(2);
+        const done = (e) => { const x = e.data; if (!x || x.id !== id || x.command) return; window.removeEventListener("message", done); x.error ? reject(new Error(x.error)) : resolve(x.result); };
+        window.addEventListener("message", done);
+        window.postMessage({ id, command: "signer:sendTransaction", to: "ms-standin",
+          args: { signerAddress: me, transaction: { header: { chain_id: MS.PG.chainId, rc_limit: rcLimit, payer: me }, operations } } }, "*");
+      });
+    }
+
+    async function checks() {
+      const me = MS.active()?.address; const H = window.__manaStationHelper;
+      const rows = [["Helper", H ? "On" : "Not installed, or switched off for this page"]];
+      if (me) {
+        const L = await MS.read("list_connected").catch(() => ({}));
+        const p = (L.paid || []).find((x) => x.target === me && x.kind === 2 && Number(x.expiry) > Date.now());
+        rows.push(["Your pass", p ? `${MS.mana(BigInt(p.mana_per_day) - BigInt(p.used_24h || 0))} of ${MS.mana(p.mana_per_day)} Mana left today` : "No active pass"]);
+        rows.push(["Your own Mana", MS.mana(await MS.provider.getAccountRc(me))]);
+      } else rows.push(["Wallet", "Choose one, top right"]);
+      $("checks").replaceChildren(...rows.map(([k, v]) => { const d = document.createElement("div"); d.className = "stat"; d.innerHTML = "<b></b><span></span>"; d.firstChild.textContent = v; d.lastChild.textContent = k; return d; }));
+    }
+    $("tryBtn").addEventListener("click", () => MS.run($("tryBtn"), "tryMsg", async () => {
+      const me = MS.active()?.address; if (!me) throw new Error("Choose a wallet first (top right).");
+      if (!MS.PG.openApp) throw new Error("This playground has no open app set up.");
+      const { operation } = await MS.appC(MS.PG.openApp).functions.play({ user: me }, { onlyOperation: true });
+      const r = await askWallet(me, [operation], "19000000");
+      await checks();
+      const by = r.receipt?.payer || r.header?.payer;
+      return by === MS.ST ? `Paid by Mana Station: your pass covered it (${MS.mana(r.receipt.rc_used, 3)} Mana). Your wallet paid nothing.`
+        : `Paid by your own wallet (${MS.mana(r.receipt?.rc_used, 3)} Mana). ${window.__manaStationHelper ? "Your pass didn't cover this one." : "The helper isn't installed."}`;
+    }));
+    const phone = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    $("phoneBox").hidden = !phone;
+    MS.onWallet(checks); checks();
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!doctype html>
+<!-- Built from site/src/privacy.html by site/tools/build-pages.mjs. Edit the source, not this file. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2f5bff">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Figtree:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+  <title>Privacy notice: Mana Station</title>
+  <meta name="description" content="What the Mana Station website, contract and browser helper collect and share: no accounts, no tracking, public blockchain data, and one read-only question to a Koinos node.">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <div class="testnet-bar"><div class="wrap"><span>Playground on the Koinos testnet. Nothing here costs real money.</span></div></div>
+  <header class="site-head">
+    <div class="wrap">
+      <a class="brand" href="index.html" aria-label="Mana Station home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--ink)"/><path d="M16 6c4 5 7 8.6 7 12.4A7 7 0 0 1 9 18.4C9 14.6 12 11 16 6Z" fill="var(--mana)"/><rect x="11" y="20" width="10" height="3" rx="1.5" fill="var(--spark)"/></svg>
+        Mana Station
+      </a>
+      <nav class="nav" aria-label="Main">
+        <a href="get.html">Get Mana</a>
+        <a href="play.html">Try it</a>
+        <a href="help.html" aria-current="page">Help</a>
+        <a href="owner.html">Owner</a>
+      </nav>
+      <div class="wallet-slot" id="walletChip"></div>
+    </div>
+  </header>
+
+  <main id="main" class="wrap page legal">
+    <div class="page-head">
+      <h1>Privacy notice</h1>
+      <p class="msg">Draft for legal review, version 2026-10-21.</p>
+      <p class="lede">Short version: no accounts, no tracking, no ads. What you do on a blockchain is public by design.</p>
+    </div>
+
+    <section class="panel" aria-labelledby="p1"><h2 id="p1">The website</h2>
+      <ul class="ticks">
+        <li>It has no accounts, no analytics, no ads and no tracking cookies.</li>
+        <li>To show the station and send your transactions, your browser talks directly to a public Koinos node (on mainnet, api.koinos.io). That node sees your IP address and the requests, like any website you visit.</li>
+        <li>The page loads its fonts from Google Fonts and its blockchain library from the jsDelivr CDN, which see your IP address when you load the page.</li>
+        <li>Settings such as the wallet you picked are kept in your browser's own storage and never sent to us. On the testnet playground, test wallets are kept the same way; they hold nothing of value.</li>
+        <li>The site is hosted on GitHub Pages, which keeps standard server logs.</li>
+      </ul>
+    </section>
+
+    <section class="panel" aria-labelledby="p2"><h2 id="p2">The station (blockchain)</h2>
+      <p>Purchases, refunds and the transactions the station pays for are recorded on the Koinos blockchain, which is public and permanent: anyone can see the wallet addresses, amounts and times involved. We can't change or delete that data. The station keeps per-wallet usage counts on chain to apply its limits.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="p3"><h2 id="p3">The browser helper</h2>
+      <ul class="ticks">
+        <li>When a site asks your wallet to sign a transaction, before you approve it, the helper sends one read-only question to a public Koinos node (on mainnet, api.koinos.io): your wallet address and that transaction's operations (which contracts and functions it calls, with their arguments). The node, like any website, also sees your IP address. It answers whether the station would pay. Nothing is sent to us.</li>
+        <li>It runs only on web pages (https), not on other kinds of pages, and it doesn't tell the sites you visit that it is installed (except this website, so its check page can show it's on).</li>
+        <li>It stores only its on/off setting and a count of transactions offered to the station today, in your browser.</li>
+        <li>It never reads your keys, passwords, page contents or browsing history, and never sends anything anywhere else.</li>
+        <li>It needs permission to run on all websites so it can act on any Koinos app you use. Its code is open source.</li>
+      </ul>
+    </section>
+
+    <section class="panel" aria-labelledby="p4"><h2 id="p4">Contact</h2>
+      <p>Questions: [contact email]. Operator: [Operator legal name].</p>
+    </section>
+  </main>
+
+  <footer class="site-foot"><div class="wrap"><span>Mana Station, built on Koinos · <a href="terms.html">Terms</a> · <a href="privacy.html">Privacy</a></span><p>Prepaid transaction-fee credit, not an investment, not money and not transferable. Payments are held by the station contract until a term ends; cancel any time for the unused part. The station's key alone can't move funds: that takes two of three council members, a public wait and no veto. Smart contracts and blockchains carry risk; always check transactions in your wallet. Nothing here is financial advice. Draft terms, under legal review.</p></div></footer>
+  <script src="https://cdn.jsdelivr.net/npm/koilib@9.4.1/dist/koinos.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/kondor-js@1.3.0/dist/kondor.min.js"></script>
+  <script src="abis.js"></script>
+  <script src="playground.js"></script>
+  <script src="wallets.js"></script>
+  <script src="ms.js"></script>
+</body>
+</html>

@@ -1,0 +1,114 @@
+<!doctype html>
+<!-- Built from site/src/terms.html by site/tools/build-pages.mjs. Edit the source, not this file. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2f5bff">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Figtree:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+  <title>Terms of service: Mana Station</title>
+  <meta name="description" content="Mana Station terms of service: Mana passes, app plans, upload tickets, refunds, council custody of payments, risks and limits of liability.">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <div class="testnet-bar"><div class="wrap"><span>Playground on the Koinos testnet. Nothing here costs real money.</span></div></div>
+  <header class="site-head">
+    <div class="wrap">
+      <a class="brand" href="index.html" aria-label="Mana Station home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--ink)"/><path d="M16 6c4 5 7 8.6 7 12.4A7 7 0 0 1 9 18.4C9 14.6 12 11 16 6Z" fill="var(--mana)"/><rect x="11" y="20" width="10" height="3" rx="1.5" fill="var(--spark)"/></svg>
+        Mana Station
+      </a>
+      <nav class="nav" aria-label="Main">
+        <a href="get.html">Get Mana</a>
+        <a href="play.html">Try it</a>
+        <a href="help.html" aria-current="page">Help</a>
+        <a href="owner.html">Owner</a>
+      </nav>
+      <div class="wallet-slot" id="walletChip"></div>
+    </div>
+  </header>
+
+  <main id="main" class="wrap page legal">
+    <div class="page-head">
+      <h1>Terms of service</h1>
+      <p class="msg">Draft for legal review, version 2026-10-21. Not yet in force for real money. On the Koinos testnet playground nothing has value and these terms describe how the service will work.</p>
+    </div>
+
+    <section class="panel" aria-labelledby="t1"><h2 id="t1">1. Who we are and what this is</h2>
+      <p>Mana Station ("the station") is a smart contract on the Koinos blockchain, with this website and a browser helper, operated by [Operator legal name] ("we", "the operator"). The station holds KOIN and uses the Mana that KOIN produces to pay the transaction cost of transactions that its rules accept.</p>
+      <p>By buying anything from the station, or using the website or the helper, you agree to these terms. If you don't agree, don't use the service.</p>
+      <p>You must be at least 18 and legally able to agree to these terms where you live. You may not use the service if you are subject to sanctions or live in a place where it is unlawful.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="t2"><h2 id="t2">2. What you can buy</h2>
+      <ul class="ticks">
+        <li><b>Mana pass:</b> a daily amount of Mana for one wallet, for 1, 7 or 30 days. The station pays that wallet's own transactions to any contract except the station and token contracts, never token transfers, approvals or burns, and never contract uploads, up to the daily amount.</li>
+        <li><b>App plan:</b> a daily amount of Mana for one app contract, shared by all its users. The station pays a transaction only when every top-level operation calls that app. Per-user limits apply. The app's own key must approve the purchase.</li>
+        <li><b>Upload ticket:</b> Mana reserved for one wallet for 24 hours, at the full price whether used or not, to upload or call that wallet's own contract.</li>
+      </ul>
+      <p>A transaction counts against a pass or plan by its Mana limit (the most it may use, set when it is signed), not by what it finally uses, because the station decides before the transaction runs. Wallets that estimate the limit, such as Kondor with "optimize mana", keep it close to real use.</p>
+            <p>Each wallet may hold a limited number of open purchases at a time. Purchases are paid in the stablecoins the station accepts (vUSDT or vUSDC on mainnet). You see the exact price before you buy, and the price of a term you have paid never changes.</p>
+      <p>Purchases are prepaid service credit for transaction fees. They are not money, not a deposit, not an investment, not a token and not transferable, and they can't be redeemed for crypto or cash except through the refunds below.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="t3"><h2 id="t3">3. Cancelling and refunds</h2>
+      <ul class="ticks">
+        <li><b>Passes and app plans:</b> cancel any time. You get back every whole day you haven't started; the current day counts as used, so the minimum charge is one day. Service continues to the end of that day.</li>
+        <li><b>Upload tickets:</b> end early and you get back the value of the Mana you haven't used, reduced in a straight line by the time already passed, always keeping a fee (currently 5%). A ticket that runs its full 24 hours refunds nothing.</li>
+        <li>If the operator sets a minimum charge, it is shown in the quote and kept if you cancel.</li>
+        <li>Refunds are paid only in the stablecoin you paid with, to the wallet that bought, by the station contract.</li>
+        <li>If the operator pauses the station, the paused time is added back to your term.</li>
+        <li>There is no auto-renew. Service stops when your term ends unless you renew, at the price current then.</li>
+      </ul>
+    </section>
+
+    <section class="panel" aria-labelledby="t4"><h2 id="t4">4. Who holds your payment</h2>
+      <p>Your payment is held by the station contract until your term ends. Then it is released to the operator's treasury, or returned to you if you cancel. The station's own key can't move it. Any other movement of money, an upgrade of the station's code, or a change of its owner or council needs approval by at least two of the station's council members, then a public waiting period (48 hours on mainnet) during which any one member can veto. This is council custody, not fully trustless escrow.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="t5"><h2 id="t5">5. Limits, refusals and suspension</h2>
+      <p>The station applies limits so that one user can't use up what others paid for: a few transactions a minute, daily caps, and a daily budget for the whole station. A transaction the station refuses is not charged to anyone; your wallet may then pay it from your own Mana if you choose. In rare cases a transaction the station first agreed to pay can still be refused when it lands, for example if the station's Mana falls below its safety floor.</p>
+      <p>We may suspend a buyer for abuse, for breaking these terms, for sanctions or for legal reasons. Suspended time is not added back. We may refund the unused part of a suspended purchase, never to a sanctioned party. We may pause the whole station in an emergency.</p>
+      <p>You may not use the service to break any law, to attack or overload the station or the Koinos network, or to get around its limits (for example with many wallets).</p>
+    </section>
+
+    <section class="panel" aria-labelledby="t6"><h2 id="t6">6. Risks you accept</h2>
+      <ul class="ticks">
+        <li><b>Smart contracts and blockchains:</b> the station is software on a public blockchain. Despite testing and review it may contain errors. Blockchain transactions are final and can't be reversed by us.</li>
+        <li><b>Stablecoins:</b> vUSDT and vUSDC are issued and bridged by third parties. Their value or availability can change; refunds are paid in the same stablecoin, whatever it is worth then.</li>
+        <li><b>Network and availability:</b> the Koinos network, its nodes and this website may be slow, congested or unavailable. We don't guarantee that any particular transaction will be paid or included.</li>
+        <li><b>Wallets and apps:</b> wallets such as Kondor and the apps you use are run by others, not by us. Always check a transaction in your wallet before you approve it.</li>
+        <li><b>Your keys:</b> you alone control your wallet and its keys. We can't recover lost keys or undo transactions.</li>
+      </ul>
+    </section>
+
+    <section class="panel" aria-labelledby="t7"><h2 id="t7">7. The browser helper</h2>
+      <p>The free Mana Station helper only sets who pays the Mana of a transaction your wallet is asked to sign, when the station says it will pay. It holds no keys, signs nothing and never changes what a transaction does. You still approve every transaction in your wallet. You can switch it off or remove it at any time. See the <a href="privacy.html">privacy notice</a> for what it sends.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="t8"><h2 id="t8">8. No advice, no warranty, limits of liability</h2>
+      <p>Nothing on this website or in the station is financial, investment, legal or tax advice.</p>
+      <p>The service is provided "as is" and "as available", without warranties of any kind, to the fullest extent the law allows. To the fullest extent the law allows, the operator is not liable for indirect, incidental, special or consequential losses, or for losses caused by the blockchain, third-party wallets, apps, stablecoins or networks. Our total liability to you for any claim is limited to the amount you paid the station for the purchase concerned. Some places don't allow these limits; where they don't, they apply as far as allowed.</p>
+      <p>You agree to cover the operator's reasonable losses caused by your breach of these terms or misuse of the service.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="t9"><h2 id="t9">9. Changes, law and contact</h2>
+      <p>We may update these terms. Changes apply to purchases made after they are published here, never to a term you have already paid for. The version date is at the top of this page.</p>
+      <p>These terms are governed by the laws of [State / country], and disputes go to the courts of [venue], unless the law where you live requires otherwise.</p>
+      <p>Contact: [contact email].</p>
+    </section>
+  </main>
+
+  <footer class="site-foot"><div class="wrap"><span>Mana Station, built on Koinos · <a href="terms.html">Terms</a> · <a href="privacy.html">Privacy</a></span><p>Prepaid transaction-fee credit, not an investment, not money and not transferable. Payments are held by the station contract until a term ends; cancel any time for the unused part. The station's key alone can't move funds: that takes two of three council members, a public wait and no veto. Smart contracts and blockchains carry risk; always check transactions in your wallet. Nothing here is financial advice. Draft terms, under legal review.</p></div></footer>
+  <script src="https://cdn.jsdelivr.net/npm/koilib@9.4.1/dist/koinos.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/kondor-js@1.3.0/dist/kondor.min.js"></script>
+  <script src="abis.js"></script>
+  <script src="playground.js"></script>
+  <script src="wallets.js"></script>
+  <script src="ms.js"></script>
+</body>
+</html>
