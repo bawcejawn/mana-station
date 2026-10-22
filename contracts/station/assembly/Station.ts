@@ -36,8 +36,10 @@ const MAX_OPEN_PROPOSALS: i32 = 16;
 const MAX_PER_PROPOSER: i32 = 3;                   // review M2: one member can't fill the list
 const MAX_GUARD_DELAY_MS: u64 = 30 * 86_400_000;   // review M3: bounded delay (no overflow, no permanent freeze)
 const MAX_EXEMPT: i32 = 64;                         // connected free apps (bounded list)
-// AB-002: open allowances are limited by Mana sold (soldCap); this fixed cap only bounds the loops over them.
+// AB-002: open allowances are limited by Mana sold (soldCap); this fixed cap only bounds the loops over them. The owner's
+// config.open_cap (1 to this) sets the working limit, so a launch can start low until the cost is measured on a node.
 const MAX_OPEN_ALLOWANCES: i32 = 256;
+const DEFAULT_OPEN_CAP: u32 = 50;                  // open_cap 0 (stored before the field existed) reads as 50
 // AB-001: the owner can set the ticket lifetime only within these bounds (0 = the 24 h default).
 const MIN_TICKET_MS: u64 = 3_600_000, MAX_TICKET_MS: u64 = 7 * 86_400_000;
 // AB-011: a vetoed action can't be proposed again for this long (also after a council change).
@@ -317,6 +319,7 @@ export class Station {
     const d = per1000(manaPerDay, p.price_1d); const m = this.minCharge(p, kind); return d < m ? m : d;
   }
   maxPerBuyer(c: station.config_object): u32 { return c.max_per_buyer > 0 ? c.max_per_buyer : DEFAULT_MAX_PER_BUYER; }
+  openCap(c: station.config_object): u32 { return c.open_cap > 0 ? c.open_cap : DEFAULT_OPEN_CAP; }
   /** Audit #3 (Carl, 8:43 PM): what one wallet has open = its unexpired allowances + its open big-upload tickets.
    *  AB-002: allowances FOR the wallet (it is the target) count too, so one buyer's wallets can't each add a full quota.
    *  Counts two wallets in one pass (the buyer and the target of a purchase). Bounded: <= 256 + 512 reads. */
@@ -745,8 +748,8 @@ export class Station {
     let held: u64 = 0;
     if (ignoreId > 0) { const a = this.allowances.get(u32Key(ignoreId)); if (a != null && a.expiry > now) held = a.mana_per_day; }
     if (cm[0] - held + manaPerDay > this.soldCap(c)) { r.reason = "sold capacity full"; return r; }
-    // AB-002: Mana sold (above) decides whether a new allowance fits; the count only has a fixed safety cap for the loops.
-    if (held == 0 && cm[1] >= u64(MAX_OPEN_ALLOWANCES)) { r.reason = "too many open allowances"; return r; }
+    // AB-002: Mana sold (above) decides whether a new allowance fits, up to the owner's open_cap (renewals: held > 0).
+    if (held == 0 && cm[1] >= u64(this.openCap(c))) { r.reason = "too many open allowances"; return r; }
     if (this.registry.get()!.open_purchases.length >= MAX_OPEN_PURCHASES) { r.reason = "too many open purchases"; return r; }
     r.available = true; return r;
   }
@@ -941,6 +944,7 @@ export class Station {
     System.require(c.hard_max >= MANA, "hard_max below 1 Mana would stop paid service");
     System.require(c.admin_min <= c.koin_amount / 10, "admin_min above 10% of koin_amount would stop paid service");
     System.require(c.max_ops >= 2 && c.per_min >= 1 && c.day_actions >= 1 && c.new_actions >= 1, "per-user limits would stop paid service");
+    System.require(c.open_cap >= 1 && c.open_cap <= u32(MAX_OPEN_ALLOWANCES), "open_cap: 1 to 256 open allowances");
     System.require(c.day_mana >= c.hard_max && c.new_mana >= c.hard_max, "per-user daily Mana below hard_max would stop paid service");
     this.checkCouncil(c.council, c.threshold, c.guard_delay_ms, c.owner);
     this.validateReservations(c, 0, null);
