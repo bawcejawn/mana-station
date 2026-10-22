@@ -30,6 +30,10 @@ export class Station {
     // res.buffer_used_24h = ;
     // res.alert_level = ;
     // res.treasury = ;
+    // res.open_allowances = ;
+    // res.open_cap = ;
+    // res.app_reserved = ;
+    // res.slot_fee_per_day = ;
 
     return res;
   }
@@ -80,6 +84,7 @@ export class Station {
     // const mana_per_day = args.mana_per_day;
     // const days = args.days;
     // const kind = args.kind;
+    // const target = args.target;
 
     // YOUR CODE HERE
 
@@ -92,6 +97,7 @@ export class Station {
     // res.reason = ;
     // res.unit_price = ;
     // res.min_charge = ;
+    // res.slot_fee = ;
 
     return res;
   }

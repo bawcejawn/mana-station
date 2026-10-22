@@ -157,6 +157,16 @@ export namespace station {
         writer.uint32(256);
         writer.uint32(message.open_cap);
       }
+
+      if (message.slot_fee_per_day != 0) {
+        writer.uint32(264);
+        writer.uint64(message.slot_fee_per_day);
+      }
+
+      if (message.app_reserved != 0) {
+        writer.uint32(272);
+        writer.uint32(message.app_reserved);
+      }
     }
 
     static decode(reader: Reader, length: i32): config_object {
@@ -286,6 +296,14 @@ export namespace station {
             message.open_cap = reader.uint32();
             break;
 
+          case 33:
+            message.slot_fee_per_day = reader.uint64();
+            break;
+
+          case 34:
+            message.app_reserved = reader.uint32();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -325,6 +343,8 @@ export namespace station {
     threshold: u32;
     guard_delay_ms: u64;
     open_cap: u32;
+    slot_fee_per_day: u64;
+    app_reserved: u32;
 
     constructor(
       owner: Uint8Array | null = null,
@@ -356,7 +376,9 @@ export namespace station {
       council: Array<Uint8Array> = [],
       threshold: u32 = 0,
       guard_delay_ms: u64 = 0,
-      open_cap: u32 = 0
+      open_cap: u32 = 0,
+      slot_fee_per_day: u64 = 0,
+      app_reserved: u32 = 0
     ) {
       this.owner = owner;
       this.paused = paused;
@@ -388,6 +410,8 @@ export namespace station {
       this.threshold = threshold;
       this.guard_delay_ms = guard_delay_ms;
       this.open_cap = open_cap;
+      this.slot_fee_per_day = slot_fee_per_day;
+      this.app_reserved = app_reserved;
     }
   }
 
@@ -2607,6 +2631,11 @@ export namespace station {
         writer.uint32(136);
         writer.uint64(message.day_price);
       }
+
+      if (message.slot_fee_per_day != 0) {
+        writer.uint32(144);
+        writer.uint64(message.slot_fee_per_day);
+      }
     }
 
     static decode(reader: Reader, length: i32): escrow_object {
@@ -2684,6 +2713,10 @@ export namespace station {
             message.day_price = reader.uint64();
             break;
 
+          case 18:
+            message.slot_fee_per_day = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -2710,6 +2743,7 @@ export namespace station {
     closed: bool;
     min_keep: u64;
     day_price: u64;
+    slot_fee_per_day: u64;
 
     constructor(
       id: u32 = 0,
@@ -2728,7 +2762,8 @@ export namespace station {
       released: u64 = 0,
       closed: bool = false,
       min_keep: u64 = 0,
-      day_price: u64 = 0
+      day_price: u64 = 0,
+      slot_fee_per_day: u64 = 0
     ) {
       this.id = id;
       this.kind = kind;
@@ -2747,6 +2782,7 @@ export namespace station {
       this.closed = closed;
       this.min_keep = min_keep;
       this.day_price = day_price;
+      this.slot_fee_per_day = slot_fee_per_day;
     }
   }
 
@@ -3026,6 +3062,26 @@ export namespace station {
         writer.uint32(98);
         writer.bytes(unique_name_treasury);
       }
+
+      if (message.open_allowances != 0) {
+        writer.uint32(104);
+        writer.uint32(message.open_allowances);
+      }
+
+      if (message.open_cap != 0) {
+        writer.uint32(112);
+        writer.uint32(message.open_cap);
+      }
+
+      if (message.app_reserved != 0) {
+        writer.uint32(120);
+        writer.uint32(message.app_reserved);
+      }
+
+      if (message.slot_fee_per_day != 0) {
+        writer.uint32(128);
+        writer.uint64(message.slot_fee_per_day);
+      }
     }
 
     static decode(reader: Reader, length: i32): get_status_result {
@@ -3083,6 +3139,22 @@ export namespace station {
             message.treasury = reader.bytes();
             break;
 
+          case 13:
+            message.open_allowances = reader.uint32();
+            break;
+
+          case 14:
+            message.open_cap = reader.uint32();
+            break;
+
+          case 15:
+            message.app_reserved = reader.uint32();
+            break;
+
+          case 16:
+            message.slot_fee_per_day = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -3104,6 +3176,10 @@ export namespace station {
     buffer_used_24h: u64;
     alert_level: u64;
     treasury: Uint8Array | null;
+    open_allowances: u32;
+    open_cap: u32;
+    app_reserved: u32;
+    slot_fee_per_day: u64;
 
     constructor(
       config: config_object | null = null,
@@ -3117,7 +3193,11 @@ export namespace station {
       big_debt: u64 = 0,
       buffer_used_24h: u64 = 0,
       alert_level: u64 = 0,
-      treasury: Uint8Array | null = null
+      treasury: Uint8Array | null = null,
+      open_allowances: u32 = 0,
+      open_cap: u32 = 0,
+      app_reserved: u32 = 0,
+      slot_fee_per_day: u64 = 0
     ) {
       this.config = config;
       this.mana = mana;
@@ -3131,6 +3211,10 @@ export namespace station {
       this.buffer_used_24h = buffer_used_24h;
       this.alert_level = alert_level;
       this.treasury = treasury;
+      this.open_allowances = open_allowances;
+      this.open_cap = open_cap;
+      this.app_reserved = app_reserved;
+      this.slot_fee_per_day = slot_fee_per_day;
     }
   }
 
@@ -3455,6 +3539,12 @@ export namespace station {
         writer.uint32(32);
         writer.uint32(message.kind);
       }
+
+      const unique_name_target = message.target;
+      if (unique_name_target !== null) {
+        writer.uint32(42);
+        writer.bytes(unique_name_target);
+      }
     }
 
     static decode(reader: Reader, length: i32): quote_allowance_arguments {
@@ -3480,6 +3570,10 @@ export namespace station {
             message.kind = reader.uint32();
             break;
 
+          case 5:
+            message.target = reader.bytes();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -3493,17 +3587,20 @@ export namespace station {
     mana_per_day: u64;
     days: u64;
     kind: u32;
+    target: Uint8Array | null;
 
     constructor(
       token: Uint8Array | null = null,
       mana_per_day: u64 = 0,
       days: u64 = 0,
-      kind: u32 = 0
+      kind: u32 = 0,
+      target: Uint8Array | null = null
     ) {
       this.token = token;
       this.mana_per_day = mana_per_day;
       this.days = days;
       this.kind = kind;
+      this.target = target;
     }
   }
 
@@ -3550,6 +3647,11 @@ export namespace station {
         writer.uint32(64);
         writer.uint64(message.min_charge);
       }
+
+      if (message.slot_fee != 0) {
+        writer.uint32(72);
+        writer.uint64(message.slot_fee);
+      }
     }
 
     static decode(reader: Reader, length: i32): quote_allowance_result {
@@ -3591,6 +3693,10 @@ export namespace station {
             message.min_charge = reader.uint64();
             break;
 
+          case 9:
+            message.slot_fee = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -3608,6 +3714,7 @@ export namespace station {
     reason: string | null;
     unit_price: u64;
     min_charge: u64;
+    slot_fee: u64;
 
     constructor(
       refundable: bool = false,
@@ -3617,7 +3724,8 @@ export namespace station {
       available: bool = false,
       reason: string | null = null,
       unit_price: u64 = 0,
-      min_charge: u64 = 0
+      min_charge: u64 = 0,
+      slot_fee: u64 = 0
     ) {
       this.refundable = refundable;
       this.auto_renew = auto_renew;
@@ -3627,6 +3735,7 @@ export namespace station {
       this.reason = reason;
       this.unit_price = unit_price;
       this.min_charge = min_charge;
+      this.slot_fee = slot_fee;
     }
   }
 

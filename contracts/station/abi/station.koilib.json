@@ -458,6 +458,17 @@
               "open_cap": {
                 "type": "uint32",
                 "id": 32
+              },
+              "slot_fee_per_day": {
+                "type": "uint64",
+                "id": 33,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "app_reserved": {
+                "type": "uint32",
+                "id": 34
               }
             },
             "reserved": [
@@ -1446,6 +1457,13 @@
                 "options": {
                   "jstype": "JS_STRING"
                 }
+              },
+              "slot_fee_per_day": {
+                "type": "uint64",
+                "id": 18,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
               }
             }
           },
@@ -1603,6 +1621,25 @@
                 "options": {
                   "(koinos.btype)": "ADDRESS"
                 }
+              },
+              "open_allowances": {
+                "type": "uint32",
+                "id": 13
+              },
+              "open_cap": {
+                "type": "uint32",
+                "id": 14
+              },
+              "app_reserved": {
+                "type": "uint32",
+                "id": 15
+              },
+              "slot_fee_per_day": {
+                "type": "uint64",
+                "id": 16,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
               }
             }
           },
@@ -1722,6 +1759,13 @@
               "kind": {
                 "type": "uint32",
                 "id": 4
+              },
+              "target": {
+                "type": "bytes",
+                "id": 5,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
               }
             }
           },
@@ -1764,6 +1808,13 @@
               "min_charge": {
                 "type": "uint64",
                 "id": 8,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "slot_fee": {
+                "type": "uint64",
+                "id": 9,
                 "options": {
                   "jstype": "JS_STRING"
                 }

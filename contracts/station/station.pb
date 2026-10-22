@@ -1,6 +1,6 @@
 
-íh
-assembly/proto/station.protostationkoinos/options.proto"Ò
+‡j
+assembly/proto/station.protostationkoinos/options.proto"¡
 config_object
 owner (BÄµRowner
 paused (Rpaused#
@@ -39,7 +39,9 @@ alert_mana (B0R	alertMana"
 council (BÄµRcouncil
 	threshold (R	threshold(
 guard_delay_ms (B0RguardDelayMs
-open_cap  (RopenCapJJ"ï
+open_cap  (RopenCap+
+slot_fee_per_day! (B0RslotFeePerDay!
+app_reserved" (RappReservedJJ"ï
 
 app_object'
 reserved_mana (B0RreservedMana
@@ -222,7 +224,7 @@ manaPerDay
 expiry (B0Rexpiry
 used_24h (B0Rused24h
 	suspended (R	suspended
-kind (Rkind"€
+kind (Rkind"à
 escrow_object
 id (Rid
 kind (Rkind
@@ -241,7 +243,8 @@ manaPerDay
 released (B0Rreleased
 closed (Rclosed
 min_keep (B0RminKeep
-	day_price (B0RdayPrice"ê
+	day_price (B0RdayPrice+
+slot_fee_per_day (B0RslotFeePerDay"ê
 escrow_totals_object
 held (B0Rheld 
 	collected (B0R	collected
@@ -254,7 +257,7 @@ manaPerDay
 action (	Raction"*
 revenue_object
 total (B0Rtotal"
-get_status_arguments"—
+get_status_arguments"Â
 get_status_result.
 config (2.station.config_objectRconfig
 mana (B0Rmana%
@@ -269,7 +272,11 @@ manaPerDay
  (B0RbufferUsed24h#
 alert_level (B0R
 alertLevel 
-treasury (BÄµRtreasury".
+treasury (BÄµRtreasury'
+open_allowances (RopenAllowances
+open_cap (RopenCap!
+app_reserved (RappReserved+
+slot_fee_per_day (B0RslotFeePerDay".
 get_user_arguments
 user (BÄµRuser"{
 get_user_result(
@@ -291,13 +298,14 @@ contractId
 entry_point (R
 entryPoint"?
 get_entry_result+
-entry (2.station.entry_objectRentry"â
+entry (2.station.entry_objectRentry"ß
 quote_allowance_arguments
 token (BÄµRtoken$
 mana_per_day (B0R
 manaPerDay
 days (B0Rdays
-kind (Rkind"É
+kind (Rkind
+target (BÄµRtarget"¢
 quote_allowance_result
 
 refundable (R
@@ -311,7 +319,8 @@ auto_renew (R	autoRenew
 
 unit_price (B0R	unitPrice!
 
-min_charge (B0R	minCharge"P
+min_charge (B0R	minCharge
+slot_fee	 (B0RslotFee"P
 quote_big_upload_arguments
 token (BÄµRtoken
 mana (B0Rmana"©

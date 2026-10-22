@@ -57,6 +57,14 @@ message config_object {
   // Launch low (50) and raise only after measuring buy_allowance and the heaviest authorize route on a node at the new
   // value. 0 (configs stored before this field) reads as 50. Renewals of open allowances are never refused by it.
   uint32 open_cap = 32;
+  // Slot fee (owner decision, Oct 22): every allowance (Mana pass or app plan) pays this for each day of its term, on top
+  // of the Mana price, in base units of the payment stablecoin (8 decimals: 2,000,000 = $0.02). New purchases and
+  // renewals only. At most $1 a day. 0 is "no fee" only in a testing build; elsewhere a stored 0 (configs from before
+  // the field) reads as $0.02 and set_config refuses 0. Big-upload tickets don't pay it.
+  uint64 slot_fee_per_day = 33 [jstype = JS_STRING];
+  // Slots kept for real apps (owner decision, Oct 22): once open allowances reach open_cap - app_reserved, only app plans
+  // whose target is a deployed contract are sold. 0 (configs from before the field) reads as 10. Must be below open_cap.
+  uint32 app_reserved = 34;
 }
 
 // Carl's reserved app: a fixed RESERVATION of Mana per rolling 24 h (absolute, so adding KOIN never changes it;
@@ -302,6 +310,9 @@ message escrow_object {
   // AB-010 (audit-fixes-1): the 1-day price for this size at purchase (allowance terms). A buyer cancel charges the days
   // used at this price. 0 = not recorded (purchases before audit-fixes-1): plain pro rata.
   uint64 day_price = 17 [jstype = JS_STRING];
+  // Slot fee per day included in `amount` (amount = Mana price + slot_fee_per_day × days). A buyer cancel keeps it for
+  // the days held and refunds it for unused days. 0 = no slot fee (purchases before it existed).
+  uint64 slot_fee_per_day = 18 [jstype = JS_STRING];
 }
 
 // Per token: held = Σ (amount − refunded − released) over all purchases; must equal the station's token balance.
@@ -343,6 +354,11 @@ message get_status_result {
   uint64 buffer_used_24h = 10 [jstype = JS_STRING];   // reserve Mana used by app buffers (not in used_24h)
   uint64 alert_level = 11 [jstype = JS_STRING];
   bytes treasury = 12 [(koinos.btype) = ADDRESS];     // where payments land now
+  // Early warning (owner decision, Oct 22): open allowances against the cap in force. Warn at 80% of open_cap.
+  uint32 open_allowances = 13;
+  uint32 open_cap = 14;                               // effective (a stored 0 reads as 50)
+  uint32 app_reserved = 15;                           // effective (a stored 0 reads as 10)
+  uint64 slot_fee_per_day = 16 [jstype = JS_STRING];  // effective
 }
 
 // @description One user's counters.
@@ -388,6 +404,9 @@ message quote_allowance_arguments {
   uint64 mana_per_day = 2 [jstype = JS_STRING];
   uint64 days = 3 [jstype = JS_STRING];
   uint32 kind = 4;                                   // 1 app plan, 2 Mana pass (0 = not said: the pass minimum is shown too)
+  // The app plan's target, if known: when only the slots kept for real apps are left, a plan is offered only for a
+  // deployed contract (not given = treated as not a contract).
+  bytes target = 5 [(koinos.btype) = ADDRESS];
 }
 
 message quote_allowance_result {
@@ -400,6 +419,7 @@ message quote_allowance_result {
   string reason = 3;
   uint64 unit_price = 4 [jstype = JS_STRING]; // tier price per 1,000 Mana(/day) used
   uint64 min_charge = 8 [jstype = JS_STRING];  // AB-002: the minimum charge that applies (kept on a buyer cancel)
+  uint64 slot_fee = 9 [jstype = JS_STRING];    // slot fee for the whole term (slot_fee_per_day × days), included in price
 }
 
 // @description Price of a big upload and whether the reserve can take it now.
