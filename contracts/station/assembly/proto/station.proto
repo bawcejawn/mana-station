@@ -24,7 +24,7 @@ message config_object {
   uint32 max_ops = 14;
   reserved 15;                                      // was sold_bp: the sellable slice is now derived (budget − reservations)
   uint64 big_max = 16 [jstype = JS_STRING];         // per big-upload request (Mana)
-  uint64 big_cooldown_ms = 17 [jstype = JS_STRING]; // between big-upload purchases (station-wide)
+  uint64 big_cooldown_ms = 17 [jstype = JS_STRING]; // between big-upload purchases, PER BUYER (was station-wide: audit #2)
   uint64 big_week_cap = 18 [jstype = JS_STRING];    // total big uploads per rolling 7 days (Mana)
   uint64 big_max_debt = 19 [jstype = JS_STRING];    // reserve that big uploads may owe at once (Mana)
   uint64 big_ticket_ms = 20 [jstype = JS_STRING];   // ticket lifetime; 0 = default 24 h (Carl, 8:02 PM). Owner-adjustable
@@ -32,7 +32,7 @@ message config_object {
   uint64 max_days = 22 [jstype = JS_STRING];        // longest prepaid period per buy / renew
   // Where ESCROW RELEASES go (Carl, 7:47 PM: payments are held in the station's escrow until the term ends).
   // Empty = the owner wallet. Must not be the station itself. Owner-changeable.
-  // Default (empty) = DIRECT TO THE OWNER WALLET (Carl, 5:18 PM). Owner may set another address, or the station's own id.
+  // Default (empty) = the owner wallet. Changes only through a council proposal (kind 6); never the station itself.
   bytes treasury = 23 [(koinos.btype) = ADDRESS];
   // Fee-exempt reserved apps may go this far above their daily allowance (2000 = 20%: 3,000 → 3,600). The extra comes
   // straight from the reserve (Carl, 5:22 PM): no debt, no repayment, never below the hard floor (admin_min + budget).
@@ -41,6 +41,16 @@ message config_object {
   // Big-upload ticket fee (Carl, 8:10 PM): on buyer cancel or expiry the station keeps max(this share of the price,
   // the pro-rata used share). 0 = default 500 (5%); max 2000 (20%). Refunds are only ever in the stablecoin paid.
   uint32 ticket_fee_bp = 26;
+  reserved 27;                                      // was big_idle_ms (dropped for the time-based ticket model)
+  // Audit #3 (Carl, 8:43 PM): open allowances + open big-upload tickets one wallet may hold at once. 0 = default 5.
+  uint32 max_per_buyer = 28;
+  // Audit #1 (permission takeover). The council approves money-moving changes and upgrades: `threshold` of `council`
+  // must approve, then `guard_delay_ms` must pass, and any ONE council member can veto during the wait. Owner and
+  // council members are "operators" for everyday actions (pause, suspend, connect apps, prices, limits).
+  // These fields, `owner`, `treasury` and a higher `ticket_fee_bp` change only through council proposals.
+  repeated bytes council = 29 [(koinos.btype) = ADDRESS];
+  uint32 threshold = 30;
+  uint64 guard_delay_ms = 31 [jstype = JS_STRING];
 }
 
 // Carl's reserved app: a fixed RESERVATION of Mana per rolling 24 h (absolute, so adding KOIN never changes it;
@@ -100,6 +110,8 @@ message price_object {
   uint64 price_30d = 8 [jstype = JS_STRING];        // per 1,000 Mana/day, whole 30-day term
   uint64 big_per_1000 = 9 [jstype = JS_STRING];     // token units per 1,000 Mana of big upload (one-time)
   uint64 big_min_mana = 10 [jstype = JS_STRING];    // smallest big-upload order (Mana, 8 decimals)
+  // Audit #3: every purchase (allowance term or big-upload ticket) costs at least this much, in token units. 0 = none.
+  uint64 min_purchase = 11 [jstype = JS_STRING];
 }
 
 // A sold daily allowance. kind 1 = calls into contract `target`; kind 2 = txs whose payee is account `target`.
@@ -132,20 +144,22 @@ message ticket_object {
   uint64 paid = 7 [jstype = JS_STRING];
   uint32 purchase_id = 8;                            // escrow purchase
   uint64 bought = 9 [jstype = JS_STRING];            // purchase time (weekly-cap slot, station wait)
-  uint64 prev_last_buy = 10 [jstype = JS_STRING];    // station-wide last purchase before this one (restored on release)
+  uint64 prev_last_buy = 10 [jstype = JS_STRING];    // UNUSED since audit #2 (the station-wide wait was removed)
 }
 
-// Station-wide big-upload state. Debt is repaid at the sold slice's daily rate (the slice pauses while it repays),
-// so total spend never exceeds the refill and the reserve always reloads.
+// Station-wide big-upload state. Debt is an estimate repaid at the sold slice's daily rate. Since audit #2 it only gates
+// new big-upload sales and unreserved exempt projects; it never pauses paid allowances. The reserve itself is protected
+// by the live floor check (big uploads and buffers never take Mana below admin_min + one day's budget).
 message big_object {
   uint64 debt = 1 [jstype = JS_STRING];
   uint64 debt_ts = 2 [jstype = JS_STRING];
-  uint64 last_buy = 3 [jstype = JS_STRING];
+  uint64 last_buy = 3 [jstype = JS_STRING];          // UNUSED since audit #2 (cooldown is per buyer now)
   window_object week = 4;
   uint32 next_id = 5;                                // allowance ids
   bool low_alerted = 6;                              // reserve_low already emitted for this dip
   uint32 next_purchase = 7;                          // escrow purchase ids
   uint64 paused_at = 8 [jstype = JS_STRING];         // set while paused: the escrow clock stops here
+  uint64 ticket_open = 9 [jstype = JS_STRING];       // review H1: unused Mana locked by open tickets (kept above the floor)
 }
 
 // Payload of station.allowance_bought / station.allowance_renewed / station.big_upload_bought, with the purchase terms.
@@ -182,6 +196,75 @@ message registry_object {
   repeated uint32 app_ids = 1;
   repeated uint32 open_ids = 2;
   repeated uint32 open_purchases = 3;                // escrow purchases not yet closed (bounded)
+  repeated bytes exempt_ids = 4 [(koinos.btype) = CONTRACT_ID]; // connected free apps (bounded index, for list_connected)
+  repeated uint32 open_proposals = 5;                // council proposals not yet executed or cancelled (bounded)
+  uint32 next_proposal = 6;
+}
+
+// A council-guarded action (audit #1). kind: 1 upgrade the station's code (hash = multihash sha2-256 of the new
+// bytecode, "0x1220…" as shown in contract metadata), 2 withdraw KOIN (to, amount), 3 rescue a token sent by mistake
+// (token, to, amount; never escrowed funds), 4 replace the council (council, threshold), 5 set the delay (delay_ms),
+// 6 set the treasury (to), 7 set the ticket fee (fee_bp), 8 set the owner (to).
+// KCS-4 approve arguments, read by the free-checkout rule (the station pays a buyer's approve + buy).
+message kcs_approve_args {
+  bytes owner = 1 [(koinos.btype) = ADDRESS];
+  bytes spender = 2 [(koinos.btype) = ADDRESS];
+  uint64 value = 3 [jstype = JS_STRING];
+}
+
+message guarded_action {
+  uint32 kind = 1;
+  bytes hash = 2 [(koinos.btype) = HEX];               // "0x1220…" in tools (koilib hex encoding)
+  bytes to = 3 [(koinos.btype) = ADDRESS];
+  uint64 amount = 4 [jstype = JS_STRING];
+  bytes token = 5 [(koinos.btype) = CONTRACT_ID];
+  repeated bytes council = 6 [(koinos.btype) = ADDRESS];
+  uint32 threshold = 7;
+  uint64 delay_ms = 8 [jstype = JS_STRING];
+  uint32 fee_bp = 9;
+}
+
+message proposal_object {
+  uint32 id = 1;
+  guarded_action action = 2;
+  bytes proposer = 3 [(koinos.btype) = ADDRESS];
+  repeated bytes approvals = 4 [(koinos.btype) = ADDRESS];
+  uint64 created = 5 [jstype = JS_STRING];
+  uint64 ready_at = 6 [jstype = JS_STRING];          // 0 until the threshold is reached; then + guard delay
+  bool executed = 7;
+  bool cancelled = 8;
+  bytes cancelled_by = 9 [(koinos.btype) = ADDRESS];
+}
+
+// Payload of station.proposal_* events.
+message proposal_event {
+  proposal_object proposal = 1;
+  bytes by = 2 [(koinos.btype) = ADDRESS];
+  string what = 3;                                   // created / approved / ready / executed / cancelled
+}
+
+// One connected free app, as list_connected returns it.
+message connected_app {
+  bytes contract_id = 1 [(koinos.btype) = CONTRACT_ID];
+  uint32 app = 2;
+  uint64 mana_per_day = 3 [jstype = JS_STRING];      // its reservation
+  uint64 boost_mana = 4 [jstype = JS_STRING];
+  uint64 boost_until = 5 [jstype = JS_STRING];
+  bool strict = 6;
+  bool active = 7;
+  uint64 used_24h = 8 [jstype = JS_STRING];
+}
+
+// One paid allowance, as list_connected returns it.
+message paid_app {
+  uint32 id = 1;
+  bytes buyer = 2 [(koinos.btype) = ADDRESS];
+  bytes target = 3 [(koinos.btype) = CONTRACT_ID];
+  uint64 mana_per_day = 4 [jstype = JS_STRING];
+  uint64 expiry = 5 [jstype = JS_STRING];
+  uint64 used_24h = 6 [jstype = JS_STRING];
+  bool suspended = 7;
+  uint32 kind = 8;                                     // 1 = app plan, 2 = wallet Mana pass
 }
 
 // One prepaid purchase held in the station's escrow (Carl, 7:47 PM). kind 1 = an allowance term, kind 2 = a big-upload
@@ -202,6 +285,7 @@ message escrow_object {
   uint64 refunded = 13 [jstype = JS_STRING];
   uint64 released = 14 [jstype = JS_STRING];
   bool closed = 15;
+  uint64 min_keep = 16 [jstype = JS_STRING];         // review M3: buyer cancels never refund below this (min charge at purchase)
 }
 
 // Per token: held = Σ (amount − refunded − released) over all purchases; must equal the station's token balance.
@@ -472,9 +556,33 @@ message get_escrow_totals_result {
   escrow_totals_object totals = 1;
 }
 
+// One operation of a transaction, as would_pay needs it (Oct 21). A call: contract_id + entry_point + args.
+// upload = true: an upload of contract_id's code. other = true: any other operation (set_system_call, …).
+message op_info {
+  bytes contract_id = 1 [(koinos.btype) = CONTRACT_ID];
+  uint32 entry_point = 2;
+  bytes args = 3 [(koinos.btype) = HEX];
+  bool upload = 4;
+  bool other = 5;
+}
+
+// @description Would the station pay for this transaction right now? The same rules as the real decision, run without
+// recording anything, so an app or wallet helper can choose the payer before the user signs once.
+// @read-only true
+message would_pay_arguments {
+  bytes payee = 1 [(koinos.btype) = ADDRESS];          // the wallet that signs (the user)
+  repeated op_info operations = 2;
+  uint64 rc_limit = 3 [jstype = JS_STRING];
+}
+
+message would_pay_result {
+  bool pay = 1;
+  string route = 2;                                     // checkout | operator | ticket | free_app | app_plan | pass
+}
+
 // ════════ Admin (owner only) ════════
 
-// @description First-time setup (station key).
+// @description First-time setup. Only valid inside the transaction that uploads the station (so nobody can front-run it).
 // @read-only false
 message init_arguments {
   config_object config = 1;
@@ -593,3 +701,99 @@ message set_price_result {}
 // (withdraw_revenue removed: all payments are escrow; Carl gets funds only through release / ticket settlement.)
 
 // (7:47 PM: the 7:32 "no refunds" rule is superseded: buyer cancel with pro-rata refunds from escrow, see cancel_allowance.)
+
+
+// ═══════ connected apps (Carl, Oct 20: one list, one-step add / remove) ═══════
+
+// @description Connect (or update) a free app: it gets mana_per_day of the station's daily budget for its users. Operator.
+// @read-only false
+message connect_app_arguments {
+  bytes contract_id = 1 [(koinos.btype) = CONTRACT_ID];
+  uint64 mana_per_day = 2 [jstype = JS_STRING];
+  bool strict = 3;                                   // true: only entry points listed with set_entry are covered
+}
+
+message connect_app_result {
+  uint32 app = 1;
+}
+
+// @description Disconnect a free app; its daily Mana goes back to the sellable slice. Operator.
+// @read-only false
+message disconnect_app_arguments {
+  bytes contract_id = 1 [(koinos.btype) = CONTRACT_ID];
+}
+
+message disconnect_app_result {}
+
+// @description Everything connected: free apps and paid allowances, with today's use and the station's budget.
+// @read-only true
+message list_connected_arguments {}
+
+message list_connected_result {
+  repeated connected_app free_apps = 1;
+  repeated paid_app paid = 2;
+  uint64 daily_budget = 3 [jstype = JS_STRING];
+  uint64 reserved = 4 [jstype = JS_STRING];
+  uint64 sellable = 5 [jstype = JS_STRING];
+  uint64 sold = 6 [jstype = JS_STRING];
+  uint64 mana = 7 [jstype = JS_STRING];
+}
+
+// ═══════ council (audit #1) ═══════
+
+// @description Propose a guarded action (council member `signer`, who also approves it).
+// @read-only false
+message propose_arguments {
+  bytes signer = 1 [(koinos.btype) = ADDRESS];
+  guarded_action action = 2;
+}
+
+message propose_result {
+  uint32 id = 1;
+}
+
+// @description Approve a proposal (council member `signer`).
+// @read-only false
+message approve_arguments {
+  bytes signer = 1 [(koinos.btype) = ADDRESS];
+  uint32 id = 2;
+}
+
+message approve_result {
+  uint64 ready_at = 1 [jstype = JS_STRING];
+}
+
+// @description Veto a pending proposal (any ONE council member).
+// @read-only false
+message cancel_proposal_arguments {
+  bytes signer = 1 [(koinos.btype) = ADDRESS];
+  uint32 id = 2;
+}
+
+message cancel_proposal_result {}
+
+// @description Carry out an approved proposal after its delay (anyone). Upgrades instead run by uploading the approved code.
+// @read-only false
+message execute_arguments {
+  uint32 id = 1;
+}
+
+message execute_result {}
+
+// @description One proposal by id.
+// @read-only true
+message get_proposal_arguments {
+  uint32 id = 1;
+}
+
+message get_proposal_result {
+  proposal_object proposal = 1;
+}
+
+// @description Open proposals (not executed or cancelled).
+// @read-only true
+message list_proposals_arguments {}
+
+message list_proposals_result {
+  repeated proposal_object proposals = 1;
+}

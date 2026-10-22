@@ -17,3 +17,84 @@
 - BLOCKED: the Harbinger scenarios step failed at its first call: `connect ETIMEDOUT 45.79.244.237:443` (harbinger-api.koinos.io) from GitHub's runner; an independent fetcher gets 504 Gateway Timeout. Harbinger's public RPC is down, not only the box's egress. No tx was sent, so no tKOIN was spent and no testnet scenario ran; no costs were measured.
 - Next: when harbinger-api.koinos.io answers again (`curl -d '{"jsonrpc":"2.0","id":0,"method":"chain.get_chain_id","params":{}}' https://harbinger-api.koinos.io`), rerun: `gh workflow run testnet.yml -R bawcejawn/mana-station -f run_testnet=true`. Alternative endpoint: an API-key Harbinger provider (e.g. api.harbinger.koinos.pro, needs Carl's free API key as a secret and a small `RPC` change; the script refuses non-"harbinger" URLs and mainnet's chain id).
 - run_tests.mjs v2 has not executed against a live chain yet: expect a first-run fix or two (koilib option details, tx-size limits, real Mana costs).
+
+### Status 2026-10-20 03:55 UTC (branch fix/squat-freeze-stall, runs 39366080825 and 39366513329)
+- PASS on GitHub Actions: install, unit tests (58/58), testnet build with the mock stablecoin, mainnet build + `check:mainnet`, testapp + mock token builds.
+- BLOCKED again at the first RPC call: `connect ETIMEDOUT 45.79.244.237:443` (harbinger-api.koinos.io). No tx was sent, and no tKOIN was spent.
+- Fix ready: the workflow now reads the RPC from the Actions secret `HARBINGER_RPC` when it is set, falling back to the public endpoint. Set it to `https://api.harbinger.koinos.pro/jsonrpc?apikey=<free Koinos Pro key>` (docs.koinos.io/developers/testnet), then rerun the workflow on the branch. The script masks the key in its output.
+- The workflow now also posts the results and the script's last 60 lines as annotations, so failures are readable through the API.
+
+### Status 2026-10-20 ~06:45 UTC: full rehearsal PASSED, 74/74 (run 39379717585)
+Node `https://testnet.koinosfoundation.org`, chain id `EiAIKVvm6-V2qmsmUvPJy09vCCLbtn9lHFpwrJbcTIEWRQ==`. Fresh in-memory accounts each run, leftovers swept back to the funder (`1N6yd5SzAQaHe484vkV7pFhmYiGfQh2Cuy`, topped up from the faucet on Oct 19).
+
+**Measured costs:**
+| Action | Mana |
+|---|---|
+| Upload the station (66 KB) | 5.39 |
+| Play, self-paid | 0.036 |
+| Play, sponsored | 0.167 (authorize adds 0.131) |
+| Play on a paying app (Route B) | 0.150 |
+| Buy an allowance (approve + pay) | 0.141 |
+| Buy a ticket (approve + pay) | 0.132 |
+| Upload a 10.6 KB contract via a ticket | 2.01 |
+
+Kondor's 1.1× margin fits (about 90% of the limit used).
+
+**Confirmed on chain:**
+- Upload, init, and owner admin paid by the station.
+- Exempt apps:
+  - per-user rate limit and cooldown
+  - new-user pool
+  - buffer, with `buffer_used` events in receipts (events emitted inside authorize DO land)
+- Refusals:
+  - non-allowlisted entries, token and KOIN transfers, mixed targets, uploads without a ticket
+  - refusals cost the station 0 Mana
+- Paid allowances:
+  - target-app signature required (#3)
+  - over-capacity refused
+  - escrow purchase in one tx
+  - users sponsored
+  - suspend / unsuspend
+  - early release refused
+  - cancel refund 6/7
+- Tickets:
+  - big tx via the enlarged buffer
+  - time-based refund
+  - per-buyer wait
+  - 5% fee floor
+  - fee cap
+- Escrow invariant holds; the station's KOIN never moves.
+
+**Found on testnet:**
+1. **Fixed:** a freshly uploaded station refused its own txs before init, so it could never be set up.
+2. **This node rejects a reverting sponsored call at submission,** so the station pays nothing. Docs assumed it would be included and charged.
+3. **The mempool holds each tx's full rc limit for a while,** so wallets need limits near real costs.
+4. **Open (product):** tickets deduct the tx's rc LIMIT, not the Mana actually used (5 Mana limit, 2 Mana used → ticket at 0). Charging `rc_used` isn't possible inside authorize (it runs before execution). Options: tell buyers to set tight limits (the helper can), or accept it as the cost of safety.
+5. **One sponsored tx per player per block:** consecutive actions must land in different blocks (about 3 s apart). Fine for typical play; the helper's own-Mana fallback covers bursts.
+
+### Status 2026-10-20 ~13:00 UTC: lockdown + council rehearsal PASSED, 100/100 (run 39427353315)
+**Confirmed on chain:**
+- The station is uploaded and initialized in one transaction, overriding all three authorities.
+- The station key alone:
+  - can't re-init
+  - can't move the station's KOIN (KOIN contract: "account 'from' has not authorized transfer")
+  - can't replace the code
+- Council:
+  - an upgrade proposal and its approval start the wait
+  - one member's veto works
+  - non-members can't propose
+- Owner and council split: a council member can pause but not resume or reconfigure; the owner resumes; the treasury can't be changed outside the council.
+- Upgrades:
+  - unapproved code is refused
+  - approved code without the overrides is refused
+  - attacker code + approved code in one tx is refused (review C1), and the code stays unchanged
+  - the approved code, alone and after the wait, uploads without the station key, once only
+- Withdrawal:
+  - 1 of 2 approvals: refused
+  - 2 of 2 inside the wait: refused
+  - after the wait anyone executes: 189 tKOIN back to the funder
+- connect / list / disconnect work in one step each.
+
+**Helper:** its tight limit for a 10,580-byte ticket upload was 2.55 Mana, of which 2.01 was used (78.7%). The rest of the earlier checks still pass.
+
+**Cost:** upload + init of the station (81 KB) costs 8.27 Mana.

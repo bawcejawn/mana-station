@@ -1,3 +1,4 @@
 build/
 node_modules/
 testnet/keys.testnet.json
+helper/wallet-helper/dist/

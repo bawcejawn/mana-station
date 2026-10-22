@@ -559,3 +559,107 @@ Release wasm: 58,724 bytes; ABI 30 methods.
 3. Testnet: still blocked by the box's egress allowlist (TLS cut for harbinger-api / harbinger-rest; mainnet passes). The host allowlist must add both. Verify `authorize` events, cost and the Kondor "Optimize mana" margin there before mainnet.
 
 Sources for this section: Koinos payer/authorize, Mana and disk-delta facts as cited in §1 and §7. The 4:37 PM rules come from Carl's answers. Station.ts and Station.spec.ts are local code, not deployed.
+
+## Audit fixes, Oct 19 2026 (branch `fix/squat-freeze-stall`)
+Source: the security audit of Oct 19 (findings #1–#8). Decided by Carl the same evening. Simulated chain only; testnet rehearsal is next.
+
+**#2 One cheap ticket could freeze every paying customer (was critical).** Buying a ticket booked its full size as debt, any debt switched off every paid allowance, and each purchase started a 24 h wait for every other buyer. About $0.0125 bought a day-long outage.
+- Debt no longer touches paid allowances (Route B). The reserve is still protected by the live floor checks: big uploads (`bigOk`) and buffers (Route A) never take Mana below admin_min + one day's budget. Debt now only gates new big-upload sales and unreserved exempt projects (app 0).
+- The wait between ticket purchases is **per buyer**, counted from the purchase (`ticketCd`). The station-wide `last_buy` wait is gone, and so is the refund-triggered cooldown. That also fixes #8: a stranger closing an expired ticket late can no longer extend the buyer's wait.
+- **Ticket model (Carl, 8:19 PM):** a ticket locks its Mana for one full 24 h period at the full price, used or not. Ending early refunds `floor(paid × time left / lock)` on a straight line, capped at paid − fee (default 5%) and at the unused-Mana share. That second cap keeps "burn the ticket in an hour, cancel, get 95% back" impossible; flagged for Carl's review. A full lock refunds nothing. Owner refunds use the same time share with no fee and lift the buyer's wait. Holding a ticket to block capacity now costs its full price.
+
+**#3 All sales could be locked for ~$0.0015/day, and anyone could claim another developer's app (was critical).**
+- `buy_allowance` requires `check_authority(contract_call, target)`. The app's key (or its own authorize) must sign the purchase.
+- `price_object.min_purchase`: every allowance term and ticket costs at least this (proposed $1).
+- `config.max_per_buyer` (0 = 5): open allowances per buyer.
+
+**#4 Sales stopped by themselves (high).** Purchases only left the open list (cap 128) when someone called `release()`. Now `buy_allowance`, `renew` and `buy_big_upload` first close up to 8 finished purchases (`sweep`): ended terms are released, and expired or used-up tickets are settled. Suspended buyers are skipped. Cost: up to 128 storage reads plus a few token transfers, paid by the buyer's tx. Measure on testnet.
+
+**#7 Oversell guard.** `set_config` and `set_app` refuse any change that leaves sold allowances above the new sellable capacity.
+
+**#6 Terms.** `ALLOWANCE_TERMS` / `BIG_TERMS` were rewritten to promise only what the code does: operator custody (not trustless escrow) until the permission takeover, top-level-call scope, co-signing, the minimum charge, per-user limits, and the lock model. They are marked DRAFT pending legal review.
+
+**Independent review of the branch (same evening).** A separate reviewer re-read the contract and found:
+- **C1 (critical, pre-existing):** `cancel_allowance` with a renewed future term refunded about 86% and kept the service live until that term's start. It was repeatable, and each free slot also clogged the open list. Fixed: a refunded future term never counts toward the expiry and is closed at once.
+- **H1:** ticket Mana wasn't really locked. Fixed: `big.ticket_open` tracks unused ticket Mana. Quotes, other tickets and buffers can't spend into it.
+- **M1:** one broken token in `sweep` blocked all purchases. Fixed: the sweep only covers the purchase's own token.
+- **M3:** cancelling dodged the minimum charge. Fixed: `escrow.min_keep` is kept on buyer cancels; owner refunds ignore it.
+- **L3:** the oversell guard only fires when capacity shrinks.
+- **L4:** `set_price` refuses a min_purchase above max_per_purchase.
+- **L5:** the sweep and `release` also respect suspension or sanctions of the allowance owner when a third party paid a renewal.
+- Not changed: fresh addresses bypass the per-buyer ticket wait (the station-wide caps still apply), and `ticketCd` isn't pause-shifted. Both are low and noted.
+- Debt repayment is still an estimate (the sold slice keeps selling). Safety comes from the live floor + `ticket_open` checks.
+
+**Tests: 57/57 pass** after the review (4 more: C1, H1, M3, L4; the mutation check on C1, H1 quote, H1 buffer and M3 catches each). Before the review: **53/53 pass** (45 existing, some updated for the new rules, plus 8 attack replays). Mutation check, each fix undone alone, all caught: debt pausing paid allowances → 2 fail; no target signature → 1; no minimum charge → 1; no per-buyer cap → 1; no sweep → 1; no oversell guard → 1; no fee floor → 4; no used-Mana cap → 2; station-wide wait restored → 8. Test note: the MockVM key-store quirk (bytes ≥ 0x80) caps the #4 replay at 120 purchases.
+
+**Still open before any mainnet:**
+- #1: the station key keeps every permission except transaction_application, so it can move KOIN and escrowed stablecoins and re-upload code. The permission takeover, multisig owner and time delay need their own design plus a testnet validation.
+- #5: app co-signing of sponsored txs (sybil drain).
+- #8 (mempool reservation) and the authorize-event check: testnet items.
+- Residual: a buyer who pays the full price can still hold big-upload capacity for 24 h. That is now a paid choice, not a cheap attack.
+
+**Carl's decisions on the PR (Oct 19, 8:43 PM):**
+- **Ticket refund:** `refund = floor(floor(paid × time left / lock) × unused Mana / ticket Mana)`. It is the value of the Mana still left, decayed by elapsed time, always keeping ticket_fee_bp (5%). Example: 50% Mana left with 75% of the time left returns 37.5%. This replaces the min(time share, unused share) cap.
+- **No default minimum charge:** `min_purchase` stays available per token but is proposed as 0.
+- **Per-wallet limit:** `max_per_buyer` (default 5) caps one wallet's open allowances **plus** open big-upload tickets together.
+- **Residual risk (flagged):** with no minimum charge, a sybil attacker can still fill the `max_allowances` slots with self-owned targets at about $0.00003 each. They can't take a real app's target, because the app must sign. Mitigations, if this shows up: raise `max_allowances`, set a small per-token `min_purchase`, or suspend the buyers.
+- **Tests: 58/58**. The mutation check catches removal of the time × unused formula and of the ticket count in the wallet limit.
+
+
+## Testnet rehearsal, Oct 20 2026: 74/74 PASS
+Koinos Foundation testnet node, fresh accounts per run (see `testnet/README.md` for costs and the full list).
+
+**Contract bug found and fixed:** `sponsorOk` checked "initialized?" before "is this the station's own tx?". Once uploaded, the station refused its own transactions, so `init` could never be approved. A fresh mainnet deploy would have been stuck. The station-key path now comes first. There's a unit test for it, and it fails without the fix.
+
+**Resolved "UNVERIFIED" items:**
+- Events emitted inside `authorize` do land in receipts (`buffer_used` seen).
+- A reverting sponsored call is rejected at submission on this node, so the station is not charged.
+- Real costs replace the estimates: about 0.17 Mana per sponsored play, of which authorize is about 0.13.
+
+**Open, for Carl:** a ticket is charged its tx's rc limit, not the Mana actually used (authorize runs before execution, so it can't know the actual cost).
+
+## Audit #1 built: permission takeover, council, connected-apps list (Oct 20 2026)
+**Chain fact (koinos-chain `check_authority`):** with an authority overridden, the chain calls the station's `authorize` for EVERY check of that type. There is no automatic approval when caller == account. For `contract_call`, `call.caller` is the caller of the contract doing the check (for example the station calling KOIN.transfer). Payer and payee are checked before any operation runs.
+
+**Lockdown (all three overrides, enforced at init):**
+- `contract_call`: true only when `call.caller` is the station itself. That covers escrow payouts and council withdrawals. A transaction signed with the key gets false.
+- `contract_upload`: only the exact approved bytecode (sha2-256 multihash), alone in its transaction, after the wait, within 7 days, with all three overrides kept.
+- `init`: only inside the station's own upload transaction, with all three overrides. It can't be front-run, and a deploy without the lockdown can't be set up.
+- The station never pays for its own transactions.
+
+**Council:**
+- 2–7 members; threshold ≥ 2.
+- Delay: 48 h minimum (60 s on testnet builds), 30 days maximum.
+- Any one member can veto, except their own removal.
+- Max 3 open proposals per member, 16 in total.
+- A council change restarts every open proposal's wait.
+- `execute` can be called by anyone after the wait, and re-counts approvals from current members only.
+- Guarded actions: upgrade, KOIN withdrawal (never below `koin_amount`), rescue of non-KOIN tokens above escrow, council, delay, treasury, ticket fee, owner.
+
+**Owner:** handles everyday operations. Council members can pause (emergency brake), vote and veto. Station-paid admin transactions follow the per-user limits.
+
+**Connected apps:**
+- `connect_app` / `disconnect_app`, one step each.
+- `list_connected`: free apps and paid allowances, use in the last 24 h, budget, reserved, sellable, sold.
+- Bounded index of up to 64 apps.
+- Tools: `site/console.html` (Kondor) and `admin/station-admin.mjs`.
+
+**Independent review (same day) found a CRITICAL bypass in the first version:** the upgrade check read the last upload in the transaction, while the chain asks once per upload. An attacker could have put their own code before the approved code in one transaction and drained the station in between. It is fixed: the approved upload must be the only operation, and only the first operation is ever considered. Unit tests and an on-chain replay cover it. H1, M1–M3, L1, L2, L4 and L5 were fixed too (see commit b0322dd).
+
+**Tests: 71/71.** Mutation checks: all 15 lockdown/council rules and 4 review fixes are caught.
+
+**Not supported:** upgrading an already-deployed pre-lockdown station in place. Deploy fresh (nothing is on mainnet).
+
+## Three ways in: wallet pass, free checkout, new site (Oct 20 2026, afternoon)
+
+Carl: "the overall experience is overwhelming… clear, direct paths for Mana access: a wallet, a contract, and the owner's own apps." He chose a **wallet Mana pass covering any app, with no token moves** (reversing the 9:09 PM "app allowances only" rule for this one case).
+
+**Wallet Mana pass (kind 2 allowance).** The wallet itself must sign the purchase. The station pays only that wallet's own transactions (payee = the wallet), calls only, never the station, KOIN or stablecoins, never a KCS `transfer` / `approve` / `burn` on any contract, never uploads; bounded by the pass's daily Mana and the station-wide 24 h cap. Free and paid app routes run first, so a pass isn't spent where an app pays. `list_connected` reports each purchase's `kind`.
+
+**Free checkout.** A wallet with no KOIN couldn't buy anything (the purchase transaction itself needs Mana). The station now pays exactly `[token.approve(owner = payee, spender = station), station.buy_allowance | buy_big_upload | renew (payee as buyer/payer, same priced token)]` or a single `cancel_allowance` / `cancel_big_upload` by the payee as buyer, under per-player limits, within hard_max and above admin_min; buys refused while paused.
+
+**Tests:** 76/76. Every new rule mutation-checked (6 pass rules, 9 checkout rules; one equivalent mutant: removing the final `else return false` leaves `who` null, which the next line already refuses). Testnet: new `pass` and `checkout` sections in `run_tests.mjs`.
+
+**Site:** rebuilt around three paths with one wallet chip in the header (`ms.js`): `get.html` (pass / app plan with one-click upload / Your Mana), `owner.html` (free Mana in sizes, customers, council), `help.html`; old pages forward. Shared parts built by `site/tools/build-pages.mjs`.
+
+**Playground:** generation v3 `1JnSnBNHrKxWGwWeriuhK1DrG5rv3KRFqc`, handed over to Carl's owner + council; an unconnected "open app" shows a pass paying where no app does. v2 (`1FHnCg7…`, never handed over) is reclaimed with `playground.mjs reclaim v2`.

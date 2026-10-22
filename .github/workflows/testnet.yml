@@ -6,6 +6,12 @@ on:
       run_testnet:
         description: "Run the Harbinger scenarios after the unit tests"
         default: "true"
+      playground:
+        description: "Instead of the scenarios, run a playground command: deploy, status, handover, traffic or mint"
+        default: ""
+      playground_args:
+        description: "Playground arguments (public addresses and numbers only)"
+        default: ""
 permissions:
   contents: read
 concurrency:
@@ -14,7 +20,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,7 +31,17 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Unit tests (MockVM)
         working-directory: contracts/station
-        run: npm test </dev/null
+        # npm test first builds with the ABI generator, which sometimes fails to read its pipe (EAGAIN): retry up to 3 times.
+        # On a real failure, the last lines are posted as an annotation (raw logs aren't reachable from every reviewer).
+        run: |
+          set -o pipefail
+          for i in 1 2 3; do
+            npm test </dev/null 2>&1 | tee unit.log && exit 0
+            grep -q EAGAIN unit.log || break
+            echo "::warning::unit test build hit the EAGAIN flake (attempt $i), retrying"
+          done
+          echo "::error title=unit tests failed::$(tail -n 60 unit.log | sed -e 's/\x1b\[[0-9;]*[mGK]//g' | sed -e ':a;N;$!ba' -e 's/%/%25/g' -e 's/\r//g' -e 's/\n/%0A/g')"
+          exit 1
       - name: Write throwaway testnet keys (secret, masked)
         env:
           TESTNET_KEYS: ${{ secrets.TESTNET_KEYS }}
@@ -36,19 +52,48 @@ jobs:
           echo "MOCK_STABLE=$(node -p 'require("./testnet/keys.testnet.json").token.address')" >> "$GITHUB_ENV"
       - name: Build testnet station (VUSDT = mock token), then mainnet build + check
         working-directory: contracts/station
+        # The ABI generator occasionally fails to read its input pipe (EAGAIN); retry each build up to 3 times.
         run: |
-          npm run build:testnet
-          npm run build
+          retry() { for i in 1 2 3; do "$@" && return 0; echo "::warning::'$*' failed (attempt $i), retrying"; sleep 2; done; return 1; }
+          retry npm run build:testnet
+          retry npm run build
           npm run check:mainnet
       - name: Build testapp and mock token
         run: |
-          (cd contracts/testapp && npm run build)
-          (cd contracts/mocktoken && npm run build)
-      - name: Harbinger scenarios
-        if: ${{ inputs.run_testnet == 'true' }}
+          retry() { for i in 1 2 3; do "$@" && return 0; echo "::warning::'$*' failed (attempt $i), retrying"; sleep 2; done; return 1; }
+          (cd contracts/testapp && retry npm run build)
+          (cd contracts/mocktoken && retry npm run build)
+      - name: Playground command
+        if: ${{ inputs.playground != '' }}
         env:
-          RPC: https://harbinger-api.koinos.io
-        run: node testnet/run_tests.mjs
+          RPC: https://testnet.koinosfoundation.org
+          CMD: ${{ inputs.playground }}
+          ARGS: ${{ inputs.playground_args }}
+        run: |
+          set -o pipefail
+          case "$CMD" in deploy|status|handover|traffic|mint|fund|reclaim|sweep|recover) ;; *) echo "unknown playground command"; exit 1;; esac
+          echo "$ARGS" | grep -Eq '^[1-9A-HJ-NP-Za-km-z0-9 .]*$' || { echo "args may only contain addresses and numbers"; exit 1; }
+          node testnet/playground.mjs "$CMD" $ARGS 2>&1 | tee testnet/run.log
+      - name: Harbinger scenarios
+        if: ${{ inputs.run_testnet == 'true' && inputs.playground == '' }}
+        env:
+          # Koinos Foundation public testnet node (Carl, Oct 19 10:05 PM). The script also refuses any chain id but the testnet's.
+          # Optional override: the HARBINGER_RPC secret.
+          RPC: ${{ secrets.HARBINGER_RPC || 'https://testnet.koinosfoundation.org' }}
+        run: |
+          set -o pipefail
+          node testnet/run_tests.mjs 2>&1 | tee testnet/run.log
+      # Surface the outcome as annotations too (readable via the API when raw logs aren't reachable).
+      # The script never prints keys; WIFs are also masked above.
+      - name: Report results as annotations
+        if: always()
+        run: |
+          enc() { sed -e ':a;N;$!ba' -e 's/%/%25/g' -e 's/\r//g' -e 's/\n/%0A/g'; }
+          # Annotations are capped at about 4 KB each and 10 per step: post results.md in up to 8 chunks.
+          if [ -f testnet/results.md ]; then
+            node -e 'const t=require("fs").readFileSync("testnet/results.md","utf8");const e=(x)=>x.replace(/%/g,"%25").replace(/\r/g,"").replace(/\n/g,"%0A");let i=0,n=1;while(i<t.length&&n<=8){let j=Math.min(t.length,i+3800);const k=t.lastIndexOf("\n",j);if(j<t.length&&k>i)j=k;console.log(`::notice title=testnet results ${n}::${e(t.slice(i,j))}`);i=j;n++;}'
+          fi
+          if [ -f testnet/run.log ]; then echo "::warning title=run_tests last 60 lines::$(tail -n 60 testnet/run.log | enc)"; fi
       - name: Remove keys
         if: always()
         run: rm -f testnet/keys.testnet.json
@@ -59,4 +104,5 @@ jobs:
           path: |
             testnet/results.json
             testnet/results.md
+            testnet/run.log
           retention-days: 7

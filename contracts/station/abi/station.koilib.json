@@ -133,12 +133,19 @@
       "read_only": true,
       "description": "Escrow totals for a token."
     },
+    "would_pay": {
+      "entry_point": 3659520245,
+      "argument": "station.would_pay_arguments",
+      "return": "station.would_pay_result",
+      "read_only": true,
+      "description": "Would the station pay for this transaction right now? The same rules as the real decision, run without"
+    },
     "init": {
       "entry_point": 3142846090,
       "argument": "station.init_arguments",
       "return": "station.init_result",
       "read_only": false,
-      "description": "First-time setup (station key)."
+      "description": "First-time setup. Only valid inside the transaction that uploads the station (so nobody can front-run it)."
     },
     "set_config": {
       "entry_point": 1269140617,
@@ -209,6 +216,69 @@
       "return": "station.set_price_result",
       "read_only": false,
       "description": "Set the price for a stablecoin (owner)."
+    },
+    "connect_app": {
+      "entry_point": 1326281238,
+      "argument": "station.connect_app_arguments",
+      "return": "station.connect_app_result",
+      "read_only": false,
+      "description": "Connect (or update) a free app: it gets mana_per_day of the station's daily budget for its users. Operator."
+    },
+    "disconnect_app": {
+      "entry_point": 3968198614,
+      "argument": "station.disconnect_app_arguments",
+      "return": "station.disconnect_app_result",
+      "read_only": false,
+      "description": "Disconnect a free app; its daily Mana goes back to the sellable slice. Operator."
+    },
+    "list_connected": {
+      "entry_point": 2725556362,
+      "argument": "station.list_connected_arguments",
+      "return": "station.list_connected_result",
+      "read_only": true,
+      "description": "Everything connected: free apps and paid allowances, with today's use and the station's budget."
+    },
+    "propose": {
+      "entry_point": 316636942,
+      "argument": "station.propose_arguments",
+      "return": "station.propose_result",
+      "read_only": false,
+      "description": "Propose a guarded action (council member `signer`, who also approves it)."
+    },
+    "approve": {
+      "entry_point": 1960973952,
+      "argument": "station.approve_arguments",
+      "return": "station.approve_result",
+      "read_only": false,
+      "description": "Approve a proposal (council member `signer`)."
+    },
+    "cancel_proposal": {
+      "entry_point": 103751385,
+      "argument": "station.cancel_proposal_arguments",
+      "return": "station.cancel_proposal_result",
+      "read_only": false,
+      "description": "Veto a pending proposal (any ONE council member)."
+    },
+    "execute": {
+      "entry_point": 3194740712,
+      "argument": "station.execute_arguments",
+      "return": "station.execute_result",
+      "read_only": false,
+      "description": "Carry out an approved proposal after its delay (anyone). Upgrades instead run by uploading the approved code."
+    },
+    "get_proposal": {
+      "entry_point": 2869724812,
+      "argument": "station.get_proposal_arguments",
+      "return": "station.get_proposal_result",
+      "read_only": true,
+      "description": "One proposal by id."
+    },
+    "list_proposals": {
+      "entry_point": 1970023477,
+      "argument": "station.list_proposals_arguments",
+      "return": "station.list_proposals_result",
+      "read_only": true,
+      "description": "Open proposals (not executed or cancelled)."
     }
   },
   "koilib_types": {
@@ -361,12 +431,39 @@
               "ticket_fee_bp": {
                 "type": "uint32",
                 "id": 26
+              },
+              "max_per_buyer": {
+                "type": "uint32",
+                "id": 28
+              },
+              "council": {
+                "rule": "repeated",
+                "type": "bytes",
+                "id": 29,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "threshold": {
+                "type": "uint32",
+                "id": 30
+              },
+              "guard_delay_ms": {
+                "type": "uint64",
+                "id": 31,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
               }
             },
             "reserved": [
               [
                 15,
                 15
+              ],
+              [
+                27,
+                27
               ]
             ]
           },
@@ -565,6 +662,13 @@
               "big_min_mana": {
                 "type": "uint64",
                 "id": 10,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "min_purchase": {
+                "type": "uint64",
+                "id": 11,
                 "options": {
                   "jstype": "JS_STRING"
                 }
@@ -789,6 +893,13 @@
                 "options": {
                   "jstype": "JS_STRING"
                 }
+              },
+              "ticket_open": {
+                "type": "uint64",
+                "id": 9,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
               }
             }
           },
@@ -921,6 +1032,284 @@
                 "rule": "repeated",
                 "type": "uint32",
                 "id": 3
+              },
+              "exempt_ids": {
+                "rule": "repeated",
+                "type": "bytes",
+                "id": 4,
+                "options": {
+                  "(koinos.btype)": "CONTRACT_ID"
+                }
+              },
+              "open_proposals": {
+                "rule": "repeated",
+                "type": "uint32",
+                "id": 5
+              },
+              "next_proposal": {
+                "type": "uint32",
+                "id": 6
+              }
+            }
+          },
+          "kcs_approve_args": {
+            "fields": {
+              "owner": {
+                "type": "bytes",
+                "id": 1,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "spender": {
+                "type": "bytes",
+                "id": 2,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "value": {
+                "type": "uint64",
+                "id": 3,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              }
+            }
+          },
+          "guarded_action": {
+            "fields": {
+              "kind": {
+                "type": "uint32",
+                "id": 1
+              },
+              "hash": {
+                "type": "bytes",
+                "id": 2,
+                "options": {
+                  "(koinos.btype)": "HEX"
+                }
+              },
+              "to": {
+                "type": "bytes",
+                "id": 3,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "amount": {
+                "type": "uint64",
+                "id": 4,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "token": {
+                "type": "bytes",
+                "id": 5,
+                "options": {
+                  "(koinos.btype)": "CONTRACT_ID"
+                }
+              },
+              "council": {
+                "rule": "repeated",
+                "type": "bytes",
+                "id": 6,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "threshold": {
+                "type": "uint32",
+                "id": 7
+              },
+              "delay_ms": {
+                "type": "uint64",
+                "id": 8,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "fee_bp": {
+                "type": "uint32",
+                "id": 9
+              }
+            }
+          },
+          "proposal_object": {
+            "fields": {
+              "id": {
+                "type": "uint32",
+                "id": 1
+              },
+              "action": {
+                "type": "guarded_action",
+                "id": 2
+              },
+              "proposer": {
+                "type": "bytes",
+                "id": 3,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "approvals": {
+                "rule": "repeated",
+                "type": "bytes",
+                "id": 4,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "created": {
+                "type": "uint64",
+                "id": 5,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "ready_at": {
+                "type": "uint64",
+                "id": 6,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "executed": {
+                "type": "bool",
+                "id": 7
+              },
+              "cancelled": {
+                "type": "bool",
+                "id": 8
+              },
+              "cancelled_by": {
+                "type": "bytes",
+                "id": 9,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              }
+            }
+          },
+          "proposal_event": {
+            "fields": {
+              "proposal": {
+                "type": "proposal_object",
+                "id": 1
+              },
+              "by": {
+                "type": "bytes",
+                "id": 2,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "what": {
+                "type": "string",
+                "id": 3
+              }
+            }
+          },
+          "connected_app": {
+            "fields": {
+              "contract_id": {
+                "type": "bytes",
+                "id": 1,
+                "options": {
+                  "(koinos.btype)": "CONTRACT_ID"
+                }
+              },
+              "app": {
+                "type": "uint32",
+                "id": 2
+              },
+              "mana_per_day": {
+                "type": "uint64",
+                "id": 3,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "boost_mana": {
+                "type": "uint64",
+                "id": 4,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "boost_until": {
+                "type": "uint64",
+                "id": 5,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "strict": {
+                "type": "bool",
+                "id": 6
+              },
+              "active": {
+                "type": "bool",
+                "id": 7
+              },
+              "used_24h": {
+                "type": "uint64",
+                "id": 8,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              }
+            }
+          },
+          "paid_app": {
+            "fields": {
+              "id": {
+                "type": "uint32",
+                "id": 1
+              },
+              "buyer": {
+                "type": "bytes",
+                "id": 2,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "target": {
+                "type": "bytes",
+                "id": 3,
+                "options": {
+                  "(koinos.btype)": "CONTRACT_ID"
+                }
+              },
+              "mana_per_day": {
+                "type": "uint64",
+                "id": 4,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "expiry": {
+                "type": "uint64",
+                "id": 5,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "used_24h": {
+                "type": "uint64",
+                "id": 6,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "suspended": {
+                "type": "bool",
+                "id": 7
+              },
+              "kind": {
+                "type": "uint32",
+                "id": 8
               }
             }
           },
@@ -1018,6 +1407,13 @@
               "closed": {
                 "type": "bool",
                 "id": 15
+              },
+              "min_keep": {
+                "type": "uint64",
+                "id": 16,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
               }
             }
           },
@@ -1805,6 +2201,71 @@
               }
             }
           },
+          "op_info": {
+            "fields": {
+              "contract_id": {
+                "type": "bytes",
+                "id": 1,
+                "options": {
+                  "(koinos.btype)": "CONTRACT_ID"
+                }
+              },
+              "entry_point": {
+                "type": "uint32",
+                "id": 2
+              },
+              "args": {
+                "type": "bytes",
+                "id": 3,
+                "options": {
+                  "(koinos.btype)": "HEX"
+                }
+              },
+              "upload": {
+                "type": "bool",
+                "id": 4
+              },
+              "other": {
+                "type": "bool",
+                "id": 5
+              }
+            }
+          },
+          "would_pay_arguments": {
+            "fields": {
+              "payee": {
+                "type": "bytes",
+                "id": 1,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "operations": {
+                "rule": "repeated",
+                "type": "op_info",
+                "id": 2
+              },
+              "rc_limit": {
+                "type": "uint64",
+                "id": 3,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              }
+            }
+          },
+          "would_pay_result": {
+            "fields": {
+              "pay": {
+                "type": "bool",
+                "id": 1
+              },
+              "route": {
+                "type": "string",
+                "id": 2
+              }
+            }
+          },
           "init_arguments": {
             "fields": {
               "config": {
@@ -2033,6 +2494,208 @@
           },
           "set_price_result": {
             "fields": {}
+          },
+          "connect_app_arguments": {
+            "fields": {
+              "contract_id": {
+                "type": "bytes",
+                "id": 1,
+                "options": {
+                  "(koinos.btype)": "CONTRACT_ID"
+                }
+              },
+              "mana_per_day": {
+                "type": "uint64",
+                "id": 2,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "strict": {
+                "type": "bool",
+                "id": 3
+              }
+            }
+          },
+          "connect_app_result": {
+            "fields": {
+              "app": {
+                "type": "uint32",
+                "id": 1
+              }
+            }
+          },
+          "disconnect_app_arguments": {
+            "fields": {
+              "contract_id": {
+                "type": "bytes",
+                "id": 1,
+                "options": {
+                  "(koinos.btype)": "CONTRACT_ID"
+                }
+              }
+            }
+          },
+          "disconnect_app_result": {
+            "fields": {}
+          },
+          "list_connected_arguments": {
+            "fields": {}
+          },
+          "list_connected_result": {
+            "fields": {
+              "free_apps": {
+                "rule": "repeated",
+                "type": "connected_app",
+                "id": 1
+              },
+              "paid": {
+                "rule": "repeated",
+                "type": "paid_app",
+                "id": 2
+              },
+              "daily_budget": {
+                "type": "uint64",
+                "id": 3,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "reserved": {
+                "type": "uint64",
+                "id": 4,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "sellable": {
+                "type": "uint64",
+                "id": 5,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "sold": {
+                "type": "uint64",
+                "id": 6,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "mana": {
+                "type": "uint64",
+                "id": 7,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              }
+            }
+          },
+          "propose_arguments": {
+            "fields": {
+              "signer": {
+                "type": "bytes",
+                "id": 1,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "action": {
+                "type": "guarded_action",
+                "id": 2
+              }
+            }
+          },
+          "propose_result": {
+            "fields": {
+              "id": {
+                "type": "uint32",
+                "id": 1
+              }
+            }
+          },
+          "approve_arguments": {
+            "fields": {
+              "signer": {
+                "type": "bytes",
+                "id": 1,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "id": {
+                "type": "uint32",
+                "id": 2
+              }
+            }
+          },
+          "approve_result": {
+            "fields": {
+              "ready_at": {
+                "type": "uint64",
+                "id": 1,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              }
+            }
+          },
+          "cancel_proposal_arguments": {
+            "fields": {
+              "signer": {
+                "type": "bytes",
+                "id": 1,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "id": {
+                "type": "uint32",
+                "id": 2
+              }
+            }
+          },
+          "cancel_proposal_result": {
+            "fields": {}
+          },
+          "execute_arguments": {
+            "fields": {
+              "id": {
+                "type": "uint32",
+                "id": 1
+              }
+            }
+          },
+          "execute_result": {
+            "fields": {}
+          },
+          "get_proposal_arguments": {
+            "fields": {
+              "id": {
+                "type": "uint32",
+                "id": 1
+              }
+            }
+          },
+          "get_proposal_result": {
+            "fields": {
+              "proposal": {
+                "type": "proposal_object",
+                "id": 1
+              }
+            }
+          },
+          "list_proposals_arguments": {
+            "fields": {}
+          },
+          "list_proposals_result": {
+            "fields": {
+              "proposals": {
+                "rule": "repeated",
+                "type": "proposal_object",
+                "id": 1
+              }
+            }
           }
         }
       },

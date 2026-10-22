@@ -7,13 +7,17 @@
  *    cooldown, rolling 7-day cap, and a debt that the sold slice repays (the slice pauses while repaying), so total
  *    spend over time never exceeds the refill and the reserve always reloads.
  * Upload with ONLY authorizes_transaction_application = true.
+ * Audit fixes (2026-10-19, branch fix/squat-freeze-stall): #2 debt never pauses paid allowances, per-buyer ticket
+ * wait, tickets lock Mana for 24 h at full price with a straight-line time refund (Carl, 8:19 PM); #3 target app must sign, minimum charge, per-buyer cap; #4 finished purchases are
+ * swept on buy/renew; #7 no-oversell guard. #1 (Oct 20): the station overrides all three authorities, so its key alone
+ * moves nothing; money moves and upgrades need 2+ council approvals, a delay (48 h on mainnet) and no veto.
  */
-import { System, Storage, Protobuf, Arrays, Token, Base58, authority, value, protocol } from "@koinos/sdk-as";
+import { System, Storage, Protobuf, Arrays, Token, Base58, Crypto, authority, value, protocol } from "@koinos/sdk-as";
 import { station } from "./proto/station";
 
 const S_CONFIG: u32 = 0, S_APPS: u32 = 1, S_ENTRIES: u32 = 2, S_USERS: u32 = 3, S_APPWIN: u32 = 4,
   S_PRICES: u32 = 5, S_ALLOW: u32 = 6, S_TARGET: u32 = 7, S_TICKETS: u32 = 8, S_BIG: u32 = 9, S_REVENUE: u32 = 10, S_EXEMPT: u32 = 11, S_REGISTRY: u32 = 12, S_GLOBALWIN: u32 = 13, S_OVERFLOWWIN: u32 = 14, S_BUFFERWIN: u32 = 15, S_SUSPEND: u32 = 16, S_ESCROW: u32 = 17, S_ESCROWTOT: u32 = 18, S_TICKETCD: u32 = 19,
-  S_TESTLEDGER: u32 = 90;
+  S_PROPOSALS: u32 = 20, S_TESTLEDGER: u32 = 90;
 const DAY: u64 = 86_400_000;
 const MANA: u64 = 100_000_000;
 const USER_SLOT: u64 = 21_600_000; const USER_N: i32 = 4;   // 4 × 6 h
@@ -21,7 +25,16 @@ const APP_SLOT: u64 = 3_600_000; const APP_N: i32 = 24;     // 24 × 1 h
 const WEEK_N: i32 = 7;                                       // 7 × 1 day
 const GLOBAL_KEY: u32 = 0xffffffff;
 // Stablecoins (stablecoins.md, 2026-10-19). Prices are set per token by the owner; these are the defaults to set.
-import { VUSDT, VUSDC } from "./net";
+import { VUSDT, VUSDC, NETWORK } from "./net";
+// Audit #1: council delay floor. 48 h on mainnet so everyone can see a money move or upgrade coming; 1 min on testnet.
+const MIN_GUARD_DELAY_MS: u64 = NETWORK == "mainnet" ? 172_800_000 : 60_000;
+const UPGRADE_WINDOW_MS: u64 = 7 * 86_400_000;      // an approved upgrade must be uploaded within 7 days of being ready
+const MAX_COUNCIL: i32 = 7;
+const MAX_OPEN_PROPOSALS: i32 = 16;
+const MAX_PER_PROPOSER: i32 = 3;                   // review M2: one member can't fill the list
+const MAX_GUARD_DELAY_MS: u64 = 30 * 86_400_000;   // review M3: bounded delay (no overflow, no permanent freeze)
+const MAX_EXEMPT: i32 = 64;                         // connected free apps (bounded list)
+const TEST_KOIN = "19GYjDBVXU7keLbYvMLazsGQn3GTWHjHkK"; // test build only: stands in for the KOIN contract
 export { VUSDT, VUSDC };
 const LEGACY_CHAINGE_USDT = "19WrWze3XAoMa3Mwqys4rJMP6emZX2wfpH"; // rejected
 
@@ -42,12 +55,22 @@ function u32Key(n: u32): Uint8Array { const k = new Uint8Array(4); k[0] = u8(n >
 function entryKey(contract: Uint8Array, ep: u32): Uint8Array { const k = new Uint8Array(contract.length + 4); k.set(contract, 0); k.set(u32Key(ep), contract.length); return k; }
 function pct(amount: u64, bp: u32): u64 { return amount / 10_000 * u64(bp); }
 function wholeManaUp(m: u64): u64 { return (m + MANA - 1) / MANA; }
-export const ALLOWANCE_TERMS = "Prepaid Mana for one app contract: the station only sponsors transactions whose every operation calls that app (no other contracts, no token transfers). Your payment is held in the station's escrow until the term ends, then released to the operator. Cancel any time: unused whole days are refunded (the current day counts as used, so 1 day is the minimum charge). If the operator pauses the station, paused time is credited: your term is extended by the pause. No auto-renew: service stops at expiry unless you renew, at the price current then. Daily, 7-day and 30-day offers: buy only what you need. Non-transferable; not redeemable for crypto or cash except these refunds. Introductory prices may increase for new purchases. A buyer may be suspended for abuse, sanctions or AUP reasons; suspended time is not extended, and the operator may refund unused days (never to a sanctioned party).";
-export const BIG_TERMS = "Prepaid one-time big upload, paid in vUSDT or vUSDC and held in the station's escrow. Cancel any time, or let it expire: you get back the unused share of what you paid, minus a 5% fee that is always kept (the station keeps the larger of 5% or the share you used). Refunds are only in the stablecoin you paid, never in Mana or KOIN; unused Mana returns to the station's pool. After a refund, the same buyer waits one cooldown period before buying another ticket. Tickets last 24 hours and only sponsor uploading or calling the payee's own app contract. Paused time extends the ticket. No auto-renew. Non-transferable; not redeemable for crypto or cash except these refunds. A buyer may be suspended for abuse, sanctions or AUP reasons; the operator may refund unused value (never to a sanctioned party).";
+// DRAFT terms (audit #1/#6, 2026-10-19): rewritten to promise only what the code does. Pending legal review.
+export const ALLOWANCE_TERMS = "DRAFT, pending legal review. Prepaid daily Mana, either for one app contract (app plan) or for one wallet (Mana pass). App plan: the station sponsors a transaction only when every top-level operation in it calls that app; what the app does internally when called is up to the app. The app's own key must approve the purchase. Per-user anti-spam limits apply to each of the app's users. Mana pass: the station sponsors the pass wallet's own transactions (the wallet is the payee and signs), calling any contract except the station and token contracts, never token transfers, approvals or burns, and never contract uploads, up to the daily amount. The wallet itself must approve the purchase. Each wallet may hold a limited number of open allowances and tickets at once. Payment is held by the station contract until the term ends, then released to the operator. Its key alone can't move it: funds leave only through these rules (refunds, releases) or a council decision that needs at least two of its members' approvals, a public waiting period (48 hours) and no veto from any member. This is council custody, not fully trustless escrow. If the operator sets a minimum charge, it is shown in the quote and kept if you cancel. Cancel any time: unused whole days are refunded (the current day counts as used, so 1 day is the minimum charge). If the operator pauses the station, paused time is credited: your term is extended by the pause. No auto-renew: service stops at expiry unless you renew, at the price current then. 1-, 7- and 30-day terms only. Non-transferable; not redeemable for crypto or cash except these refunds. Introductory prices may increase for new purchases. A buyer may be suspended for abuse, sanctions or AUP reasons; suspended time is not extended, and the operator may refund unused days (never to a sanctioned party).";
+export const BIG_TERMS = "DRAFT, pending legal review. Prepaid big upload: the station reserves the Mana you buy for you for one full 24-hour period, at the full price, whether you use it or not. Reserved Mana is not sold again or spent by the station's other services. Paid in vUSDT or vUSDC and held by the station contract (council custody: its key alone can't move funds; money moves need two or more council approvals, a 48-hour public wait and no veto). If the lock runs its full period, nothing is refunded. If you end it early, you get back the value of the Mana you have not used, reduced in a straight line by the time already passed (for example, half the Mana left with three quarters of the time left returns 37.5% of the price), always keeping a fee (currently 5%). If the operator sets a minimum charge, it is shown in the quote and kept if you cancel. Refunds are only in the stablecoin you paid, never in Mana or KOIN. Each buyer can buy one ticket per cooldown period (default 24 hours). Tickets only sponsor uploading or calling the payee's own contract. In rare cases (for example if the station's Mana falls below its safety floor) a transaction can still be refused; tell the operator, who may refund the unexpired share. Paused time extends the lock. No auto-renew. Non-transferable; not redeemable for crypto or cash except these refunds. Each wallet may hold a limited number of open allowances and tickets at once. A buyer may be suspended for abuse, sanctions or AUP reasons; the operator may refund the unexpired share (never to a sanctioned party).";
 const MAX_OPEN_PURCHASES: i32 = 128;                 // bounded loops (pause credit)
 const MAX_TERMS: i32 = 8;
 const DEFAULT_TICKET_FEE_BP: u32 = 500;             // 5% (Carl, 8:10 PM)
+// KCS-1/KCS-4 money-moving entry points: a Mana pass never pays for these on any contract.
+const EP_KCS_TRANSFER: u32 = 0x27f576ca;
+const EP_KCS_APPROVE: u32 = 0x74e21680;
+const EP_KCS_BURN: u32 = 0x859facc5;
+// The station's own buy / renew / cancel entry points (free checkout).
+const EP_BUY_ALLOWANCE: u32 = 0x60422f5f, EP_RENEW: u32 = 0xa36a2ce1, EP_BUY_BIG: u32 = 0x1c1d9f26;
+const EP_CANCEL_ALLOWANCE: u32 = 0xc7643cce, EP_CANCEL_BIG: u32 = 0xc2985745;
 const DEFAULT_TICKET_MS: u64 = 86_400_000;          // ticket lifetime when big_ticket_ms = 0 (Carl, 8:02 PM: 24 h)
+const DEFAULT_MAX_PER_BUYER: u32 = 5;               // audit #3: open allowances per buyer when max_per_buyer = 0
+const SWEEP_MAX: i32 = 8;                           // audit #4: finished purchases closed per buy / renew
 const TX_BUFFER: u32 = 64 * 1024;                   // normal sponsored txs
 const BIG_TX_BUFFER: u32 = 1024 * 1024;             // big-upload ticket txs (contract bytecode)                            // open escrow terms per allowance
 const DEFAULT_ALERT_MANA: u64 = 15_000 * MANA;     // Carl: alert below 15k by default
@@ -129,12 +152,28 @@ export class Station {
   globalWin: Storage.Obj<station.window_object> = new Storage.Obj(System.getContractId(), S_GLOBALWIN, station.window_object.decode, station.window_object.encode, () => new station.window_object());
   suspended: Storage.Map<Uint8Array, station.suspend_object> = new Storage.Map(System.getContractId(), S_SUSPEND, station.suspend_object.decode, station.suspend_object.encode, null);
   bufferWin: Storage.Obj<station.window_object> = new Storage.Obj(System.getContractId(), S_BUFFERWIN, station.window_object.decode, station.window_object.encode, () => new station.window_object());
+  proposals: Storage.Map<Uint8Array, station.proposal_object> = new Storage.Map(System.getContractId(), S_PROPOSALS, station.proposal_object.decode, station.proposal_object.encode, null);
   overflowWin: Storage.Obj<station.window_object> = new Storage.Obj(System.getContractId(), S_OVERFLOWWIN, station.window_object.decode, station.window_object.encode, () => new station.window_object());
   lastNew: bool = false;
+  // would_pay (Oct 21): run the sponsorship rules as a dry run. Nothing is written and no event is emitted; `route`
+  // says which rule would pay ("checkout", "operator", "ticket", "free_app", "app_plan", "pass").
+  dry: bool = false;
+  route: string = "";
 
   // ───── environment ─────
   mana(): u64 { return BUILD_FOR_TESTING ? TEST_MANA : System.getAccountRC(this.contractId); }
   koinBalance(): u64 { return BUILD_FOR_TESTING ? TEST_BALANCE : new Token(System.getContractAddress("koin")).balanceOf(this.contractId); }
+  koinId(): Uint8Array { return BUILD_FOR_TESTING ? Base58.decode(TEST_KOIN) : System.getContractAddress("koin"); }
+  /** KOIN out of the station: only from a council-approved withdrawal (execute). */
+  koinSend(to: Uint8Array, amount: u64): void {
+    if (BUILD_FOR_TESTING) {
+      System.require(TEST_BALANCE >= amount, "insufficient KOIN"); TEST_BALANCE -= amount;
+      testSetToken(this.koinId(), to, testGetToken(this.koinId(), to) + amount);
+    } else {
+      System.require(new Token(this.koinId()).transfer(this.contractId, to, amount), "KOIN transfer failed");
+    }
+  }
+  tokenBalance(token: Uint8Array): u64 { return BUILD_FOR_TESTING ? testGetToken(token, this.contractId) : new Token(token).balanceOf(this.contractId); }
   now(): u64 { return System.getBlockField("header.timestamp")!.uint64_value; }
   height(): u64 { return System.getBlockField("header.height")!.uint64_value; }
   /** Payment, pattern A from stablecoins.md §5.1: the buyer approves the station for exactly `amount` (same tx,
@@ -159,7 +198,7 @@ export class Station {
     }
   }
   /** Where releases go: the treasury if set (never the station), else Carl's owner wallet. */
-  treasury(c: station.config_object): Uint8Array { return isAddress(c.treasury) ? c.treasury! : c.owner!; }
+  treasury(c: station.config_object): Uint8Array { return isAddress(c.treasury) ? c.treasury! : (isAddress(c.owner) ? c.owner! : new Uint8Array(0)); } // empty before init (get_status no longer traps)
   /** The escrow clock: frozen at paused_at while the station is paused. */
   clock(c: station.config_object, now: u64): u64 { const b = this.big.get()!; return c.paused && b.paused_at > 0 ? b.paused_at : now; }
   newPurchase(kind: u32, buyer: Uint8Array, token: Uint8Array, amount: u64, start: u64, end: u64): station.escrow_object {
@@ -180,19 +219,29 @@ export class Station {
     return used >= e.days ? 0 : e.days - used;
   }
   /** Refund = floor(amount × unused / days): rounds down by < 1 base unit (in Carl's favour); never creates value. */
-  termRefund(e: station.escrow_object, t: u64): u64 {
+  termRefund(e: station.escrow_object, t: u64, keepMin: bool = true): u64 {
     const u = this.unusedDays(e, t); if (u == 0) return 0;
-    const r = mulDiv(e.amount, u, e.days); const h = this.held(e); return r > h ? h : r;
+    let r = mulDiv(e.amount, u, e.days);
+    if (keepMin) { const cap = e.amount > e.min_keep ? e.amount - e.min_keep : 0; if (r > cap) r = cap; } // review M3: the minimum charge stays
+    const h = this.held(e); return r > h ? h : r;
   }
-  /** Ticket refund (Carl, 7:59 PM: no minimum charge) = floor(paid × unused Mana / ticket Mana), exact in base units:
-   *  rounds down by < 1 token base unit, in Carl's favour. */
-  ticketRefund(e: station.escrow_object, t: station.ticket_object, feeBp: u32): u64 {
-    if (t.mana == 0 || t.remaining == 0) return 0;
-    let r = mulDiv(e.amount, t.remaining, t.mana);                      // pro-rata unused share, rounded down
-    if (feeBp > 0) {                                                     // keep at least the fee (rounded up)
+  /** Ticket refund (Carl, Oct 19 8:19 PM + 8:43 PM): a ticket LOCKS its Mana for one full period at the full price.
+   *  Ending it early returns the value of the Mana still left, decayed by the time already passed:
+   *    refund = floor(floor(paid × time left / lock length) × unused Mana / ticket Mana)
+   *  e.g. 50% Mana left with 75% of the time left → 37.5% back. Never more than paid − fee (ticket_fee_bp, default 5%,
+   *  rounded up), so even an immediate cancel keeps the fee. Expiry or used-up Mana returns nothing. `clock` is the
+   *  escrow clock (frozen while paused; the pause credit shifts start and end together, so the lock length stays). */
+  ticketRefund(e: station.escrow_object, t: station.ticket_object, clock: u64, feeBp: u32): u64 {
+    if (e.closed || e.end <= e.start || clock >= e.end) return 0;
+    const lock = e.end - e.start;
+    const left = clock <= e.start ? lock : e.end - clock;
+    let r = mulDiv(e.amount, left, lock);                                // straight-line time decay of the price…
+    if (t.mana > 0) r = mulDiv(r, t.remaining, t.mana);                  // …applied to the share of Mana still unused
+    if (feeBp > 0) {                                                     // always keep at least the fee (rounded up)
       const keep = e.amount - mulDiv(e.amount, u64(10_000 - feeBp), 10_000);
       const cap = e.amount - keep; if (r > cap) r = cap;
     }
+    if (feeBp > 0) { const cap = e.amount > e.min_keep ? e.amount - e.min_keep : 0; if (r > cap) r = cap; } // review M3
     const h = this.held(e); return r > h ? h : r;
   }
   /** KOIN or any priced / rejected stablecoin: never a sponsorable app (no sponsored token transfers). */
@@ -200,6 +249,54 @@ export class Station {
     if (this.prices.has(t) || Arrays.equal(t, Base58.decode(VUSDT)) || Arrays.equal(t, Base58.decode(VUSDC)) || Arrays.equal(t, Base58.decode(LEGACY_CHAINGE_USDT))) return true;
     return !BUILD_FOR_TESTING && Arrays.equal(t, System.getContractAddress("koin"));
   }
+  /** Audit #4: close up to SWEEP_MAX finished purchases so the open list (capped at 128) can't fill up and stop sales.
+   *  Same outcome as release() / close_ticket(): earned money to the treasury, refunds to buyers. Purchases of any
+   *  suspended buyer are skipped (the owner decides those, and sanctions freeze them). Bounded: <= 128 reads. */
+  sweep(c: station.config_object, now: u64, token: Uint8Array): void {
+    const ids = this.registry.get()!.open_purchases.slice(0);
+    let done = 0;
+    for (let i = 0; i < ids.length && done < SWEEP_MAX; i++) {
+      const e = this.escrow.get(u32Key(ids[i]));
+      if (e == null || e.closed || !Arrays.equal(e.token, token) || this.frozenOwner(e)) continue; // review M1/L5
+      if (e.kind == 1) {
+        if (now < e.end) continue;                                       // term still running
+        this.doRelease(c, e, "auto_release"); done++;
+      } else {
+        const t = this.tickets.get(e.payee!);
+        if (t == null || t.purchase_id != e.id || !this.ticketEnded(t, now)) continue;
+        this.settleTicket(c, e.payee!, t, true, "auto_settle", now); done++;
+      }
+    }
+  }
+  /** Review L5: skip a purchase if its payer OR (for a renewal paid by someone else) the allowance owner is suspended. */
+  frozenOwner(e: station.escrow_object): bool {
+    if (this.suspended.has(e.buyer!)) return true;
+    if (e.kind != 1) return false;
+    const a = this.allowances.get(u32Key(e.allowance_id));
+    return a != null && this.suspended.has(a.buyer!);
+  }
+  /** Audit #7: an owner change may never leave less sellable capacity than is already sold to paying customers. */
+  noOversell(c: station.config_object, now: u64, oldCap: u64): void {
+    if (this.soldCap(c) >= oldCap) return;                              // review L3: never block a change that doesn't shrink capacity
+    System.require(this.committed(c, now, false)[0] <= this.soldCap(c), "change would oversell: sold allowances exceed the new sellable capacity");
+  }
+  /** Review M3: the minimum charge kept on a buyer cancel = min(price's min_purchase at purchase time, amount paid). */
+  minKeep(token: Uint8Array, amount: u64): u64 { const p = this.prices.get(token); const m = p != null ? p.min_purchase : 0; return m < amount ? m : amount; }
+  maxPerBuyer(c: station.config_object): u32 { return c.max_per_buyer > 0 ? c.max_per_buyer : DEFAULT_MAX_PER_BUYER; }
+  /** Audit #3 (Carl, 8:43 PM): what one wallet has open = its unexpired allowances + its open big-upload tickets.
+   *  Bounded: max_allowances allowance reads + <= 128 purchase reads. */
+  openFor(buyer: Uint8Array, now: u64): u32 {
+    const reg = this.registry.get()!; let n: u32 = 0;
+    for (let i = 0; i < reg.open_ids.length; i++) { const a = this.allowances.get(u32Key(reg.open_ids[i])); if (a != null && a.expiry > now && Arrays.equal(a.buyer, buyer)) n++; }
+    for (let i = 0; i < reg.open_purchases.length; i++) {
+      const e = this.escrow.get(u32Key(reg.open_purchases[i]));
+      if (e == null || e.closed || e.kind != 2 || !Arrays.equal(e.buyer, buyer)) continue;
+      const t = this.tickets.get(e.payee!); if (t != null && t.purchase_id == e.id && !this.ticketEnded(t, now)) n++;
+    }
+    return n;
+  }
+  /** A ticket is over when its 24 h lock has expired or its Mana is used up. */
+  ticketEnded(t: station.ticket_object, clock: u64): bool { return clock >= t.expiry || t.remaining == 0; }
   ticketFeeBp(c: station.config_object): u32 { return c.ticket_fee_bp > 0 ? c.ticket_fee_bp : DEFAULT_TICKET_FEE_BP; }
   doRefund(e: station.escrow_object, amount: u64, action: string): void {
     if (amount == 0) return;
@@ -226,6 +323,7 @@ export class Station {
   alertLevel(c: station.config_object): u64 { return c.alert_mana > 0 ? c.alert_mana : DEFAULT_ALERT_MANA; }
   /** One station.reserve_low event per dip below the alert level; re-armed once Mana is back at or above it. */
   watchReserve(c: station.config_object, after: u64): void {
+    if (this.dry) return;
     const lvl = this.alertLevel(c); const b = this.big.get()!;
     if (after < lvl && !b.low_alerted) {
       b.low_alerted = true; this.big.put(b);
@@ -294,6 +392,14 @@ export class Station {
   // ═══════ authorize ═══════
   authorize(args: authority.authorize_arguments): authority.authorize_result {
     if (args.type == authority.authorization_type.transaction_application) return new authority.authorize_result(this.sponsorOk());
+    // Audit #1 (permission takeover). The station overrides ALL three authorities, so its private key alone can't move
+    // anything. contract_call: a token asks "may the station's funds move?". Yes only when the station's OWN code is
+    // the caller (escrow refunds/releases, council-approved withdrawals); a tx signed with the key gets no.
+    if (args.type == authority.authorization_type.contract_call) {
+      return new authority.authorize_result(args.call != null && Arrays.equal(args.call!.caller, this.contractId));
+    }
+    // contract_upload: only bytecode the council approved (hash), after the delay, keeping all three overrides.
+    if (args.type == authority.authorization_type.contract_upload) return new authority.authorize_result(this.upgradeOk());
     return new authority.authorize_result(false);
   }
 
@@ -320,35 +426,48 @@ export class Station {
 
   sponsorOk(): bool {
     const c = this.config.get()!;
-    if (!isAddress(c.owner)) return false;
     const rc = System.getTransactionField("header.rc_limit")!.uint64_value;
     const pf = System.getTransactionField("header.payee");
     const payee = pf == null ? new Uint8Array(0) : pf.bytes_value;
-    const mana = this.mana();
-    if (rc > mana) return false;
-    if (payee.length == 0 || Arrays.equal(payee, this.contractId)) {
-      return System.checkAuthority(authority.authorization_type.contract_call, this.contractId); // station key only
-    }
+    if (payee.length == 0) return false;
     // The SDK's system-call buffer is 1 KiB by default: reading the operations of a bigger tx (a contract upload, long
     // args) would fail. Enlarge it; a big-upload ticket holder may send a whole contract (UNVERIFIED max tx size:
     // measure on testnet).
     System.setSystemBufferSize(this.tickets.has(payee) ? BIG_TX_BUFFER : TX_BUFFER);
-    const ops = txOps();
+    return this.decide(c, payee, rc, txOps());
+  }
+
+  /** The sponsorship rules, shared by authorize (real: records use) and would_pay (dry: records nothing). */
+  decide(c: station.config_object, payee: Uint8Array, rc: u64, ops: protocol.operation[]): bool {
+    this.route = "";
+    const mana = this.mana();
+    if (rc > mana) return false;
+    // Audit #1: the station never pays for its OWN transactions (payee = the station). There is no station-key path:
+    // setup happens in the upload transaction itself (see init), which the chain authorizes before this code exists.
+    if (payee.length == 0 || Arrays.equal(payee, this.contractId)) return false;
+    if (!isAddress(c.owner)) return false;                              // everything else needs an initialized station
     if (ops.length < 1 || ops.length > i32(c.max_ops)) return false;
+    // Free checkout (Oct 20): a wallet with no Mana can still buy, renew or cancel its own purchases.
+    if (this.checkoutOk(c, ops, payee, rc, mana)) { this.route = "checkout"; return true; }
     let allSelf = true, hasUpload = false, allCalls = true;
     for (let i = 0; i < ops.length; i++) {
       const o = ops[i].call_contract;
       if (o == null) { allCalls = false; allSelf = false; if (ops[i].upload_contract != null) hasUpload = true; continue; }
       if (!Arrays.equal(o.contract_id, this.contractId)) allSelf = false;
     }
-    if (allSelf) { // owner admin (kill switch etc.): works while paused, down to rc <= mana
-      return rc <= c.hard_max && Arrays.equal(payee, c.owner) && System.checkAuthority(authority.authorization_type.contract_call, c.owner!);
+    if (allSelf) { // owner admin and council votes (kill switch etc.): work while paused, down to rc <= mana
+      // (dry run: the payee's signature can't be checked yet; the real transaction still needs it)
+      if (rc > c.hard_max || !this.isOperator(c, payee) || (!this.dry && !System.checkAuthority(authority.authorization_type.contract_call, payee))) return false;
+      // Review M1: the same per-user limits as players (per minute, per day), so no operator can drain the station.
+      const u = this.userCheck(c, payee, this.now(), this.height(), rc); if (u == null) return false;
+      if (!this.dry) this.users.put(payee, u);
+      this.route = "operator"; return true;
     }
     if (c.paused) return false;
     const now = this.now(), h = this.height();
     // Big upload ticket.
     const t = this.tickets.get(payee);
-    if (t != null && (rc > c.hard_max || hasUpload)) return this.bigOk(c, t, ops, rc, mana, now, payee);
+    if (t != null && (rc > c.hard_max || hasUpload)) { const ok = this.bigOk(c, t, ops, rc, mana, now, payee); if (ok) this.route = "ticket"; return ok; }
     if (!allCalls || rc > c.hard_max) return false;
     if (mana - rc < c.admin_min) return false;
     // Station-wide rolling 24 h cap: 20% of koin_amount (+ explicit owner boosts). App buffers are outside it (below).
@@ -384,15 +503,15 @@ export class Station {
         const used = sumMana(aw) + rc;
         if (used <= allow) {
           if (!globalRoom) return false;
-          add(gw, now / APP_SLOT, APP_N, rc, false); this.globalWin.put(gw);
+          add(gw, now / APP_SLOT, APP_N, rc, false); if (!this.dry) this.globalWin.put(gw);
         } else {
           if (used > limit) return false;
-          if (mana - rc < this.bigFloor(c)) return false;              // hard floor (admin_min + budget) untouchable
+          if (mana - rc < this.bigFloor(c) + this.big.get()!.ticket_open) return false; // hard floor + tickets' locked Mana untouchable (H1)
           const bw = this.bufferWin.get()!; roll(bw, now / APP_SLOT, APP_N, false);
-          add(bw, now / APP_SLOT, APP_N, rc, false); this.bufferWin.put(bw);
-          System.event("station.buffer_used", Protobuf.encode(new station.buffer_event(ex.app, payee, rc, used, allow, limit, mana - rc), station.buffer_event.encode), [payee]);
+          add(bw, now / APP_SLOT, APP_N, rc, false); if (!this.dry) this.bufferWin.put(bw);
+          if (!this.dry) System.event("station.buffer_used", Protobuf.encode(new station.buffer_event(ex.app, payee, rc, used, allow, limit, mana - rc), station.buffer_event.encode), [payee]);
         }
-        add(aw, now / APP_SLOT, APP_N, rc, isNew); this.appWin.put(u32Key(ex.app), aw);
+        add(aw, now / APP_SLOT, APP_N, rc, isNew); if (!this.dry) this.appWin.put(u32Key(ex.app), aw);
       } else {
         // Exempt project without a reservation: only the unsold part of the sellable slice (unchanged rule).
         if (!globalRoom) return false;
@@ -402,40 +521,100 @@ export class Station {
         const ow = this.overflowWin.get()!;
         roll(ow, now / APP_SLOT, APP_N, false);
         if (sumMana(ow) + rc > free) return false;
-        add(ow, now / APP_SLOT, APP_N, rc, false); this.overflowWin.put(ow);
-        add(gw, now / APP_SLOT, APP_N, rc, false); this.globalWin.put(gw);
+        add(ow, now / APP_SLOT, APP_N, rc, false); if (!this.dry) this.overflowWin.put(ow);
+        add(gw, now / APP_SLOT, APP_N, rc, false); if (!this.dry) this.globalWin.put(gw);
       }
-      this.users.put(payee, u);
+      if (!this.dry) this.users.put(payee, u);
       this.watchReserve(c, mana - rc);
-      return true;
+      this.route = "free_app"; return true;
     }
     // Route B: sold APP allowances only (Carl, 9:09 PM: "only usable through the apps that are paying for the Mana
     // usage"). Every op must call the one paying app contract; Mana is drawn from that app's allowance. No account
     // allowances: a payee address never unlocks sponsorship of arbitrary contracts.
-    if (!oneTarget) return false;
+    // Route C (Oct 20): the payee's own Mana pass covers what no app pays for (other contracts, mixed calls).
+    if (!oneTarget) return this.passOk(c, ops, payee, rc, now, gw, globalRoom, mana);
     const id = this.targets.get(target0); const kind: u32 = 1;
-    if (id == null) return false;
+    if (id == null) return this.passOk(c, ops, payee, rc, now, gw, globalRoom, mana);
     const s = this.allowances.get(u32Key(u32(id.total)));
-    if (s == null || s.kind != kind || s.expiry <= now) return false;    // expired: cut off automatically
+    if (s == null || s.kind != kind || s.expiry <= now) return this.passOk(c, ops, payee, rc, now, gw, globalRoom, mana); // expired: cut off
     if (this.suspended.has(s.buyer!)) return false;                    // buyer suspended by the owner
     if (!globalRoom) return false;                                     // paid: hard cap, no buffer
-    if (this.debtNow(c, this.big.get()!, now) > 0) return false;        // sold slice is repaying big uploads
+    // Audit #2: big-upload debt no longer pauses paid allowances (one unused ticket could freeze every paying customer).
+    // The reserve stays safe because big uploads and buffers can never take Mana below the big floor (bigOk, Route A).
     if (s.day == null) s.day = new station.window_object();
     roll(s.day!, now / USER_SLOT, USER_N, false);
     if (sumMana(s.day!) + rc > s.mana_per_day) return false;
     let u: station.user_object | null = null;
     if (kind == 1) { u = this.userCheck(c, payee, now, h, rc); if (u == null) return false; }
     add(s.day!, now / USER_SLOT, USER_N, rc, false); add(gw, now / APP_SLOT, APP_N, rc, false);
-    this.allowances.put(u32Key(s.id), s); this.globalWin.put(gw);
-    if (u != null) this.users.put(payee, u);
+    if (!this.dry) { this.allowances.put(u32Key(s.id), s); this.globalWin.put(gw); if (u != null) this.users.put(payee, u); }
     this.watchReserve(c, mana - rc);
+    this.route = "app_plan"; return true;
+  }
+
+  /** Free checkout: [token.approve(owner = payee, spender = the station), station.buy_allowance | buy_big_upload | renew
+   *  with the payee as buyer / payer, paying in that same priced token], or a single station.cancel_allowance |
+   *  cancel_big_upload by the payee as buyer. Per-user limits apply (like players), within hard_max and above admin_min.
+   *  The buy itself still checks every signature (buyer, and the app for app plans), price and capacity. */
+  checkoutOk(c: station.config_object, ops: protocol.operation[], payee: Uint8Array, rc: u64, mana: u64): bool {
+    if (ops.length < 1 || ops.length > 2 || rc > c.hard_max || mana - rc < c.admin_min) return false;
+    const last = ops[ops.length - 1].call_contract;
+    if (last == null || !Arrays.equal(last.contract_id, this.contractId)) return false;
+    const ep = last.entry_point;
+    if (ops.length == 1) {
+      if (ep == EP_CANCEL_ALLOWANCE) {
+        const a = Protobuf.decode<station.cancel_allowance_arguments>(last.args, station.cancel_allowance_arguments.decode);
+        if (!isAddress(a.buyer) || !Arrays.equal(a.buyer!, payee)) return false;
+      } else if (ep == EP_CANCEL_BIG) {
+        const a = Protobuf.decode<station.cancel_big_upload_arguments>(last.args, station.cancel_big_upload_arguments.decode);
+        if (!isAddress(a.buyer) || !Arrays.equal(a.buyer!, payee)) return false;
+      } else return false;
+    } else {
+      if (c.paused) return false;
+      const ap = ops[0].call_contract;
+      if (ap == null || ap.entry_point != EP_KCS_APPROVE || !this.prices.has(ap.contract_id)) return false;
+      const x = Protobuf.decode<station.kcs_approve_args>(ap.args, station.kcs_approve_args.decode);
+      if (!isAddress(x.owner) || !Arrays.equal(x.owner!, payee) || !isAddress(x.spender) || !Arrays.equal(x.spender!, this.contractId)) return false;
+      let who: Uint8Array | null = null, tok: Uint8Array | null = null;
+      if (ep == EP_BUY_ALLOWANCE) { const a = Protobuf.decode<station.buy_allowance_arguments>(last.args, station.buy_allowance_arguments.decode); who = a.buyer; tok = a.token; }
+      else if (ep == EP_BUY_BIG) { const a = Protobuf.decode<station.buy_big_upload_arguments>(last.args, station.buy_big_upload_arguments.decode); who = a.buyer; tok = a.token; }
+      else if (ep == EP_RENEW) { const a = Protobuf.decode<station.renew_arguments>(last.args, station.renew_arguments.decode); who = a.payer; tok = a.token; }
+      else return false;
+      if (!isAddress(who) || !Arrays.equal(who!, payee) || tok == null || !Arrays.equal(tok!, ap.contract_id)) return false;
+    }
+    const u = this.userCheck(c, payee, this.now(), this.height(), rc); if (u == null) return false;
+    if (!this.dry) this.users.put(payee, u);
     return true;
   }
 
+  /** Route C: a wallet's Mana pass (kind 2). Only the pass wallet's own txs (payee = the wallet, who signs as payee),
+   *  calls only (no uploads: checked before), never the station, KOIN or stablecoins, and never a KCS transfer, approve
+   *  or burn on any contract (no money moves). Bounded by the pass's daily Mana and the station-wide 24 h cap. */
+  passOk(c: station.config_object, ops: protocol.operation[], payee: Uint8Array, rc: u64, now: u64, gw: station.window_object, globalRoom: bool, mana: u64): bool {
+    const id = this.targets.get(payee); if (id == null) return false;
+    const s = this.allowances.get(u32Key(u32(id.total)));
+    if (s == null || s.kind != 2 || s.expiry <= now || !Arrays.equal(s.target!, payee)) return false;
+    if (this.suspended.has(s.buyer!) || this.suspended.has(payee)) return false;
+    for (let i = 0; i < ops.length; i++) {
+      const o = ops[i].call_contract; if (o == null) return false;
+      if (Arrays.equal(o.contract_id, this.contractId) || this.isMoneyContract(o.contract_id)) return false;
+      if (o.entry_point == EP_KCS_TRANSFER || o.entry_point == EP_KCS_APPROVE || o.entry_point == EP_KCS_BURN) return false;
+    }
+    if (!globalRoom) return false;
+    if (s.day == null) s.day = new station.window_object();
+    roll(s.day!, now / USER_SLOT, USER_N, false);
+    if (sumMana(s.day!) + rc > s.mana_per_day) return false;
+    add(s.day!, now / USER_SLOT, USER_N, rc, false); add(gw, now / APP_SLOT, APP_N, rc, false);
+    if (!this.dry) { this.allowances.put(u32Key(s.id), s); this.globalWin.put(gw); }
+    this.watchReserve(c, mana - rc);
+    this.route = "pass"; return true;
+  }
+
   bigOk(c: station.config_object, t: station.ticket_object, ops: protocol.operation[], rc: u64, mana: u64, now: u64, payee: Uint8Array): bool {
-    if (now >= t.expiry || rc > t.remaining) return false;
+    if (this.ticketEnded(t, now) || rc > t.remaining) return false;    // lock expired or Mana used up
     if (this.suspended.has(t.buyer!)) return false;                    // buyer suspended by the owner
-    if (mana - rc < this.bigFloor(c)) return false;                     // never below admin_min + one day's budget
+    const b = this.big.get()!; const others = b.ticket_open > t.remaining ? b.ticket_open - t.remaining : 0;
+    if (mana - rc < this.bigFloor(c) + others) return false;            // never below the floor, nor into other tickets' locks
     for (let i = 0; i < ops.length; i++) {
       const up = ops[i].upload_contract;
       if (ops[i].call_contract != null) { if (!Arrays.equal(ops[i].call_contract!.contract_id, payee)) return false; continue; } // the payee's own app only (9:09 PM)
@@ -443,7 +622,8 @@ export class Station {
       return false;                                                     // set_system_* never
     }
     t.remaining -= rc;
-    this.tickets.put(payee, t);
+    b.ticket_open = b.ticket_open > rc ? b.ticket_open - rc : 0;  // used: no longer locked
+    if (!this.dry) { this.tickets.put(payee, t); this.big.put(b); }
     this.watchReserve(c, mana - rc);
     return true;
   }
@@ -487,6 +667,7 @@ export class Station {
     if (manaPerDay < MANA) { r.reason = "at least 1 Mana per day"; return r; }
     if (wholeManaUp(manaPerDay) > MAX_WHOLE_MANA) { r.reason = "too large"; return r; }
     r.price = per1000(manaPerDay, unit); r.unit_price = unit;
+    if (r.price < p.min_purchase) r.price = p.min_purchase;           // audit #3: minimum charge per purchase
     if (r.price > p.max_per_purchase) { r.reason = "above the per-purchase maximum"; return r; }
     const cm = this.committed(c, now, false);
     let held: u64 = 0;
@@ -506,14 +687,16 @@ export class Station {
     if (mana < p.big_min_mana || mana < MANA) { r.reason = "below the big-upload minimum"; return r; }
     if (mana > c.big_max) { r.reason = "above the per-request maximum"; return r; }
     r.price = per1000(mana, p.big_per_1000); r.unit_price = p.big_per_1000;
+    if (r.price < p.min_purchase) r.price = p.min_purchase;           // audit #3: minimum charge per purchase
     if (r.price > p.max_per_purchase) { r.reason = "above the per-purchase maximum"; return r; }
     if (this.soldCap(c) == 0) { r.reason = "no repayment capacity (sellable slice is 0)"; return r; }
-    if (b.last_buy > 0 && now < b.last_buy + c.big_cooldown_ms) { r.reason = "cooldown"; return r; }
+    // Audit #2: the wait between purchases is per buyer now (checked in buy_big_upload), not station-wide.
     const w = b.week != null ? b.week! : new station.window_object(); roll(w, now / DAY, WEEK_N, false);
     if (sumMana(w) + mana > c.big_week_cap) { r.reason = "weekly big-upload cap reached"; return r; }
     if (this.debtNow(c, b, now) + mana > c.big_max_debt) { r.reason = "reserve still repaying"; return r; }
     const m = this.mana();
-    if (m < mana || m - mana < this.bigFloor(c)) { r.reason = "reserve too low right now"; return r; }
+    // Review H1: Mana already locked by other open tickets is not for sale again.
+    if (m < mana || m - mana < this.bigFloor(c) + b.ticket_open) { r.reason = "reserve too low right now"; return r; }
     r.available = true; return r;
   }
   quote_big_upload(args: station.quote_big_upload_arguments): station.quote_big_upload_result {
@@ -537,10 +720,17 @@ export class Station {
     System.require(!c.paused, "paused");
     System.require(isAddress(args.buyer) && System.checkAuthority(authority.authorization_type.contract_call, args.buyer!), "buyer must sign");
     System.require(!this.suspended.has(args.buyer!), "buyer suspended");
-    System.require(args.kind == 1 && isAddress(args.target), "kind 1 (paying app contract) only; account allowances were removed (Carl, 9:09 PM)");
+    // kind 1 = app plan (target = the app contract); kind 2 = Mana pass (target = a wallet; its own txs, any contract
+    // except money moves; Carl, Oct 20 10:58, reversing 9:09 PM with "no token moves").
+    System.require((args.kind == 1 || args.kind == 2) && isAddress(args.target), "kind 1 (app plan) or kind 2 (wallet Mana pass)");
     System.require(!Arrays.equal(args.target!, this.contractId), "not the station");
     System.require(!this.isMoneyContract(args.target!), "token contracts (KOIN, stablecoins) cannot be sponsored");
+    // Audit #3: the app itself must approve being sponsored (its key, or its own authorize, signs this purchase), so
+    // nobody can claim another developer's contract and lock them out.
+    System.require(System.checkAuthority(authority.authorization_type.contract_call, args.target!), "the target app must approve (sign) this purchase");
+    this.sweep(c, now, args.token!);                                    // audit #4: close finished purchases first (same token: M1)
     this.committed(c, now, true);                                       // clean expired entries
+    System.require(this.openFor(args.buyer!, now) < this.maxPerBuyer(c), "this wallet already has the most open allowances and tickets allowed");
     const existing = this.targets.get(args.target!);
     if (existing != null) { const e = this.allowances.get(u32Key(u32(existing.total))); System.require(e == null || e.expiry <= now, "target already has an allowance; renew it"); }
     const q = this.allowanceQuote(c, args.token!, args.mana_per_day, args.days, now, 0);
@@ -550,7 +740,7 @@ export class Station {
     const a = new station.allowance_object(b.next_id, args.buyer, args.kind, args.target, args.mana_per_day, now + args.days * DAY, new station.window_object());
     a.token = args.token; a.term_days = args.days; a.unit_price = q.unit_price; a.paid = q.price; a.term_start = now; a.total_paid = q.price;
     const e = this.newPurchase(1, args.buyer!, args.token!, q.price, now, a.expiry);
-    e.days = args.days; e.per_day = q.price / args.days; e.allowance_id = a.id; this.escrow.put(u32Key(e.id), e);
+    e.days = args.days; e.per_day = q.price / args.days; e.allowance_id = a.id; e.min_keep = this.minKeep(args.token!, q.price); this.escrow.put(u32Key(e.id), e);
     a.purchase_ids.push(e.id);
     this.allowances.put(u32Key(a.id), a);
     const reg = this.registry.get()!; reg.open_ids.push(a.id); this.registry.put(reg);
@@ -565,6 +755,7 @@ export class Station {
     System.require(isAddress(args.payer) && System.checkAuthority(authority.authorization_type.contract_call, args.payer!), "payer must sign");
     const a = this.allowances.get(u32Key(args.id)); System.require(a != null, "no such allowance");
     System.require(!this.suspended.has(args.payer!) && !this.suspended.has(a!.buyer!), "buyer suspended");
+    this.sweep(c, now, args.token!);                                    // audit #4
     const t = this.targets.get(a!.target!); System.require(t != null, "target was taken by another allowance");
     System.require(u32(t!.total) == a!.id, "target was taken by another allowance");
     const q = this.allowanceQuote(c, args.token!, a!.mana_per_day, args.days, now, a!.id);
@@ -580,7 +771,7 @@ export class Station {
     for (let i = 0; i < a!.purchase_ids.length; i++) { const x = this.escrow.get(u32Key(a!.purchase_ids[i])); if (x != null && !x.closed) keep.push(x.id); }
     System.require(keep.length < MAX_TERMS, "too many open terms on this allowance");
     const e = this.newPurchase(1, args.payer!, args.token!, q.price, start, a!.expiry);
-    e.days = args.days; e.per_day = q.price / args.days; e.allowance_id = a!.id; this.escrow.put(u32Key(e.id), e);
+    e.days = args.days; e.per_day = q.price / args.days; e.allowance_id = a!.id; e.min_keep = this.minKeep(args.token!, q.price); this.escrow.put(u32Key(e.id), e);
     keep.push(e.id); a!.purchase_ids = keep;
     this.allowances.put(u32Key(a!.id), a!);
     System.event("station.allowance_renewed", Protobuf.encode(new station.purchase_event(a!, null, args.token, q.price, true, false, ALLOWANCE_TERMS), station.purchase_event.encode), [args.payer!, a!.target!]);
@@ -593,22 +784,27 @@ export class Station {
     System.require(isAddress(args.buyer) && System.checkAuthority(authority.authorization_type.contract_call, args.buyer!), "buyer must sign");
     System.require(isAddress(args.payee) && !Arrays.equal(args.payee!, this.contractId), "payee required");
     System.require(!this.suspended.has(args.buyer!), "buyer suspended");
+    this.sweep(c, now, args.token!);                                    // audit #4 (may also settle an expired ticket here)
     const old = this.tickets.get(args.payee!); System.require(old == null, "payee already has a ticket");
+    System.require(this.openFor(args.buyer!, now) < this.maxPerBuyer(c), "this wallet already has the most open allowances and tickets allowed"); // Carl, 8:43 PM
     const cd = this.ticketCd.get(args.buyer!);
-    System.require(cd == null || now >= cd.total, "buyer cooldown after a refunded ticket");
+    System.require(cd == null || now >= cd.total, "buyer cooldown: one ticket per buyer per cooldown period");
     const q = this.bigQuote(c, args.token!, args.mana, now);
     System.require(q.available, q.reason != null ? q.reason! : "unavailable");
     System.require(q.price <= args.max_price, "price above the accepted quote");
     const b = this.big.get()!;
-    const prevLast = b.last_buy;
-    b.debt = this.debtNow(c, b, now) + args.mana; b.debt_ts = now; b.last_buy = now;
+    b.debt = this.debtNow(c, b, now) + args.mana; b.debt_ts = now;
+    b.ticket_open += args.mana;                                          // review H1: this Mana is now locked for the buyer
     if (b.week == null) b.week = new station.window_object();
     roll(b.week!, now / DAY, WEEK_N, false); add(b.week!, now / DAY, WEEK_N, args.mana, false);
     this.big.put(b);
     const t = new station.ticket_object(args.buyer, args.mana, args.mana, now + (c.big_ticket_ms > 0 ? c.big_ticket_ms : DEFAULT_TICKET_MS), args.allow_upload, args.token, q.price);
-    t.bought = now; t.prev_last_buy = prevLast;
+    t.bought = now;
+    // Audit #2: per-buyer wait, counted from the purchase. One buyer can't block others, and buy-cancel loops still
+    // can't repeat faster than once per cooldown (so no separate refund-triggered cooldown is needed).
+    if (c.big_cooldown_ms > 0) this.ticketCd.put(args.buyer!, new station.revenue_object(now + c.big_cooldown_ms));
     const e = this.newPurchase(2, args.buyer!, args.token!, q.price, now, t.expiry);
-    e.payee = args.payee; e.mana = args.mana; this.escrow.put(u32Key(e.id), e); t.purchase_id = e.id;
+    e.payee = args.payee; e.mana = args.mana; e.min_keep = this.minKeep(args.token!, q.price); this.escrow.put(u32Key(e.id), e); t.purchase_id = e.id;
     this.tickets.put(args.payee!, t);
     System.event("station.big_upload_bought", Protobuf.encode(new station.purchase_event(null, t, args.token, q.price, true, false, BIG_TERMS), station.purchase_event.encode), [args.buyer!, args.payee!]);
     this.collect(args.token!, args.buyer!, q.price);
@@ -616,24 +812,56 @@ export class Station {
   }
 
   // ═══════ admin ═══════
+  isCouncil(c: station.config_object, a: Uint8Array): bool {
+    for (let i = 0; i < c.council.length; i++) if (Arrays.equal(c.council[i], a)) return true;
+    return false;
+  }
+  isOperator(c: station.config_object, a: Uint8Array): bool { return (isAddress(c.owner) && Arrays.equal(c.owner, a)) || this.isCouncil(c, a); }
+  /** Everyday actions: the owner (review H1: one council member can't disrupt operations; the council can replace the
+   *  owner with a kind-8 proposal). Council members can only PAUSE (emergency brake), vote and veto. */
   requireOwner(): station.config_object {
     const c = this.config.get()!;
     System.require(isAddress(c.owner), "not initialized");
     System.require(System.checkAuthority(authority.authorization_type.contract_call, c.owner!), "owner only");
     return c;
   }
+  signedCouncil(c: station.config_object): bool {
+    for (let i = 0; i < c.council.length; i++) if (System.checkAuthority(authority.authorization_type.contract_call, c.council[i])) return true;
+    return false;
+  }
+  checkCouncil(council: Uint8Array[], threshold: u32, delay: u64): void {
+    System.require(council.length >= 2 && council.length <= MAX_COUNCIL, "council: 2 to 7 members");
+    for (let i = 0; i < council.length; i++) {
+      System.require(isAddress(council[i]) && !Arrays.equal(council[i], this.contractId), "council: wallet addresses only");
+      for (let j = 0; j < i; j++) System.require(!Arrays.equal(council[i], council[j]), "council: duplicate member");
+    }
+    System.require(threshold >= 2 && threshold <= u32(council.length), "threshold: at least 2, at most the council size");
+    System.require(delay >= MIN_GUARD_DELAY_MS && delay <= MAX_GUARD_DELAY_MS, "guard delay: 48 h (mainnet) to 30 days");
+  }
   checkConfig(c: station.config_object): void {
-    System.require(isAddress(c.owner), "owner required");
+    System.require(isAddress(c.owner) && !Arrays.equal(c.owner!, this.contractId), "owner required (an external wallet)");
     System.require(c.refill_bp <= 2000, "daily budget above one day's refill (20%)");
     System.require(c.buffer_bp <= 5000, "buffer above 50%");
     System.require(c.ticket_fee_bp <= 2000, "ticket fee above 20%");
     System.require(!isAddress(c.treasury) || !Arrays.equal(c.treasury!, this.contractId), "treasury must be an external wallet (escrow lives in the station)");
     System.require(c.koin_amount <= this.koinBalance(), "koin_amount above the station's KOIN balance");
+    this.checkCouncil(c.council, c.threshold, c.guard_delay_ms);
     this.validateReservations(c, 0, null);
   }
   init(args: station.init_arguments): station.init_result {
     System.require(!isAddress(this.config.get()!.owner), "already initialized");
-    System.require(System.checkAuthority(authority.authorization_type.contract_call, this.contractId), "station key only");
+    // Audit #1: setup is only valid inside the transaction that uploads this station, with all three permissions taken
+    // over. Only the key holder can make that first upload, so nobody can front-run init, and a deploy that forgot the
+    // lockdown can't be set up at all.
+    // The upload tx carries the whole bytecode: read it with the big buffer. (Not in the test build: its test runner
+    // never frees memory, so a 1 MiB buffer per test runs it out; each real call gets fresh memory.)
+    if (!BUILD_FOR_TESTING) System.setSystemBufferSize(BIG_TX_BUFFER);
+    const ops = txOps(); let ok = false;
+    for (let i = 0; i < ops.length; i++) {
+      const up = ops[i].upload_contract;
+      if (up != null && Arrays.equal(up.contract_id, this.contractId) && up.authorizes_call_contract && up.authorizes_transaction_application && up.authorizes_upload_contract) ok = true;
+    }
+    System.require(ok, "init only in the station's own upload transaction, with all three permissions taken over");
     System.require(args.config != null, "config required");
     this.checkConfig(args.config!);
     this.config.put(args.config!);
@@ -641,12 +869,24 @@ export class Station {
   }
   set_config(args: station.set_config_arguments): station.set_config_result {
     this.requireOwner(); System.require(args.config != null, "config required");
-    args.config!.paused = this.config.get()!.paused;                     // pause only via set_paused (escrow clock)
+    const old = this.config.get()!; const n = args.config!;
+    const oldCap = this.soldCap(old);
+    n.paused = old.paused;                                               // pause only via set_paused (escrow clock)
+    // Audit #1: these change only through a council proposal (delay + veto).
+    let same = Arrays.equal(n.owner, old.owner) && Arrays.equal(n.treasury, old.treasury) && n.threshold == old.threshold
+      && n.guard_delay_ms == old.guard_delay_ms && n.council.length == old.council.length && this.ticketFeeBp(n) <= this.ticketFeeBp(old);
+    for (let i = 0; same && i < n.council.length; i++) same = Arrays.equal(n.council[i], old.council[i]);
+    System.require(same, "owner, treasury, council, threshold, delay and a higher ticket fee change only through a council proposal");
     this.checkConfig(args.config!); this.config.put(args.config!);
+    this.noOversell(args.config!, this.now(), oldCap);                  // audit #7
     return new station.set_config_result();
   }
   set_paused(args: station.set_paused_arguments): station.set_paused_result {
-    const c = this.requireOwner(); const now = this.now(); const b = this.big.get()!;
+    // Pause: the owner or any council member (emergency brake). Resume: the owner only.
+    let c = this.config.get()!;
+    if (args.paused && isAddress(c.owner) && !System.checkAuthority(authority.authorization_type.contract_call, c.owner!)) System.require(this.signedCouncil(c), "owner or council only");
+    else c = this.requireOwner();
+    const now = this.now(); const b = this.big.get()!;
     if (args.paused && !c.paused) { b.paused_at = now; this.big.put(b); }
     else if (!args.paused && c.paused) {
       // Fair option (Carl, 7:47 PM): paused time is CREDITED. Every open purchase, allowance and ticket that was
@@ -673,9 +913,11 @@ export class Station {
     const c = this.requireOwner();
     System.require(args.value != null && args.app != GLOBAL_KEY, "app value required");
     this.validateReservations(c, args.app, args.value);                 // boosts are explicit owner permission
+    const oldCap = this.soldCap(c);
     this.apps.put(u32Key(args.app), args.value!);
     const reg = this.registry.get()!;
     if (!reg.app_ids.includes(args.app)) { System.require(reg.app_ids.length < 32, "too many apps"); reg.app_ids.push(args.app); this.registry.put(reg); }
+    this.noOversell(c, this.now(), oldCap);                             // audit #7
     return new station.set_app_result();
   }
   set_entry(args: station.set_entry_arguments): station.set_entry_result {
@@ -709,8 +951,12 @@ export class Station {
     this.requireOwner();                                                // owner key only
     System.require(isAddress(args.contract_id) && !Arrays.equal(args.contract_id!, this.contractId), "contract id required");
     const ev = new station.exempt_event(args.contract_id, args.value, args.remove);
-    if (args.remove) this.exempt.remove(args.contract_id!);
-    else { System.require(args.value != null, "value required"); this.exempt.put(args.contract_id!, args.value!); }
+    if (args.remove) { this.exempt.remove(args.contract_id!); this.unindexExempt(args.contract_id!); }
+    else {
+      System.require(args.value != null, "value required");
+      System.require(args.value!.app == 0 || this.apps.has(u32Key(args.value!.app)), "no such app slot (create it with set_app first)"); // review L2
+      this.exempt.put(args.contract_id!, args.value!); this.indexExempt(args.contract_id!);
+    }
     System.event("station.exempt_changed", Protobuf.encode(ev, station.exempt_event.encode), [args.contract_id!]);
     return new station.set_exempt_result();
   }
@@ -724,6 +970,7 @@ export class Station {
     // never KOIN or any other token (Carl, 8:10 PM). Mana itself can't be transferred at all.
     System.require(Arrays.equal(args.token!, Base58.decode(VUSDT)) || Arrays.equal(args.token!, Base58.decode(VUSDC)), "only vUSDT or vUSDC");
     const v = args.value!;
+    System.require(v.min_purchase <= v.max_per_purchase, "minimum charge above the per-purchase maximum"); // review L4
     System.require(v.price_1d <= MAX_UNIT_PRICE && v.price_7d <= MAX_UNIT_PRICE && v.price_30d <= MAX_UNIT_PRICE && v.big_per_1000 <= MAX_UNIT_PRICE, "price too large");
     // Affects new purchases and renewals only: existing allowances and tickets keep their stored snapshot and expiry.
     this.prices.put(args.token!, args.value!);
@@ -731,12 +978,12 @@ export class Station {
   }
   // ═══════ escrow: cancel, settle, release, owner refund (Carl, 7:47 PM) ═══════
   /** End an allowance's terms at time t: refund unused whole days; return the new expiry (end of the paid current day). */
-  endTerms(a: station.allowance_object, t: u64, action: string): u64[] {
+  endTerms(a: station.allowance_object, t: u64, action: string, keepMin: bool = true): u64[] {
     let refund: u64 = 0; let newExpiry: u64 = t;
     for (let i = 0; i < a.purchase_ids.length; i++) {
       const e = this.escrow.get(u32Key(a.purchase_ids[i]));
       if (e == null || e.closed || t >= e.end) continue;                // finished terms: releasable as they are
-      const r = this.termRefund(e!, t);
+      const r = this.termRefund(e!, t, keepMin);
       // Shorten the term to what was used, so nothing can be refunded twice (later refunds compute 0 unused days).
       const used = e!.days - this.unusedDays(e!, t);
       if (t < e!.start) e!.end = e!.start;                               // future term: nothing used
@@ -744,14 +991,22 @@ export class Station {
       e!.days = t < e!.start ? 0 : used;
       this.escrow.put(u32Key(e!.id), e!);
       this.doRefund(e!, r, action);
+      refund += r;
+      if (t < e!.start) {
+        // Review C1 (critical, pre-existing): a future (renewed) term that is refunded must NOT keep the service alive.
+        // It used to set end = start and then extend the expiry to that start, so a buyer got ~86% back and kept the
+        // service. Now it never counts toward the expiry and is closed at once (anything kept goes to the treasury).
+        this.doRelease(this.config.get()!, this.escrow.get(u32Key(e!.id))!, "term_cancelled");
+        continue;
+      }
       if (e!.end > newExpiry) newExpiry = e!.end;
     }
     a.expiry = newExpiry; this.allowances.put(u32Key(a.id), a);
     return [refund, newExpiry];
   }
-  refundSum(a: station.allowance_object, t: u64): u64 {
+  refundSum(a: station.allowance_object, t: u64, keepMin: bool = true): u64 {
     let r: u64 = 0;
-    for (let i = 0; i < a.purchase_ids.length; i++) { const e = this.escrow.get(u32Key(a.purchase_ids[i])); if (e != null && !e.closed) r += this.termRefund(e, t); }
+    for (let i = 0; i < a.purchase_ids.length; i++) { const e = this.escrow.get(u32Key(a.purchase_ids[i])); if (e != null && !e.closed && t < e.end) r += this.termRefund(e, t, keepMin); }
     return r;
   }
   cancel_allowance(args: station.cancel_allowance_arguments): station.cancel_allowance_result {
@@ -767,7 +1022,7 @@ export class Station {
     return new station.cancel_allowance_result(r, x[1]);
   }
   /** Settle a ticket: refund unused Mana, release the rest to Carl, free its debt. */
-  settleTicket(c: station.config_object, payee: Uint8Array, t: station.ticket_object, buyerCooldown: bool, action: string, now: u64, noRefund: bool = false): u64[] {
+  settleTicket(c: station.config_object, payee: Uint8Array, t: station.ticket_object, withFee: bool, action: string, now: u64, noRefund: bool = false): u64[] {
     const e = this.escrow.get(u32Key(t.purchase_id));
     let r: u64 = 0, rel: u64 = 0;
     // Fee-free hold fix (Carl, 8:02 PM): unused Mana is released from every counter, once (the ticket is removed here,
@@ -775,6 +1030,7 @@ export class Station {
     const b = this.big.get()!; const d = this.debtNow(c, b, now);
     const unused = t.remaining;
     b.debt = unused >= d ? 0 : d - unused; b.debt_ts = now;                 // outstanding
+    b.ticket_open = b.ticket_open > unused ? b.ticket_open - unused : 0;     // review H1: the lock ends here
     if (unused > 0 && b.week != null) {                                       // weekly cap: only used Mana counts
       roll(b.week!, now / DAY, WEEK_N, false);
       const slot = t.bought / DAY;
@@ -783,14 +1039,12 @@ export class Station {
         b.week!.mana[i] = b.week!.mana[i] > unused ? b.week!.mana[i] - unused : 0;
       }
     }
-    if (unused > 0 && b.last_buy == t.bought) b.last_buy = t.prev_last_buy; // lift the station-wide wait this ticket started
     this.big.put(b);
     this.tickets.remove(payee);
     if (e != null && !e.closed) {
-      r = noRefund ? 0 : this.ticketRefund(e!, t, buyerCooldown ? this.ticketFeeBp(c) : 0); // owner refund: no fee
-      // Anti-spam without a fee (Carl, 7:59 PM): after a buyer gets unused Mana back (cancel or expiry), that buyer waits
-      // big_cooldown_ms before buying another ticket. Owner refunds don't trigger it.
-      if (buyerCooldown && r > 0) this.ticketCd.put(t.buyer!, new station.revenue_object(now + c.big_cooldown_ms));
+      r = noRefund ? 0 : this.ticketRefund(e!, t, this.clock(c, now), withFee ? this.ticketFeeBp(c) : 0); // owner refund: no fee
+      // Audit #2/#8: no cooldown is started here any more. The per-buyer wait runs from the purchase, so a stranger
+      // closing an expired ticket late can't extend the buyer's wait.
       e!.end = now; this.escrow.put(u32Key(e!.id), e!);
       this.doRefund(e!, r, action);
       rel = this.doRelease(c, this.escrow.get(u32Key(e!.id))!, "ticket_settle");
@@ -800,7 +1054,7 @@ export class Station {
   close_ticket(args: station.close_ticket_arguments): station.close_ticket_result {
     const c = this.config.get()!; const now = this.now(); const t0 = this.clock(c, now);
     const t = this.tickets.get(args.payee!); System.require(t != null, "no ticket");
-    System.require(t0 >= t!.expiry || t!.remaining == 0, "ticket still valid");
+    System.require(this.ticketEnded(t!, t0), "ticket still valid");     // lock expired or Mana used up
     // Suspended buyer: only the owner settles, and this path refunds nothing (forfeit, never early: the ticket has
     // ended). To refund a buyer who wasn't at fault the owner uses owner_refund instead.
     const sus = this.suspended.get(t!.buyer!);
@@ -829,20 +1083,26 @@ export class Station {
     System.require(t >= e!.end, "term not ended: funds stay in escrow");
     const sus = this.suspended.get(e!.buyer!);
     System.require(sus == null || sus.reason != 2, "sanctions: funds frozen in escrow pending legal review");
+    const al = this.allowances.get(u32Key(e!.allowance_id));
+    if (al != null) { const so = this.suspended.get(al.buyer!); System.require(so == null || so.reason != 2, "sanctions: funds frozen in escrow pending legal review"); } // review L5
     return new station.release_result(this.doRelease(c, e!, "release"));
   }
   owner_refund(args: station.owner_refund_arguments): station.owner_refund_result {
     const c = this.requireOwner(); const now = this.now(); const t = this.clock(c, now);
+    const who = args.allowance_id > 0 ? (this.allowances.get(u32Key(args.allowance_id)) != null ? this.allowances.get(u32Key(args.allowance_id))!.buyer : null)
+      : (isAddress(args.ticket_payee) && this.tickets.get(args.ticket_payee!) != null ? this.tickets.get(args.ticket_payee!)!.buyer : null);
+    System.require(who == null || !this.isOperator(c, who!), "the owner can't refund purchases made by the owner or a council member"); // review L4
     if (args.allowance_id > 0) {
       const a = this.allowances.get(u32Key(args.allowance_id)); System.require(a != null, "no such allowance");
       this.noSanctionedRefund(a!.buyer!);
-      const r = this.refundSum(a!, t);
-      this.endTerms(a!, t, "owner_refund");
+      const r = this.refundSum(a!, t, false);                            // buyer not at fault: no minimum kept
+      this.endTerms(a!, t, "owner_refund", false);
       return new station.owner_refund_result(r);
     }
     System.require(isAddress(args.ticket_payee), "allowance_id or ticket_payee");
     const tk = this.tickets.get(args.ticket_payee!); System.require(tk != null, "no ticket");
     this.noSanctionedRefund(tk!.buyer!);
+    if (this.ticketCd.has(tk!.buyer!)) this.ticketCd.remove(tk!.buyer!);  // buyer not at fault: lift their wait too
     const x = this.settleTicket(c, args.ticket_payee!, tk!, false, "owner_refund", now);
     return new station.owner_refund_result(x[0]);
   }
@@ -856,10 +1116,267 @@ export class Station {
     const c = this.config.get()!; const t = this.clock(c, this.now());
     r.purchase = e;
     if (e.kind == 1) { r.refundable_now = this.termRefund(e, t); r.releasable = !e.closed && t >= e.end; }
-    else { const tk = this.tickets.get(e.payee!); if (tk != null) r.refundable_now = this.ticketRefund(e, tk, this.ticketFeeBp(c)); }
+    else { const tk = this.tickets.get(e.payee!); if (tk != null) r.refundable_now = this.ticketRefund(e, tk, t, this.ticketFeeBp(c)); }
     return r;
   }
   get_escrow_totals(args: station.get_escrow_totals_arguments): station.get_escrow_totals_result {
     const r = new station.get_escrow_totals_result(); r.totals = this.escrowTot.get(args.token!); return r;
+  }
+  /** Oct 21: the sponsorship decision as a dry run (nothing written, no events). A snapshot: the real transaction can
+   *  still be refused if something changes before it lands, so callers keep the own-Mana fallback for that case. */
+  would_pay(args: station.would_pay_arguments): station.would_pay_result {
+    const r = new station.would_pay_result();
+    const c = this.config.get()!;
+    if (!isAddress(args.payee)) return r;
+    const ops = new Array<protocol.operation>();
+    for (let i = 0; i < args.operations.length; i++) {
+      const x = args.operations[i]; const o = new protocol.operation();
+      const cid = x.contract_id != null ? x.contract_id! : new Uint8Array(0); const xa = x.args != null ? x.args! : new Uint8Array(0);
+      if (x.upload) o.upload_contract = new protocol.upload_contract_operation(cid, new Uint8Array(0));
+      else if (!x.other) o.call_contract = new protocol.call_contract_operation(cid, x.entry_point, xa);
+      ops.push(o);
+    }
+    this.dry = true;
+    r.pay = this.decide(c, args.payee!, args.rc_limit, ops);
+    this.dry = false;
+    r.route = r.pay ? this.route : "";
+    return r;
+  }
+
+  // ═══════ connected apps (Carl, Oct 20): one list, one-step connect / disconnect ═══════
+  indexExempt(id: Uint8Array): void {
+    const reg = this.registry.get()!;
+    for (let i = 0; i < reg.exempt_ids.length; i++) if (Arrays.equal(reg.exempt_ids[i], id)) return;
+    System.require(reg.exempt_ids.length < MAX_EXEMPT, "too many connected apps (64)");
+    reg.exempt_ids.push(id); this.registry.put(reg);
+  }
+  unindexExempt(id: Uint8Array): void {
+    const reg = this.registry.get()!; const keep = new Array<Uint8Array>();
+    for (let i = 0; i < reg.exempt_ids.length; i++) if (!Arrays.equal(reg.exempt_ids[i], id)) keep.push(reg.exempt_ids[i]);
+    reg.exempt_ids = keep; this.registry.put(reg);
+  }
+  connect_app(args: station.connect_app_arguments): station.connect_app_result {
+    const c = this.requireOwner(); const now = this.now();
+    System.require(isAddress(args.contract_id) && !Arrays.equal(args.contract_id!, this.contractId), "contract id required");
+    System.require(!this.isMoneyContract(args.contract_id!), "token contracts (KOIN, stablecoins) cannot be sponsored");
+    System.require(args.mana_per_day >= MANA, "at least 1 Mana per day (use disconnect_app to remove)");
+    const oldCap = this.soldCap(c);
+    const ex = this.exempt.get(args.contract_id!);
+    let id: u32 = 0;
+    if (ex != null && ex.app > 0 && !this.slotShared(ex.app, args.contract_id!)) id = ex.app;
+    else { id = 1; while (this.apps.has(u32Key(id))) id++; this.appWin.remove(u32Key(id)); } // review L2: own, clean slot
+    let a = this.apps.get(u32Key(id)); if (a == null) a = new station.app_object();
+    a.reserved_mana = args.mana_per_day; a.active = true;
+    this.validateReservations(c, id, a);
+    this.apps.put(u32Key(id), a);
+    const reg = this.registry.get()!;
+    if (!reg.app_ids.includes(id)) { System.require(reg.app_ids.length < 32, "too many apps"); reg.app_ids.push(id); this.registry.put(reg); }
+    const v = new station.exempt_object(id, args.strict);
+    this.exempt.put(args.contract_id!, v); this.indexExempt(args.contract_id!);
+    this.noOversell(c, now, oldCap);
+    System.event("station.exempt_changed", Protobuf.encode(new station.exempt_event(args.contract_id, v, false), station.exempt_event.encode), [args.contract_id!]);
+    return new station.connect_app_result(id);
+  }
+  /** True when another connected contract also points at slot `app`. */
+  slotShared(app: u32, except: Uint8Array): bool {
+    const reg = this.registry.get()!;
+    for (let i = 0; i < reg.exempt_ids.length; i++) { if (Arrays.equal(reg.exempt_ids[i], except)) continue; const o = this.exempt.get(reg.exempt_ids[i]); if (o != null && o.app == app) return true; }
+    return false;
+  }
+  disconnect_app(args: station.disconnect_app_arguments): station.disconnect_app_result {
+    this.requireOwner();
+    const ex = this.exempt.get(args.contract_id!); System.require(ex != null, "not connected");
+    this.exempt.remove(args.contract_id!); this.unindexExempt(args.contract_id!);
+    if (ex!.app > 0) {                                                  // free its slot unless another contract shares it
+      const reg = this.registry.get()!; let shared = false;
+      for (let i = 0; i < reg.exempt_ids.length; i++) { const o = this.exempt.get(reg.exempt_ids[i]); if (o != null && o.app == ex!.app) shared = true; }
+      if (!shared) {
+        this.apps.remove(u32Key(ex!.app));
+        const keep = new Array<u32>(); for (let i = 0; i < reg.app_ids.length; i++) if (reg.app_ids[i] != ex!.app) keep.push(reg.app_ids[i]);
+        reg.app_ids = keep; this.registry.put(reg);
+      }
+    }
+    System.event("station.exempt_changed", Protobuf.encode(new station.exempt_event(args.contract_id, ex, true), station.exempt_event.encode), [args.contract_id!]);
+    return new station.disconnect_app_result();
+  }
+  list_connected(args: station.list_connected_arguments): station.list_connected_result {
+    const c = this.config.get()!; const now = this.now(); const reg = this.registry.get()!;
+    const r = new station.list_connected_result(); const seen = new Array<u32>();
+    for (let i = 0; i < reg.exempt_ids.length; i++) {
+      const ex = this.exempt.get(reg.exempt_ids[i]); if (ex == null) continue;
+      const x = new station.connected_app(); x.contract_id = reg.exempt_ids[i]; x.app = ex.app; x.strict = ex.strict;
+      if (ex.app > 0) {
+        seen.push(ex.app); const a = this.apps.get(u32Key(ex.app));
+        if (a != null) { x.mana_per_day = a.reserved_mana; x.boost_mana = a.boost_mana; x.boost_until = a.boost_until; x.active = a.active; }
+        const w = this.appWin.get(u32Key(ex.app))!; roll(w, now / APP_SLOT, APP_N, true); x.used_24h = sumMana(w);
+      }
+      r.free_apps.push(x);
+    }
+    for (let i = 0; i < reg.app_ids.length; i++) {                     // reserved slots with no contract linked yet
+      if (seen.includes(reg.app_ids[i])) continue;
+      const a = this.apps.get(u32Key(reg.app_ids[i])); if (a == null) continue;
+      const x = new station.connected_app(); x.app = reg.app_ids[i]; x.mana_per_day = a.reserved_mana; x.active = a.active;
+      const w = this.appWin.get(u32Key(reg.app_ids[i]))!; roll(w, now / APP_SLOT, APP_N, true); x.used_24h = sumMana(w);
+      r.free_apps.push(x);
+    }
+    for (let i = 0; i < reg.open_ids.length; i++) {
+      const a = this.allowances.get(u32Key(reg.open_ids[i])); if (a == null) continue;
+      const x = new station.paid_app(); x.id = a.id; x.buyer = a.buyer; x.target = a.target; x.mana_per_day = a.mana_per_day; x.expiry = a.expiry; x.kind = a.kind;
+      if (a.day != null) { roll(a.day!, now / USER_SLOT, USER_N, false); x.used_24h = sumMana(a.day!); }
+      x.suspended = this.suspended.has(a.buyer!);
+      r.paid.push(x);
+    }
+    r.daily_budget = this.dailyBudget(c); r.reserved = this.reservedTotal(); r.sellable = this.soldCap(c);
+    r.sold = this.committed(c, now, false)[0]; r.mana = this.mana();
+    return r;
+  }
+
+  // ═══════ council (audit #1): M-of-N approval + delay for money moves and upgrades; any one member can veto ═══════
+  validCount(c: station.config_object, p: station.proposal_object): u32 {
+    let n: u32 = 0;
+    for (let i = 0; i < p.approvals.length; i++) if (this.isCouncil(c, p.approvals[i])) n++;
+    return n;
+  }
+  propEvent(p: station.proposal_object, by: Uint8Array, what: string): void {
+    System.event("station.proposal_" + what, Protobuf.encode(new station.proposal_event(p, by, what), station.proposal_event.encode), [by]);
+  }
+  maybeReady(c: station.config_object, p: station.proposal_object, now: u64, by: Uint8Array): void {
+    if (p.ready_at == 0 && this.validCount(c, p) >= c.threshold) { p.ready_at = now + c.guard_delay_ms; this.propEvent(p, by, "ready"); }
+  }
+  /** Review L1: after a council change every open proposal restarts its wait, counted from now with current members. */
+  rearm(c: station.config_object, now: u64): void {
+    const reg = this.registry.get()!;
+    for (let i = 0; i < reg.open_proposals.length; i++) {
+      const q = this.proposals.get(u32Key(reg.open_proposals[i])); if (q == null) continue;
+      q.ready_at = 0; this.maybeReady(c, q, now, new Uint8Array(0)); this.proposals.put(u32Key(q.id), q);
+    }
+  }
+  closeProposal(p: station.proposal_object): void {
+    this.proposals.put(u32Key(p.id), p);
+    const reg = this.registry.get()!; const keep = new Array<u32>();
+    for (let i = 0; i < reg.open_proposals.length; i++) if (reg.open_proposals[i] != p.id) keep.push(reg.open_proposals[i]);
+    reg.open_proposals = keep; this.registry.put(reg);
+  }
+  requireCouncil(c: station.config_object, signer: Uint8Array | null): void {
+    System.require(isAddress(signer) && this.isCouncil(c, signer!), "council members only");
+    System.require(System.checkAuthority(authority.authorization_type.contract_call, signer!), "signer must sign");
+  }
+  openProposal(id: u32): station.proposal_object {
+    const p = this.proposals.get(u32Key(id)); System.require(p != null, "no such proposal");
+    System.require(!p!.executed && !p!.cancelled, "proposal already closed");
+    return p!;
+  }
+  checkAction(a: station.guarded_action): void {
+    System.require(a.kind >= 1 && a.kind <= 8, "kind 1-8");
+    if (a.kind == 1) { const h = a.hash; System.require(h != null && h.length == 34 && h[0] == 0x12 && h[1] == 0x20, "upgrade: sha2-256 multihash (0x1220…) of the new bytecode"); }
+    if (a.kind == 2 || a.kind == 3 || a.kind == 6 || a.kind == 8) System.require(isAddress(a.to) && !Arrays.equal(a.to, this.contractId), "a wallet address is required");
+    if (a.kind == 2 || a.kind == 3) System.require(a.amount > 0, "amount required");
+    if (a.kind == 3) System.require(isAddress(a.token) && !Arrays.equal(a.token, this.koinId()), "token required (use kind 2 for KOIN)");
+    if (a.kind == 4) this.checkCouncil(a.council, a.threshold, this.config.get()!.guard_delay_ms);
+    if (a.kind == 5) System.require(a.delay_ms >= MIN_GUARD_DELAY_MS && a.delay_ms <= MAX_GUARD_DELAY_MS, "guard delay: 48 h (mainnet) to 30 days");
+    if (a.kind == 7) System.require(a.fee_bp <= 2000, "ticket fee above 20%");
+  }
+  propose(args: station.propose_arguments): station.propose_result {
+    const c = this.config.get()!; System.require(isAddress(c.owner), "not initialized");
+    this.requireCouncil(c, args.signer); System.require(args.action != null, "action required");
+    this.checkAction(args.action!);
+    const reg = this.registry.get()!;
+    System.require(reg.open_proposals.length < MAX_OPEN_PROPOSALS, "too many open proposals (16)");
+    let mine = 0;
+    for (let i = 0; i < reg.open_proposals.length; i++) { const q = this.proposals.get(u32Key(reg.open_proposals[i])); if (q != null && Arrays.equal(q.proposer, args.signer!)) mine++; }
+    System.require(mine < MAX_PER_PROPOSER, "this member already has 3 open proposals");
+    reg.next_proposal += 1; const id = reg.next_proposal; reg.open_proposals.push(id); this.registry.put(reg);
+    const now = this.now();
+    const p = new station.proposal_object(id, args.action, args.signer, [args.signer!], now);
+    this.propEvent(p, args.signer!, "created");
+    this.maybeReady(c, p, now, args.signer!);
+    this.proposals.put(u32Key(id), p);
+    return new station.propose_result(id);
+  }
+  approve(args: station.approve_arguments): station.approve_result {
+    const c = this.config.get()!; this.requireCouncil(c, args.signer);
+    const p = this.openProposal(args.id);
+    for (let i = 0; i < p.approvals.length; i++) System.require(!Arrays.equal(p.approvals[i], args.signer!), "already approved");
+    p.approvals.push(args.signer!);
+    this.propEvent(p, args.signer!, "approved");
+    this.maybeReady(c, p, this.now(), args.signer!);
+    this.proposals.put(u32Key(p.id), p);
+    return new station.approve_result(p.ready_at);
+  }
+  cancel_proposal(args: station.cancel_proposal_arguments): station.cancel_proposal_result {
+    const c = this.config.get()!; this.requireCouncil(c, args.signer);
+    const p = this.openProposal(args.id);
+    // Review H1: a member can't veto a council change that removes them (or they could never be removed).
+    if (p.action != null && p.action!.kind == 4) {
+      let stays = false; for (let i = 0; i < p.action!.council.length; i++) if (Arrays.equal(p.action!.council[i], args.signer!)) stays = true;
+      System.require(stays, "a member can't veto their own removal");
+    }
+    p.cancelled = true; p.cancelled_by = args.signer; this.closeProposal(p);
+    this.propEvent(p, args.signer!, "cancelled");
+    return new station.cancel_proposal_result();
+  }
+  /** Ready = threshold reached, delay passed, and still enough approvals from CURRENT council members. */
+  isReady(c: station.config_object, p: station.proposal_object, now: u64): bool {
+    return p.ready_at > 0 && now >= p.ready_at && this.validCount(c, p) >= c.threshold;
+  }
+  execute(args: station.execute_arguments): station.execute_result {
+    const c = this.config.get()!; const now = this.now();
+    const p = this.openProposal(args.id); const a = p.action!;
+    System.require(a.kind != 1, "upgrades run by uploading the approved bytecode to the station");
+    System.require(p.ready_at > 0, "not enough approvals yet");
+    System.require(now >= p.ready_at, "waiting period not over");
+    System.require(this.validCount(c, p) >= c.threshold, "not enough approvals from current council members");
+    p.executed = true; this.closeProposal(p);                            // state first, then any transfer
+    if (a.kind == 2) {
+      const bal = this.koinBalance();
+      System.require(bal >= a.amount && bal - a.amount >= c.koin_amount, "would leave less KOIN than koin_amount (lower koin_amount first)");
+      this.koinSend(a.to!, a.amount);
+    } else if (a.kind == 3) {
+      const held = this.escrowTot.get(a.token!)!.held; const bal = this.tokenBalance(a.token!);
+      System.require(bal >= held && a.amount <= bal - held, "only tokens above what escrow holds can be rescued");
+      this.send(a.token!, a.to!, a.amount);
+    } else {
+      if (a.kind == 4) { this.checkCouncil(a.council, a.threshold, c.guard_delay_ms); c.council = a.council; c.threshold = a.threshold; this.rearm(c, now); }
+      else if (a.kind == 5) c.guard_delay_ms = a.delay_ms;
+      else if (a.kind == 6) c.treasury = a.to;
+      else if (a.kind == 7) c.ticket_fee_bp = a.fee_bp;
+      else if (a.kind == 8) c.owner = a.to;
+      this.config.put(c);
+    }
+    this.propEvent(p, new Uint8Array(0), "executed");
+    return new station.execute_result();
+  }
+  /** authorize(contract_upload): only the exact bytecode of a ready upgrade proposal, keeping all three overrides. */
+  upgradeOk(): bool {
+    const c = this.config.get()!;
+    if (!isAddress(c.owner)) return false;
+    if (!BUILD_FOR_TESTING) System.setSystemBufferSize(BIG_TX_BUFFER);  // the tx carries the new bytecode (see init)
+    // Review C1 (critical): the chain asks once per upload op, and this code can't tell WHICH op is being applied. So an
+    // approved upgrade must be the only operation in its transaction; otherwise an attacker could upload their own code
+    // first and the approved code later in the same tx, and drain the station through their code in between.
+    const ops = txOps();
+    if (ops.length != 1) return false;
+    const up = ops[0].upload_contract;
+    if (up == null || !Arrays.equal(up.contract_id, this.contractId)) return false;
+    if (!up.authorizes_call_contract || !up.authorizes_transaction_application || !up.authorizes_upload_contract) return false;
+    const h = System.hash(Crypto.multicodec.sha2_256, up.bytecode); if (h == null) return false;
+    const now = this.now(); const reg = this.registry.get()!;
+    for (let i = 0; i < reg.open_proposals.length; i++) {
+      const p = this.proposals.get(u32Key(reg.open_proposals[i]));
+      if (p == null || p.action == null || p.action!.kind != 1 || !Arrays.equal(p.action!.hash, h)) continue;
+      if (!this.isReady(c, p, now) || now >= p.ready_at + UPGRADE_WINDOW_MS) continue;
+      p.executed = true; this.closeProposal(p);
+      this.propEvent(p, new Uint8Array(0), "executed");
+      return true;
+    }
+    return false;
+  }
+  get_proposal(args: station.get_proposal_arguments): station.get_proposal_result {
+    const r = new station.get_proposal_result(); r.proposal = this.proposals.get(u32Key(args.id)); return r;
+  }
+  list_proposals(args: station.list_proposals_arguments): station.list_proposals_result {
+    const r = new station.list_proposals_result(); const reg = this.registry.get()!;
+    for (let i = 0; i < reg.open_proposals.length; i++) { const p = this.proposals.get(u32Key(reg.open_proposals[i])); if (p != null) r.proposals.push(p); }
+    return r;
   }
 }

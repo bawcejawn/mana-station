@@ -217,6 +217,16 @@ export function main(): i32 {
       break;
     }
 
+    case 0xda1fd8f5: {
+      const args = Protobuf.decode<ProtoNamespace.would_pay_arguments>(
+        contractArgs.args,
+        ProtoNamespace.would_pay_arguments.decode
+      );
+      const res = c.would_pay(args);
+      retbuf = Protobuf.encode(res, ProtoNamespace.would_pay_result.encode);
+      break;
+    }
+
     case 0xbb54068a: {
       const args = Protobuf.decode<ProtoNamespace.init_arguments>(
         contractArgs.args,
@@ -334,6 +344,108 @@ export function main(): i32 {
       );
       const res = c.set_price(args);
       retbuf = Protobuf.encode(res, ProtoNamespace.set_price_result.encode);
+      break;
+    }
+
+    case 0x4f0d7216: {
+      const args = Protobuf.decode<ProtoNamespace.connect_app_arguments>(
+        contractArgs.args,
+        ProtoNamespace.connect_app_arguments.decode
+      );
+      const res = c.connect_app(args);
+      retbuf = Protobuf.encode(res, ProtoNamespace.connect_app_result.encode);
+      break;
+    }
+
+    case 0xec85e7d6: {
+      const args = Protobuf.decode<ProtoNamespace.disconnect_app_arguments>(
+        contractArgs.args,
+        ProtoNamespace.disconnect_app_arguments.decode
+      );
+      const res = c.disconnect_app(args);
+      retbuf = Protobuf.encode(
+        res,
+        ProtoNamespace.disconnect_app_result.encode
+      );
+      break;
+    }
+
+    case 0xa274b08a: {
+      const args = Protobuf.decode<ProtoNamespace.list_connected_arguments>(
+        contractArgs.args,
+        ProtoNamespace.list_connected_arguments.decode
+      );
+      const res = c.list_connected(args);
+      retbuf = Protobuf.encode(
+        res,
+        ProtoNamespace.list_connected_result.encode
+      );
+      break;
+    }
+
+    case 0x12df7f0e: {
+      const args = Protobuf.decode<ProtoNamespace.propose_arguments>(
+        contractArgs.args,
+        ProtoNamespace.propose_arguments.decode
+      );
+      const res = c.propose(args);
+      retbuf = Protobuf.encode(res, ProtoNamespace.propose_result.encode);
+      break;
+    }
+
+    case 0x74e21680: {
+      const args = Protobuf.decode<ProtoNamespace.approve_arguments>(
+        contractArgs.args,
+        ProtoNamespace.approve_arguments.decode
+      );
+      const res = c.approve(args);
+      retbuf = Protobuf.encode(res, ProtoNamespace.approve_result.encode);
+      break;
+    }
+
+    case 0x062f1ed9: {
+      const args = Protobuf.decode<ProtoNamespace.cancel_proposal_arguments>(
+        contractArgs.args,
+        ProtoNamespace.cancel_proposal_arguments.decode
+      );
+      const res = c.cancel_proposal(args);
+      retbuf = Protobuf.encode(
+        res,
+        ProtoNamespace.cancel_proposal_result.encode
+      );
+      break;
+    }
+
+    case 0xbe6bdfe8: {
+      const args = Protobuf.decode<ProtoNamespace.execute_arguments>(
+        contractArgs.args,
+        ProtoNamespace.execute_arguments.decode
+      );
+      const res = c.execute(args);
+      retbuf = Protobuf.encode(res, ProtoNamespace.execute_result.encode);
+      break;
+    }
+
+    case 0xab0c868c: {
+      const args = Protobuf.decode<ProtoNamespace.get_proposal_arguments>(
+        contractArgs.args,
+        ProtoNamespace.get_proposal_arguments.decode
+      );
+      const res = c.get_proposal(args);
+      retbuf = Protobuf.encode(res, ProtoNamespace.get_proposal_result.encode);
+      break;
+    }
+
+    case 0x756c2c35: {
+      const args = Protobuf.decode<ProtoNamespace.list_proposals_arguments>(
+        contractArgs.args,
+        ProtoNamespace.list_proposals_arguments.decode
+      );
+      const res = c.list_proposals(args);
+      retbuf = Protobuf.encode(
+        res,
+        ProtoNamespace.list_proposals_result.encode
+      );
       break;
     }
 

@@ -290,6 +290,20 @@ export class Station {
     return res;
   }
 
+  would_pay(args: station.would_pay_arguments): station.would_pay_result {
+    // const payee = args.payee;
+    // const operations = args.operations;
+    // const rc_limit = args.rc_limit;
+
+    // YOUR CODE HERE
+
+    const res = new station.would_pay_result();
+    // res.pay = ;
+    // res.route = ;
+
+    return res;
+  }
+
   init(args: station.init_arguments): station.init_result {
     // const config = args.config;
 
@@ -413,6 +427,119 @@ export class Station {
     // YOUR CODE HERE
 
     const res = new station.set_price_result();
+
+    return res;
+  }
+
+  connect_app(args: station.connect_app_arguments): station.connect_app_result {
+    // const contract_id = args.contract_id;
+    // const mana_per_day = args.mana_per_day;
+    // const strict = args.strict;
+
+    // YOUR CODE HERE
+
+    const res = new station.connect_app_result();
+    // res.app = ;
+
+    return res;
+  }
+
+  disconnect_app(
+    args: station.disconnect_app_arguments
+  ): station.disconnect_app_result {
+    // const contract_id = args.contract_id;
+
+    // YOUR CODE HERE
+
+    const res = new station.disconnect_app_result();
+
+    return res;
+  }
+
+  list_connected(
+    args: station.list_connected_arguments
+  ): station.list_connected_result {
+    // YOUR CODE HERE
+
+    const res = new station.list_connected_result();
+    // res.free_apps = ;
+    // res.paid = ;
+    // res.daily_budget = ;
+    // res.reserved = ;
+    // res.sellable = ;
+    // res.sold = ;
+    // res.mana = ;
+
+    return res;
+  }
+
+  propose(args: station.propose_arguments): station.propose_result {
+    // const signer = args.signer;
+    // const action = args.action;
+
+    // YOUR CODE HERE
+
+    const res = new station.propose_result();
+    // res.id = ;
+
+    return res;
+  }
+
+  approve(args: station.approve_arguments): station.approve_result {
+    // const signer = args.signer;
+    // const id = args.id;
+
+    // YOUR CODE HERE
+
+    const res = new station.approve_result();
+    // res.ready_at = ;
+
+    return res;
+  }
+
+  cancel_proposal(
+    args: station.cancel_proposal_arguments
+  ): station.cancel_proposal_result {
+    // const signer = args.signer;
+    // const id = args.id;
+
+    // YOUR CODE HERE
+
+    const res = new station.cancel_proposal_result();
+
+    return res;
+  }
+
+  execute(args: station.execute_arguments): station.execute_result {
+    // const id = args.id;
+
+    // YOUR CODE HERE
+
+    const res = new station.execute_result();
+
+    return res;
+  }
+
+  get_proposal(
+    args: station.get_proposal_arguments
+  ): station.get_proposal_result {
+    // const id = args.id;
+
+    // YOUR CODE HERE
+
+    const res = new station.get_proposal_result();
+    // res.proposal = ;
+
+    return res;
+  }
+
+  list_proposals(
+    args: station.list_proposals_arguments
+  ): station.list_proposals_result {
+    // YOUR CODE HERE
+
+    const res = new station.list_proposals_result();
+    // res.proposals = ;
 
     return res;
   }

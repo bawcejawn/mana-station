@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+{{HEAD}}
+  <title>Station owner: free Mana for your apps | Mana Station</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="description" content="Run a Mana Station: give your own apps free daily Mana, see passes and app plans, pause the station, and vote on council proposals.">
+</head>
+<body>
+{{TOP:owner}}
+
+  <main id="main" class="wrap page">
+    <div class="page-head">
+      <h1>Owner</h1>
+      <p class="lede">Give your own apps free Mana, see who's buying, and keep the station safe. Anyone can look; changes need the owner's or a council member's wallet.</p>
+    </div>
+    <p class="msg" id="role"></p>
+
+    <section class="panel" aria-labelledby="s-title">
+      <div class="row" style="justify-content:space-between">
+        <h2 id="s-title">The station today</h2>
+        <div class="row"><span class="pill" id="state">…</span><button class="btn btn-quiet btn-small" id="pause" type="button" hidden>Pause the station</button></div>
+      </div>
+      <div class="stats" id="stats"></div>
+      <p class="hint" id="budgetNote"></p>
+    </section>
+
+    <section class="panel" aria-labelledby="f-title">
+      <div class="stack" style="gap:8px">
+        <h2 id="f-title">Free Mana for your apps</h2>
+        <p class="hint">Each app gets a daily amount of the station's Mana, shared by all its users. Players also have per-minute and per-day limits, so one user can't use it all. Changes take effect at once.</p>
+      </div>
+      <ul class="items" id="free"><li class="empty">Loading…</li></ul>
+
+      <form id="addForm" class="stack" style="gap:18px;border-top:1px solid var(--line);padding-top:22px">
+        <h3 id="formTitle">Add an app</h3>
+        <div class="row" style="align-items:start">
+          <div class="field" style="flex:2 1 320px"><label for="addr">App contract address</label><input id="addr" required placeholder="1…" spellcheck="false" autocomplete="off" list="myApps"><datalist id="myApps"></datalist></div>
+          <div class="field" style="flex:1 1 180px"><label for="name">Name <span class="hint">(only for you, kept in this browser)</span></label><input id="name" placeholder="e.g. Knode"></div>
+        </div>
+        <fieldset class="field" style="border:0;padding:0;margin:0">
+          <legend class="label" style="margin-bottom:8px">How much a day?</legend>
+          <div class="choices" id="size"></div>
+        </fieldset>
+        <details class="disclose"><summary>Advanced: only pay for some functions</summary><div>
+          <label class="row" style="gap:8px"><input type="checkbox" id="strict"> Only pay for functions given a limit with set_entry</label>
+          <p class="small">Use this for apps with functions players shouldn't get for free. Set each function's limit with <span class="mono">admin/station-admin.mjs</span>.</p>
+        </div></details>
+        <div class="row"><button class="btn btn-main" id="addBtn" type="submit">Give free Mana</button><button class="btn btn-quiet" id="cancelEdit" type="button" hidden>Cancel</button><span class="hint" id="roomNote"></span></div>
+      </form>
+      <p class="msg" id="freeMsg" hidden></p>
+    </section>
+
+    <section class="panel" aria-labelledby="c-title">
+      <div class="stack" style="gap:8px">
+        <h2 id="c-title">Customers</h2>
+        <p class="hint">Mana passes and app plans people have bought. Payments are held by the station until each term ends.</p>
+      </div>
+      <ul class="items" id="paid"><li class="empty">Loading…</li></ul>
+    </section>
+
+    <section class="panel" aria-labelledby="k-title">
+      <div class="stack" style="gap:8px">
+        <h2 id="k-title">Council</h2>
+        <p class="hint">Moving KOIN, upgrading the code and changing the owner or council need two of the three council members, then a waiting period. During the wait any one member can veto.</p>
+      </div>
+      <div id="upgradeBox" class="checkout" hidden>
+        <div class="what"><b>A new station version is ready</b><span class="hint" id="upNotes"></span><span class="hint">Fingerprint <span class="mono" id="upHash"></span></span><span class="hint" id="upState"></span></div>
+        <div class="row" id="upActs"></div>
+      </div>
+      <ul class="items" id="props"><li class="empty">Loading…</li></ul>
+      <details class="disclose" id="wBox"><summary>Propose a KOIN withdrawal</summary><div>
+        <form id="wForm" class="row" style="align-items:end">
+          <div class="field" style="flex:2 1 260px"><label for="wTo">Send KOIN to</label><input id="wTo" placeholder="1…" spellcheck="false" required></div>
+          <div class="field" style="flex:1 1 120px"><label for="wAmt">KOIN</label><input id="wAmt" type="number" min="0.00000001" step="any" required></div>
+          <button class="btn btn-quiet" type="submit" id="wBtn">Propose</button>
+        </form>
+      </div></details>
+      <p class="msg" id="councilMsg" hidden></p>
+    </section>
+  </main>
+
+{{FOOT}}
+  <script src="station-code.js"></script>
+  <script>
+  (() => {
+    const { $ } = MS;
+    const KIND = { 1: "Upgrade the station's code", 2: "Withdraw KOIN", 3: "Rescue a token sent by mistake", 4: "Change the council", 5: "Change the waiting period", 6: "Change the treasury", 7: "Change the upload ticket fee", 8: "Change the owner" };
+    let st = {}, L = {}, P = [], role = "visitor", editing = null;
+
+    // App names: yours, kept in this browser. Test apps and the demo app are named for you.
+    const names = () => { try { return JSON.parse(MS.store.get("ms.appnames") || "{}"); } catch { return {}; } };
+    const nameOf = (a) => names()[a] || (a === MS.PG.demoApp ? "Demo app" : MSWallets.list().find((w) => w.address === a)?.name) || MS.short(a);
+    const setName = (a, n) => { const m = names(); if (n) m[a] = n; else delete m[a]; MS.store.set("ms.appnames", JSON.stringify(m)); };
+
+    // Sizes scale with the station: a share of its daily budget, in whole Mana.
+    const budget = () => Number(BigInt(L.daily_budget || 0)) / 1e8;
+    const tiers = () => [["Small", 0.05], ["Medium", 0.15], ["Large", 0.3]].map(([n, f]) => [n, Math.max(1, Math.round(budget() * f))]);
+    const tierName = (m) => { const t = tiers().find(([, v]) => v === m); return t ? t[0] : "Custom"; };
+    function sizeChoices(checked) {
+      const box = $("size"); box.replaceChildren();
+      for (const [n, v] of tiers()) {
+        const l = document.createElement("label"); l.className = "choice";
+        l.innerHTML = `<input type="radio" name="sz" value="${v}"><span><b></b><small></small></span>`;
+        l.querySelector("b").textContent = n; l.querySelector("small").textContent = `${v} Mana a day · about ${MS.actions(v)} actions`;
+        if (v === checked) l.querySelector("input").checked = true; box.append(l);
+      }
+      const c = document.createElement("label"); c.className = "choice";
+      c.innerHTML = `<input type="radio" name="sz" value="custom"><span><b>Custom</b><small><input type="number" min="1" step="1" aria-label="Mana a day" style="width:6em;font:inherit;padding:4px 8px;border-radius:8px;border:1px solid var(--line)"> Mana a day</small></span>`;
+      const num = c.querySelector("input[type=number]"); num.value = checked && !tiers().some(([, v]) => v === checked) ? checked : 2;
+      if (checked && !tiers().some(([, v]) => v === checked)) c.querySelector("input[type=radio]").checked = true;
+      num.addEventListener("focus", () => { c.querySelector("input[type=radio]").checked = true; });
+      box.append(c);
+      if (!box.querySelector("input[type=radio]:checked")) box.querySelector("input[type=radio]").checked = true;
+    }
+    const pickedSize = () => { const r = $("size").querySelector("input[type=radio]:checked"); return r.value === "custom" ? Number(r.parentElement.querySelector("input[type=number]").value) : Number(r.value); };
+
+    async function load() {
+      try {
+        const [s, l, p] = await Promise.all([MS.read("get_status"), MS.read("list_connected"), MS.read("list_proposals")]);
+        st = s; L = l; P = p.proposals || [];
+      } catch (e) { MS.say("role", "Couldn't read the station: " + MS.friendly(e), "err"); return; }
+      role = MS.roleOf(MS.active()?.address, st.config); render();
+    }
+
+    function render() {
+      const c = st.config || {};
+      const me = MS.active();
+      const text = { owner: "You're signed in as the owner. You can give apps free Mana, change or remove it, and pause or resume the station.",
+        council: "You're signed in as a council member. You can pause the station and vote on proposals. Giving apps free Mana is the owner's job.",
+        visitor: me ? `This wallet (${me.name}, ${MS.short(me.address)}) isn't the owner or on the council of this station, so you can look but not change anything. Switch wallets in the top right.` : "Choose the owner's wallet in the top right to make changes." }[role];
+      MS.say("role", text, role === "visitor" ? "" : "ok");
+
+      const free = BigInt(L.sellable || 0) - BigInt(L.sold || 0);
+      const stats = [["Mana in the station", MS.mana(st.mana, 0)], ["Daily budget", MS.mana(L.daily_budget, 0)], ["Given free each day", MS.mana(L.reserved, 0)], ["Sold each day", MS.mana(L.sold, 0)], ["Left to sell", MS.mana(free > 0n ? free : 0n, 0)]];
+      $("stats").replaceChildren(...stats.map(([k, v]) => { const d = document.createElement("div"); d.className = "stat"; d.innerHTML = "<b></b><span></span>"; d.firstChild.textContent = v; d.lastChild.textContent = k; return d; }));
+      $("budgetNote").textContent = "The station spends at most its daily budget: about a fifth of its KOIN each day, which refills by itself. Free apps and sold plans share it.";
+      $("state").textContent = c.paused ? "Paused" : "Running"; $("state").className = "pill " + (c.paused ? "warn" : "ok");
+      $("pause").hidden = !(role === "owner" || (role === "council" && !c.paused));
+      $("pause").textContent = c.paused ? "Resume the station" : "Pause the station";
+
+      // free apps
+      const ul = $("free"); ul.replaceChildren();
+      for (const a of (L.free_apps || []).filter((x) => x.contract_id)) {
+        const li = document.createElement("li"); li.className = "item";
+        const on = a.active && BigInt(a.mana_per_day || 0) > 0n;
+        const m = Number(BigInt(a.mana_per_day || 0)) / 1e8, used = Number(BigInt(a.used_24h || 0)), cap = Number(BigInt(a.mana_per_day || 1));
+        li.innerHTML = `<div class="stack" style="gap:4px"><h3><span></span> <span class="pill"></span></h3><div class="meta"><span class="mono"></span><span></span></div></div><div class="acts"></div>${on ? '<div class="usage"><div class="bar"><i></i></div></div>' : ""}`;
+        li.querySelector("h3 span").textContent = nameOf(a.contract_id);
+        const pill = li.querySelector(".pill"); pill.textContent = on ? `${tierName(m)} · ${m} Mana a day` : "Off"; if (!on) pill.classList.add("warn");
+        li.querySelector(".meta .mono").textContent = a.contract_id;
+        li.querySelector(".meta span:last-child").textContent = on ? `${MS.mana(a.used_24h)} used in the last 24 hours${a.strict ? " · listed functions only" : ""}` : "";
+        if (on) li.querySelector(".bar i").style.width = Math.min(100, used / cap * 100).toFixed(1) + "%";
+        if (role === "owner") {
+          li.querySelector(".acts").append(btn("Change", () => edit(a)), btn("Remove", (b) => MS.run(b, "freeMsg", async () => {
+            if (!confirm(`Stop giving ${nameOf(a.contract_id)} free Mana?`)) return "Nothing changed.";
+            await MS.send([[MS.station(), "disconnect_app", { contract_id: a.contract_id }]]); await load(); return `${nameOf(a.contract_id)} no longer gets free Mana.`;
+          })));
+        }
+        ul.append(li);
+      }
+      if (!ul.children.length) ul.innerHTML = '<li class="empty">No free apps yet. Add your first one below.</li>';
+      $("addForm").hidden = role !== "owner";
+      if (!editing) sizeChoices(tiers()[0][1]);
+      $("roomNote").textContent = `Room left to give: ${MS.mana(BigInt(L.daily_budget || 0) - BigInt(L.reserved || 0) - BigInt(L.sold || 0), 0)} Mana a day.`;
+      $("myApps").replaceChildren(...MSWallets.list().filter((w) => /^App/.test(w.name)).map((w) => { const o = document.createElement("option"); o.value = w.address; o.label = w.name; return o; }));
+
+      // customers
+      const pu = $("paid"); pu.replaceChildren();
+      for (const p of L.paid || []) {
+        const li = document.createElement("li"); li.className = "item";
+        const ended = Number(p.expiry) <= Date.now();
+        li.innerHTML = `<div class="stack" style="gap:4px"><h3><span></span> <span class="pill"></span></h3><div class="meta"></div></div>`;
+        li.querySelector("h3 span").textContent = p.kind === 2 ? `Mana pass for ${MS.short(p.target)}` : `App plan for ${nameOf(p.target)}`;
+        const pill = li.querySelector(".pill"); pill.textContent = p.suspended ? "Suspended" : ended ? "Ended" : "Active"; pill.classList.add(p.suspended ? "bad" : ended ? "warn" : "ok");
+        li.querySelector(".meta").textContent = `${MS.mana(p.mana_per_day)} Mana a day · ${MS.mana(p.used_24h)} used in 24 h · until ${MS.when(p.expiry)} · bought by ${MS.short(p.buyer)}`;
+        pu.append(li);
+      }
+      if (!pu.children.length) pu.innerHTML = '<li class="empty">No passes or plans sold yet.</li>';
+
+      // council
+      const pr = $("props"); pr.replaceChildren();
+      const isC = (c.council || []).includes(MS.active()?.address);
+      for (const p of P) {
+        const a = p.action || {}; const li = document.createElement("li"); li.className = "item";
+        let what = KIND[a.kind] || "Proposal"; if (a.kind === 1 && window.MS_UPGRADE && String(a.hash || "").toLowerCase() === window.MS_UPGRADE.hash.toLowerCase()) what += " (the new version above)"; if (a.kind === 2) what += `: ${MS.mana(a.amount)} KOIN to ${MS.short(a.to)}`; if (a.kind === 8) what += ` to ${MS.short(a.to)}`;
+        const ready = p.ready_at && p.ready_at !== "0", due = ready && Number(p.ready_at) <= Date.now();
+        li.innerHTML = `<div class="stack" style="gap:4px"><h3></h3><div class="meta"></div></div><div class="acts"></div>`;
+        li.querySelector("h3").textContent = `#${p.id} ${what}`;
+        li.querySelector(".meta").textContent = `${(p.approvals || []).length} of ${c.threshold} approvals · ${!ready ? "needs approvals" : due ? "ready to carry out" : "waiting until " + MS.when(p.ready_at)}`;
+        const acts = li.querySelector(".acts");
+        if (isC && !(p.approvals || []).includes(MS.active().address)) acts.append(btn("Approve", (b) => council(b, "approve", { id: p.id }, `Approved #${p.id}.`)));
+        if (isC) acts.append(btn("Veto", (b) => council(b, "cancel_proposal", { id: p.id }, `Vetoed #${p.id}.`)));
+        if (due && a.kind !== 1 && MS.active()) acts.append(btn("Carry out", (b) => MS.run(b, "councilMsg", async () => { await MS.send([[MS.station(), "execute", { id: p.id }]]); await load(); return `Carried out #${p.id}.`; }), true));
+        pr.append(li);
+      }
+      if (!pr.children.length) pr.innerHTML = '<li class="empty">No open proposals.</li>';
+      $("wBox").hidden = role !== "council";
+      upgradeState();
+    }
+    // Upgrades: the council approves a code fingerprint; after the wait anyone installs exactly that code.
+    async function upgradeState() {
+      const U = window.MS_UPGRADE, box = $("upgradeBox"); if (!U) { box.hidden = true; return; }
+      const meta = await MS.provider.invokeGetContractMetadata(MS.ST).catch(() => null);
+      if ((meta?.value?.hash || "").toLowerCase() === U.hash.toLowerCase()) { box.hidden = true; return; }
+      box.hidden = false; $("upNotes").textContent = U.notes; $("upHash").textContent = U.hash.slice(0, 14) + "…" + U.hash.slice(-6);
+      const p = P.find((x) => x.action?.kind === 1 && String(x.action.hash || "").toLowerCase() === U.hash.toLowerCase());
+      const acts = $("upActs"); acts.replaceChildren(); const c = st.config || {};
+      const ready = p && p.ready_at && p.ready_at !== "0", due = ready && Number(p.ready_at) <= Date.now();
+      if (!p) {
+        $("upState").textContent = "Step 1 of 3: a council member proposes it.";
+        if (role === "council") acts.append(btn("Propose this upgrade", (b) => council(b, "propose", { action: { kind: 1, hash: U.hash } }, "Proposed. A second council member approves it next (in the list below)."), true));
+      } else if (!ready) $("upState").textContent = `Step 2 of 3: needs ${c.threshold} council approvals (it has ${(p.approvals || []).length}). Approve it in the list below.`;
+      else if (!due) $("upState").textContent = `Step 3 of 3: approved. It can be installed after ${MS.when(p.ready_at)}, unless a council member vetoes it.`;
+      else {
+        $("upState").textContent = "Step 3 of 3: approved and the wait is over. Anyone can install it now; the wallet that installs pays the Mana (about 14).";
+        if (MS.active()) acts.append(btn("Install now", (b) => MS.run(b, "councilMsg", install), true));
+      }
+    }
+    async function install() {
+      const U = window.MS_UPGRADE, me = MS.active()?.address; if (!me) throw new Error("Choose a wallet first (top right).");
+      const code = Uint8Array.from(atob(U.code), (ch) => ch.charCodeAt(0));
+      const lim = (await MS.provider.call("chain.get_resource_limits", {})).resource_limit_data;
+      const rc = (BigInt(code.length) * (BigInt(lim.disk_storage_cost) + BigInt(lim.network_bandwidth_cost)) + MS.M) * 3n / 2n + 2n * MS.M;
+      if (BigInt(await MS.provider.getAccountRc(me)) < rc) throw new Error(`This wallet needs about ${MS.mana(rc, 0)} Mana of its own to install. Switch to Owner, which holds test KOIN.`);
+      const c = new Contract({ id: MS.ST, abi: MS.ABI.station, provider: MS.provider, signer: MS.signerFor(me), bytecode: code });
+      const { transaction, receipt } = await c.deploy({ payer: me, rcLimit: String(rc), authorizesCallContract: true, authorizesTransactionApplication: true, authorizesUploadContract: true });
+      await transaction.wait("byBlock", 180000); await load();
+      return `Installed. The station now runs the new version (used ${MS.mana(receipt.rc_used, 1)} Mana from this wallet).`;
+    }
+    function btn(label, fn, main = false) { const b = document.createElement("button"); b.type = "button"; b.className = "btn btn-small " + (main ? "btn-main" : "btn-quiet"); b.textContent = label; b.addEventListener("click", () => fn(b)); return b; }
+    const council = (b, fn, args, done) => MS.run(b, "councilMsg", async () => { await MS.send([[MS.station(), fn, { signer: MS.active().address, ...args }]]); await load(); return done; });
+
+    function edit(a) {
+      editing = a.contract_id; $("formTitle").textContent = "Change " + nameOf(a.contract_id);
+      $("addr").value = a.contract_id; $("addr").readOnly = true; $("name").value = names()[a.contract_id] || "";
+      sizeChoices(Number(BigInt(a.mana_per_day || 0)) / 1e8); $("strict").checked = !!a.strict;
+      $("addBtn").textContent = "Save"; $("cancelEdit").hidden = false; $("addForm").scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    function resetForm() { editing = null; $("formTitle").textContent = "Add an app"; $("addr").readOnly = false; $("addForm").reset(); $("addBtn").textContent = "Give free Mana"; $("cancelEdit").hidden = true; sizeChoices(tiers()[0][1]); }
+    $("cancelEdit").addEventListener("click", resetForm);
+    $("addForm").addEventListener("submit", (e) => { e.preventDefault(); MS.run($("addBtn"), "freeMsg", async () => {
+      const a = $("addr").value.trim(), m = pickedSize();
+      if (!/^1[1-9A-HJ-NP-Za-km-z]{25,34}$/.test(a)) throw new Error("That doesn't look like a Koinos address.");
+      if (!(m >= 1)) throw new Error("Give the app at least 1 Mana a day, or remove it.");
+      setName(a, $("name").value.trim());
+      await MS.send([[MS.station(), "connect_app", { contract_id: a, mana_per_day: String(MS.units(m)), strict: $("strict").checked }]]);
+      const was = !!editing; resetForm(); await load();
+      return was ? `Saved: ${nameOf(a)} gets ${m} Mana a day.` : `${nameOf(a)} now gets ${m} Mana a day, free for its users.`;
+    }); });
+    $("pause").addEventListener("click", (e) => MS.run(e.currentTarget, "role", async () => {
+      const p = !st.config?.paused; await MS.send([[MS.station(), "set_paused", { paused: p }]]); await load();
+      return p ? "Paused. The station pays for nothing until the owner resumes it." : "Resumed.";
+    }));
+    $("wForm").addEventListener("submit", (e) => { e.preventDefault(); MS.run($("wBtn"), "councilMsg", async () => {
+      if (role !== "council") throw new Error("Only a council member can propose this. Switch to a council wallet in the top right.");
+      await MS.send([[MS.station(), "propose", { signer: MS.active().address, action: { kind: 2, to: $("wTo").value.trim(), amount: String(MS.units($("wAmt").value)) } }]]);
+      await load(); return "Proposed. It needs a second council approval, then the waiting period.";
+    }); });
+    MS.onWallet(() => { role = MS.roleOf(MS.active()?.address, st.config); render(); });
+    load();
+  })();
+  </script>
+</body>
+</html>

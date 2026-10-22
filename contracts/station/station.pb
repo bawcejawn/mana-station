@@ -1,6 +1,6 @@
 
-πL
-assembly/proto/station.protostationkoinos/options.proto"ƒ
+∂e
+assembly/proto/station.protostationkoinos/options.proto"÷
 config_object
 owner (BÄµRowner
 paused (Rpaused#
@@ -34,7 +34,11 @@ bigMaxDebt&
 	buffer_bp (RbufferBp!
 
 alert_mana (B0R	alertMana"
-ticket_fee_bp (RticketFeeBpJ"ï
+ticket_fee_bp (RticketFeeBp"
+max_per_buyer (RmaxPerBuyer
+council (BÄµRcouncil
+	threshold (R	threshold(
+guard_delay_ms (B0RguardDelayMsJJ"ï
 
 app_object'
 reserved_mana (B0RreservedMana
@@ -68,7 +72,7 @@ last_block (B0R	lastBlock
 minute (B0Rminute
 n_min (RnMin)
 cooldown_until (B0RcooldownUntil(
-day (2.station.window_objectRday"ë
+day (2.station.window_objectRday"∏
 price_object
 active (Ractive,
 max_per_purchase (B0RmaxPerPurchase
@@ -79,7 +83,8 @@ last_block (B0R	lastBlock
 bigPer1000$
 big_min_mana
  (B0R
-bigMinManaJJJ"Ω
+bigMinMana%
+min_purchase (B0RminPurchaseJJJ"Ω
 allowance_object
 id (Rid
 buyer (BÄµRbuyer
@@ -112,7 +117,7 @@ total_paid (B0R	totalPaid!
 purchaseId
 bought	 (B0Rbought&
 prev_last_buy
- (B0RprevLastBuy"å
+ (B0RprevLastBuy"±
 
 big_object
 debt (B0Rdebt
@@ -123,7 +128,9 @@ big_object
 low_alerted (R
 lowAlerted#
 next_purchase (RnextPurchase
-	paused_at (B0RpausedAt"Ç
+	paused_at (B0RpausedAt#
+ticket_open	 (B0R
+ticketOpen"Ç
 purchase_event7
 	allowance (2.station.allowance_objectR	allowance.
 ticket (2.station.ticket_objectRticket
@@ -151,11 +158,66 @@ mana_after (B0R	manaAfter#
 alert_level (B0R
 alertLevel!
 
-hard_floor (B0R	hardFloor"l
+hard_floor (B0R	hardFloor"›
 registry_object
 app_ids (RappIds
 open_ids (RopenIds%
-open_purchases (RopenPurchases"õ
+open_purchases (RopenPurchases#
+
+exempt_ids (BÄµR	exemptIds%
+open_proposals (RopenProposals#
+next_proposal (RnextProposal"h
+kcs_approve_args
+owner (BÄµRowner
+spender (BÄµRspender
+value (B0Rvalue"Ä
+guarded_action
+kind (Rkind
+hash (BÄµRhash
+to (BÄµRto
+amount (B0Ramount
+token (BÄµRtoken
+council (BÄµRcouncil
+	threshold (R	threshold
+delay_ms (B0RdelayMs
+fee_bp	 (RfeeBp"∏
+proposal_object
+id (Rid/
+action (2.station.guarded_actionRaction 
+proposer (BÄµRproposer"
+	approvals (BÄµR	approvals
+created (B0Rcreated
+ready_at (B0RreadyAt
+executed (Rexecuted
+	cancelled (R	cancelled'
+cancelled_by	 (BÄµRcancelledBy"p
+proposal_event4
+proposal (2.station.proposal_objectRproposal
+by (BÄµRby
+what (	Rwhat"Ö
+connected_app%
+contract_id (BÄµR
+contractId
+app (Rapp$
+mana_per_day (B0R
+manaPerDay!
+
+boost_mana (B0R	boostMana#
+boost_until (B0R
+boostUntil
+strict (Rstrict
+active (Ractive
+used_24h (B0Rused24h"Á
+paid_app
+id (Rid
+buyer (BÄµRbuyer
+target (BÄµRtarget$
+mana_per_day (B0R
+manaPerDay
+expiry (B0Rexpiry
+used_24h (B0Rused24h
+	suspended (R	suspended
+kind (Rkind"∫
 escrow_object
 id (Rid
 kind (Rkind
@@ -172,7 +234,8 @@ hard_floor (B0R	hardFloor"l
 mana (B0Rmana
 refunded (B0Rrefunded
 released (B0Rreleased
-closed (Rclosed"ê
+closed (Rclosed
+min_keep (B0RminKeep"ê
 escrow_totals_object
 held (B0Rheld 
 	collected (B0R	collected
@@ -336,7 +399,24 @@ releasable"9
 get_escrow_totals_arguments
 token (BÄµRtoken"Q
 get_escrow_totals_result5
-totals (2.station.escrow_totals_objectRtotals"@
+totals (2.station.escrow_totals_objectRtotals"ô
+op_info%
+contract_id (BÄµR
+contractId
+entry_point (R
+entryPoint
+args (BÄµRargs
+upload (Rupload
+other (Rother"Ç
+would_pay_arguments
+payee (BÄµRpayee0
+
+operations (2.station.op_infoR
+operations
+rc_limit (B0RrcLimit":
+would_pay_result
+pay (Rpay
+route (	Rroute"@
 init_arguments.
 config (2.station.config_objectRconfig"
 init_result"F
@@ -394,7 +474,52 @@ contractId"C
 set_price_arguments
 token (BÄµRtoken+
 value (2.station.price_objectRvalue"
-set_price_resultbproto3
+set_price_result"|
+connect_app_arguments%
+contract_id (BÄµR
+contractId$
+mana_per_day (B0R
+manaPerDay
+strict (Rstrict"&
+connect_app_result
+app (Rapp"A
+disconnect_app_arguments%
+contract_id (BÄµR
+contractId"
+disconnect_app_result"
+list_connected_arguments"ä
+list_connected_result3
+	free_apps (2.station.connected_appRfreeApps%
+paid (2.station.paid_appRpaid%
+daily_budget (B0RdailyBudget
+reserved (B0Rreserved
+sellable (B0Rsellable
+sold (B0Rsold
+mana (B0Rmana"b
+propose_arguments
+signer (BÄµRsigner/
+action (2.station.guarded_actionRaction" 
+propose_result
+id (Rid"A
+approve_arguments
+signer (BÄµRsigner
+id (Rid"/
+approve_result
+ready_at (B0RreadyAt"I
+cancel_proposal_arguments
+signer (BÄµRsigner
+id (Rid"
+cancel_proposal_result"#
+execute_arguments
+id (Rid"
+execute_result"(
+get_proposal_arguments
+id (Rid"K
+get_proposal_result4
+proposal (2.station.proposal_objectRproposal"
+list_proposals_arguments"O
+list_proposals_result6
+	proposals (2.station.proposal_objectR	proposalsbproto3
 Á
 koinos/chain/authority.protokoinos.chainkoinos/options.proto"U
 call_target%
