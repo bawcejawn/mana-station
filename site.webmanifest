@@ -1,0 +1,28 @@
+{
+  "name": "Mana Station",
+  "short_name": "Mana Station",
+  "description": "Pays the Mana that Koinos transactions need: daily Mana passes for wallets and free, gasless transactions for an app's users.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f6ff",
+  "theme_color": "#17114a",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

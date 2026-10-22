@@ -4,14 +4,35 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#2f5bff">
+  <meta name="theme-color" content="#17114a">
+  <meta name="color-scheme" content="light dark">
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="icon-192.png" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="site.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Figtree:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="styles.css">
-  <title>Try it: a free Koinos transaction</title>
-  <meta name="description" content="Tap a button and send a real Koinos testnet transaction with no KOIN and no Mana. Mana Station pays.">
+  <title>Try a free Koinos transaction, no KOIN needed | Mana Station</title>
+  <meta name="description" content="Tap a button and send a real Koinos testnet transaction from a wallet with no KOIN and no Mana. See gasless Koinos transactions in action.">
+  <link rel="canonical" href="https://bawcejawn.github.io/mana-station/play.html">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Mana Station">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:title" content="Try a free Koinos transaction, no KOIN needed | Mana Station">
+  <meta property="og:description" content="Tap a button and send a real Koinos testnet transaction from a wallet with no KOIN and no Mana. See gasless Koinos transactions in action.">
+  <meta property="og:url" content="https://bawcejawn.github.io/mana-station/play.html">
+  <meta property="og:image" content="https://bawcejawn.github.io/mana-station/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Mana Station: never run out of Mana on Koinos">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Try a free Koinos transaction, no KOIN needed | Mana Station">
+  <meta name="twitter:description" content="Tap a button and send a real Koinos testnet transaction from a wallet with no KOIN and no Mana. See gasless Koinos transactions in action.">
+  <meta name="twitter:image" content="https://bawcejawn.github.io/mana-station/og-image.png">
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://bawcejawn.github.io/mana-station/play.html#page","url":"https://bawcejawn.github.io/mana-station/play.html","name":"Try a free Koinos transaction, no KOIN needed | Mana Station","description":"Tap a button and send a real Koinos testnet transaction from a wallet with no KOIN and no Mana. See gasless Koinos transactions in action.","inLanguage":"en","isPartOf":{"@id":"https://bawcejawn.github.io/mana-station/#site"},"dateModified":"2026-10-22","breadcrumb":{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://bawcejawn.github.io/mana-station/"},{"@type":"ListItem","position":2,"name":"Try it free","item":"https://bawcejawn.github.io/mana-station/play.html"}]}}]}</script>
   <style>
     .play { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: clamp(24px, 4vw, 48px); align-items: start; padding-block: 8px 80px; }
     .stage { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-big); padding: clamp(24px, 4vw, 40px); display: grid; gap: 22px; justify-items: center; text-align: center; }
@@ -47,22 +68,29 @@
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
-  <div class="testnet-bar"><div class="wrap"><span>Playground on the Koinos testnet. Nothing here costs real money.</span></div></div>
+  <div class="testnet-bar"><div class="wrap"><span><b>Testnet playground.</b> Nothing here costs real money.</span></div></div>
   <header class="site-head">
     <div class="wrap">
       <a class="brand" href="index.html" aria-label="Mana Station home">
-        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--ink)"/><path d="M16 6c4 5 7 8.6 7 12.4A7 7 0 0 1 9 18.4C9 14.6 12 11 16 6Z" fill="var(--mana)"/><rect x="11" y="20" width="10" height="3" rx="1.5" fill="var(--spark)"/></svg>
-        Mana Station
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="10" fill="#17114a"/><path d="M16 5.5c4.2 5.2 7.3 9 7.3 13a7.3 7.3 0 0 1-14.6 0c0-4 3.1-7.8 7.3-13Z" fill="#4fd8ff"/><path d="M16 12.5c2.2 2.8 3.8 4.8 3.8 6.8a3.8 3.8 0 0 1-7.6 0c0-2 1.6-4 3.8-6.8Z" fill="#3a5bff"/><rect x="10.5" y="25" width="11" height="2.6" rx="1.3" fill="#ffb21f"/></svg>
+        <span>Mana Station</span>
       </a>
       <nav class="nav" aria-label="Main">
         <a href="get.html">Get Mana</a>
-        <a href="play.html" aria-current="page">Try it</a>
+        <a href="play.html" aria-current="page">Try it free</a>
+        <a href="helper.html">Pass helper</a>
+        <a href="koinos-mana.html">What's Mana?</a>
         <a href="help.html">Help</a>
-        <a href="owner.html">Owner</a>
       </nav>
       <div class="wallet-slot" id="walletChip"></div>
     </div>
   </header>
+  <nav class="tabbar" aria-label="Quick">
+    <a href="index.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z"/></svg>Home</a>
+    <a href="get.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3.6 4.4 6 7.6 6 11a6 6 0 0 1-12 0c0-3.4 2.4-6.6 6-11Z"/></svg>Get Mana</a>
+    <a href="play.html" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="m10 8.5 5.5 3.5-5.5 3.5z"/></svg>Try it</a>
+    <a href="help.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M9.6 9.6a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.6M12 16.6v.4"/></svg>Help</a>
+  </nav>
 
   <main id="main">
     <section class="hero" aria-labelledby="t">
@@ -113,7 +141,20 @@
     </div>
   </main>
 
-  <footer class="site-foot"><div class="wrap"><span>Mana Station, built on Koinos · <a href="terms.html">Terms</a> · <a href="privacy.html">Privacy</a></span><p>Prepaid transaction-fee credit, not an investment, not money and not transferable. Payments are held by the station contract until a term ends; cancel any time for the unused part. The station's key alone can't move funds: that takes two of three council members, a public wait and no veto. Smart contracts and blockchains carry risk; always check transactions in your wallet. Nothing here is financial advice. Draft terms, under legal review.</p></div></footer>
+  <footer class="site-foot">
+    <div class="wrap">
+      <div class="foot-brand">
+        <a class="brand" href="index.html"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="10" fill="#17114a"/><path d="M16 5.5c4.2 5.2 7.3 9 7.3 13a7.3 7.3 0 0 1-14.6 0c0-4 3.1-7.8 7.3-13Z" fill="#4fd8ff"/><path d="M16 12.5c2.2 2.8 3.8 4.8 3.8 6.8a3.8 3.8 0 0 1-7.6 0c0-2 1.6-4 3.8-6.8Z" fill="#3a5bff"/><rect x="10.5" y="25" width="11" height="2.6" rx="1.3" fill="#ffb21f"/></svg><span>Mana Station</span></a>
+        <p>The Mana refill station for Koinos. Your transactions, already paid for.</p>
+      </div>
+      <nav class="foot-cols" aria-label="Footer">
+        <div><h2>Use it</h2><a href="get.html#wallet">Mana pass for my wallet</a><a href="play.html">Try a free transaction</a><a href="helper.html">Pass helper for browsers</a></div>
+        <div><h2>Build with it</h2><a href="get.html#app">App plans</a><a href="help.html#h-app">Add it to your app</a><a href="owner.html">Station owner</a><a href="https://github.com/bawcejawn/mana-station" rel="noopener">Source code</a></div>
+        <div><h2>Learn</h2><a href="koinos-mana.html">What is Koinos Mana?</a><a href="help.html">Help and questions</a><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a></div>
+      </nav>
+      <p class="fine">Prepaid transaction-fee credit: not an investment, not money and not transferable. Payments are held by the station contract until a term ends; cancel any time for the unused part. The station's key alone can't move funds: that takes two of three council members, a public wait and no veto. Smart contracts and blockchains carry risk; always check transactions in your wallet. Nothing here is financial advice. Draft terms, under legal review. Mana Station is independent and not affiliated with the Koinos Group or Koinos Foundation.</p>
+    </div>
+  </footer>
   <script src="https://cdn.jsdelivr.net/npm/koilib@9.4.1/dist/koinos.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/kondor-js@1.3.0/dist/kondor.min.js"></script>
   <script src="abis.js"></script>
