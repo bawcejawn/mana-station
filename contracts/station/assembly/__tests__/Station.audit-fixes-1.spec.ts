@@ -399,6 +399,13 @@ describe("AB-017 boundary tests (mutation survivors)", () => {
     expect(s.cancel_big_upload(new station.cancel_big_upload_arguments(BUYER, U2)).refund).toBe(200_000, "500,000 − 300,000 minimum (the 5% fee cap is 475,000)");
     signedBy([]); inv(s, USDT);
   });
+  it("M0049: with no 1-day tier (no AB-010 day price), a plan cancel still stops at the minimum charge", () => {
+    const s = setup(); const p = PRICE(); p.price_1d = 0; p.min_purchase = 50_000;
+    signedBy([OWNER]); s.set_price(new station.set_price_arguments(USDT, p)); signedBy([]);
+    const r = buyAccount(s, SOLDAPP, 5 * M, 7);
+    expect(r.paid).toBe(100_000);
+    expect(cancelBy(s, BUYER, r.id).refund).toBe(50_000, "pro rata 6/7 would be 85,714: the 50,000 minimum is kept");
+  });
   it("M0017: set_app refuses the reserved global key and a missing value", () => {
     gS1 = setup(); signedBy([OWNER]); MockVM.commitTransaction();
     expect(() => { gS1!.set_app(new station.set_app_arguments(0xffffffff, new station.app_object(1 * M, true))); }).toThrow();
@@ -464,5 +471,7 @@ describe("AB-017 boundary tests (mutation survivors)", () => {
     signedBy([]);
   });
   // M0032 (`>` → `>=` in the min_keep cap at termRefund) is equivalent: at amount == min_keep both forms give 0.
+  // M0011 (owner_refund's isAddress(ticket_payee) guard removed) is equivalent apart from the error text: a payee that
+  // isn't an address can hold no ticket, so the call still fails ("no ticket"). The M0011 test above pins the refusal.
   // M0002 (the payment transfer result check) only exists in the real-chain build: it needs a node test.
 });
