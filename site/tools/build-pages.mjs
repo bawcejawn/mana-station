@@ -5,6 +5,7 @@
 // data-faq marker, the site and app on Home), plus sitemap.xml, robots.txt and site.webmanifest.
 // Run: node site/tools/build-pages.mjs        Address and page list: site/tools/site.config.mjs
 import fs from "fs";
+import crypto from "crypto";
 import { SITE, NAME, OG_IMAGE, PAGES } from "./site.config.mjs";
 const dir = new URL("../src/", import.meta.url), out = new URL("../", import.meta.url);
 const part = (n) => fs.readFileSync(new URL("parts/" + n + ".html", dir), "utf8").replace(/\n$/, "");
@@ -15,6 +16,18 @@ const today = new Date().toISOString().slice(0, 10);
 const ORG = { "@type": "Organization", "@id": SITE + "#org", name: NAME, url: SITE, logo: SITE + "icon-512.png", sameAs: ["https://github.com/bawcejawn/mana-station"] };
 const WEBSITE = { "@type": "WebSite", "@id": SITE + "#site", name: NAME, url: SITE, publisher: { "@id": SITE + "#org" }, inLanguage: "en",
   description: "Pays the Mana that Koinos transactions need: daily Mana passes for wallets and free, gasless transactions for an app's users." };
+
+// AB-019: a Content-Security-Policy for every page. Scripts only from this site, the pinned jsDelivr files (which also
+// carry integrity hashes) and the page's own inline scripts, each allowed by its sha256. 'unsafe-eval' is needed by
+// koilib (its bundled protobufjs builds encoders with Function()). Network calls only to the Koinos RPC nodes below.
+// frame-ancestors can't be set from a meta tag (GitHub Pages sends no headers); helper.html checks message senders instead.
+const RPC = ["https://testnet.koinosfoundation.org", "https://harbinger-api.koinos.io", "https://api.koinos.io"];
+function csp(html) {
+  const inline = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(([, js]) => `'sha256-${crypto.createHash("sha256").update(js, "utf8").digest("base64")}'`);
+  return ["default-src 'self'", `script-src 'self' https://cdn.jsdelivr.net 'unsafe-eval' ${inline.join(" ")}`.trim(),
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com", "font-src https://fonts.gstatic.com", "img-src 'self' data:",
+    `connect-src 'self' ${RPC.join(" ")}`, "object-src 'none'", "base-uri 'self'", "form-action 'self'"].join("; ");
+}
 
 const built = [];
 for (const f of fs.readdirSync(dir).filter((f) => f.endsWith(".html"))) {
@@ -73,6 +86,7 @@ for (const f of fs.readdirSync(dir).filter((f) => f.endsWith(".html"))) {
   }
   if (graph.length) meta.push(`<script type="application/ld+json">${JSON.stringify({ "@context": "https://schema.org", "@graph": graph })}</script>`);
   s = s.replace(/(<meta name="description" content="[^"]*">)/, (m) => m + "\n  " + meta.join("\n  "));
+  s = s.replace(/(<meta charset="utf-8">)/, (m) => m + `\n  <meta http-equiv="Content-Security-Policy" content="${csp(s)}">`);
 
   s = s.replace(/^<!doctype html>/i, (d) => d + "\n<!-- Built from site/src/" + f + " by site/tools/build-pages.mjs. Edit the source, not this file. -->");
   fs.writeFileSync(new URL(f, out), s);
