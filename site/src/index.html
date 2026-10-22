@@ -2,99 +2,131 @@
 <html lang="en">
 <head>
 {{HEAD}}
-  <title>Mana Station: Koinos transactions, already paid for</title>
-  <meta name="description" content="Mana Station pays the Mana your Koinos transactions need. Get a daily Mana pass for your wallet, cover your app's users, or give your own apps free Mana. Pay in stablecoins, no KOIN needed.">
-  <meta property="og:type" content="website">
-  <meta property="og:site_name" content="Mana Station">
-  <meta property="og:title" content="Mana Station: Koinos transactions, already paid for">
-  <meta property="og:description" content="A daily Mana pass for your wallet, free play for your app's users. Pay in stablecoins, no KOIN needed.">
-  <meta name="twitter:card" content="summary">
-  <script type="application/ld+json">
-  {"@context":"https://schema.org","@type":"WebApplication","name":"Mana Station","applicationCategory":"DeveloperApplication","operatingSystem":"Web",
-   "description":"Pays the Koinos transaction cost (Mana) for wallets and for an app's users. Daily Mana passes and app plans, paid in vUSDT or vUSDC."}
-  </script>
+  <title>Mana Station: gasless Koinos transactions, Mana on tap</title>
+  <meta name="description" content="Never run out of Mana on Koinos. Mana Station pays your transactions: a daily Mana pass from $0.03, or free, gasless transactions for your app&#39;s users. No KOIN needed.">
 </head>
 <body>
-{{TOP:}}
+{{TOP:home}}
 
   <main id="main">
     <section class="hero" aria-labelledby="hero-title">
       <div class="wrap">
         <div class="hero-copy">
-          <h1 id="hero-title">Koinos transactions, already paid for.</h1>
-          <p class="lede">Every Koinos transaction needs Mana, and Mana comes from holding KOIN. Mana Station holds the KOIN and pays the Mana for you. You pay a small daily amount in stablecoins, or nothing at all when an app covers you.</p>
+          <h1 id="hero-title">Never run out of Mana on Koinos.</h1>
+          <p class="lede">Every Koinos transaction burns a little Mana. Mana Station keeps a big tank of it and <b>pays for your transactions</b>, so you just tap, post and play. Grab a daily pass for your wallet, or let your app's users go free.</p>
           <div class="actions">
-            <a class="btn btn-main" href="get.html">Get Mana</a>
-            <a class="btn btn-quiet" href="play.html">Try it free</a>
+            <a class="btn btn-spark btn-big" href="get.html">Get Mana</a>
+            <a class="btn btn-ghost btn-big" href="play.html">Try a free transaction</a>
           </div>
+          <ul class="hero-ticks">
+            <li>No KOIN needed</li>
+            <li>From $0.03 a day</li>
+            <li>Cancel any time</li>
+          </ul>
         </div>
 
-        <figure class="tank-card" aria-labelledby="tank-title">
-          <div class="tank-top">
-            <span class="tank-title" id="tank-title">Station Mana right now</span>
-            <span class="tank-reading" id="tankReading">…</span>
+        <figure class="meter-card" aria-labelledby="meter-title" style="margin:0">
+          <div class="meter-top">
+            <span class="meter-title" id="meter-title">Station Mana, live</span>
+            <span class="meter-reading" id="meterReading">…</span>
           </div>
-          <div class="tank" role="img" id="tank" aria-label="The station's Mana, in five cells: it refills about a fifth of its KOIN every day.">
-            <span class="cell"><i></i></span><span class="cell"><i></i></span><span class="cell"><i></i></span><span class="cell"><i></i></span><span class="cell refill"><i></i></span>
+          <div class="meter" id="meter" role="img" aria-label="The station's Mana tank.">
+            <span class="seg"><i></i></span><span class="seg"><i></i></span><span class="seg"><i></i></span><span class="seg"><i></i></span><span class="seg"><i></i></span>
+            <span class="seg"><i></i></span><span class="seg"><i></i></span><span class="seg"><i></i></span><span class="seg"><i></i></span><span class="seg"><i></i></span>
           </div>
-          <div class="tank-legend"><span class="key">Ready to spend</span><span class="key spark">Refilling now</span></div>
-          <figcaption class="small" id="tankNote">Mana refills by itself, about a fifth of the station's KOIN every day.</figcaption>
+          <dl class="meter-facts">
+            <div><dt>Tank</dt><dd id="factFull">…</dd></div>
+            <div><dt>Simple actions ready</dt><dd id="factActions">…</dd></div>
+            <div><dt>Refills by itself</dt><dd>20% a day</dd></div>
+          </dl>
+          <figcaption class="meter-note" id="meterNote">The playground station on the Koinos testnet.</figcaption>
         </figure>
       </div>
     </section>
 
-    <section class="band" aria-labelledby="doors-title" style="padding-top:0">
-      <div class="wrap stack-lg">
-        <h2 id="doors-title">What do you need?</h2>
-        <ul class="doors">
-          <li><a href="get.html#wallet">
-            <span class="who">Mana for my wallet</span>
-            <span class="what">A daily Mana pass. The station pays your own transactions on any Koinos app, so you never run out. It never pays to move tokens.</span>
-            <span class="btn btn-quiet go">Get a pass</span>
+    <section class="band" aria-labelledby="paths-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="paths-title">What brings you here?</h2>
+          <p class="lede">Pick one. Each takes about a minute.</p>
+        </div>
+        <ul class="paths">
+          <li class="p-wallet"><a href="get.html#wallet">
+            <span class="who">I use Koinos apps</span>
+            <span class="title">A Mana pass for my wallet</span>
+            <span class="what">The station pays your transactions on any Koinos app, up to a daily amount. Your wallet's Mana stays full.</span>
+            <span class="go">Get a pass</span>
           </a></li>
-          <li><a href="get.html#app">
-            <span class="who">Mana for my app</span>
-            <span class="what">Your users act for free. Buy a daily amount for your app's contract and every user draws from it, with fair limits so no one can drain it.</span>
-            <span class="btn btn-quiet go">Cover my app</span>
+          <li class="p-app"><a href="get.html#app">
+            <span class="who">I build a Koinos app</span>
+            <span class="title">Free transactions for my users</span>
+            <span class="what">Buy a daily plan for your app's contract. New users play right away, even with an empty wallet.</span>
+            <span class="go">Cover my app</span>
           </a></li>
-          <li><a href="owner.html">
-            <span class="who">Free Mana for my own apps</span>
-            <span class="what">For the station's owner: give any of your contracts a free daily amount, pick a size, change or remove it in one step.</span>
-            <span class="btn btn-quiet go">Open the owner page</span>
+          <li class="p-try"><a href="play.html">
+            <span class="who">I'm just curious</span>
+            <span class="title">See it work in 10 seconds</span>
+            <span class="what">Tap a button and send a real Koinos testnet transaction from a wallet with zero Mana.</span>
+            <span class="go">Try it free</span>
           </a></li>
         </ul>
       </div>
     </section>
 
-    <section class="band" aria-labelledby="how-title">
-      <div class="wrap stack-lg">
-        <div class="section-head" style="margin:0"><h2 id="how-title">How it works</h2></div>
-        <ol class="flow">
-          <li><h3>Pick a daily amount</h3><p class="small">For your wallet or for your app, for 1, 7 or 30 days. You see the exact price first.</p></li>
-          <li><h3>Pay in stablecoins</h3><p class="small">vUSDT or vUSDC. No KOIN needed: the station even pays the Mana for the purchase itself.</p></li>
-          <li><h3>Transactions just go through</h3><p class="small">Your transactions name the station as the payer, and the station pays, up to your daily amount. Cancel any time for the unused days.</p></li>
+    <section class="band" aria-labelledby="how-title" style="padding-top:0">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="how-title">How it works</h2>
+          <p class="lede">Koinos has no gas fees. Instead, every transaction uses Mana, which comes from holding KOIN. Mana Station holds the KOIN, so you don't have to.</p>
+        </div>
+        <ol class="steps">
+          <li><h3>Pick a daily amount</h3><p class="small">For your wallet or your app, for 1, 7 or 30 days. You see the exact price before you pay.</p></li>
+          <li><h3>Pay with stablecoins</h3><p class="small">vUSDT or vUSDC. Your wallet doesn't need any KOIN or Mana: the station even pays for the purchase itself.</p></li>
+          <li><h3>Transactions just go through</h3><p class="small">The station pays the Mana, up to your daily amount. Your wallet still asks you to approve each one, as always.</p></li>
         </ol>
       </div>
     </section>
 
-    <section class="band" aria-labelledby="price-title">
+    <section class="band" aria-labelledby="price-title" style="padding-top:0">
       <div class="wrap">
         <div class="section-head">
-          <h2 id="price-title">Prices</h2>
-          <p class="lede">The same for a wallet pass and an app plan. One simple action uses about 0.16 Mana, so 1,000 Mana covers roughly 6,000 actions.</p>
+          <h2 id="price-title">Simple prices</h2>
+          <p class="lede">Same prices for a wallet pass and an app plan. A simple action uses about 0.16 Mana, so 1,000 Mana a day covers roughly 6,000 actions a day.</p>
         </div>
-        <div class="price-table-wrap">
-          <table>
-            <thead><tr><th scope="col">Term</th><th scope="col">Per 1,000 Mana a day</th><th scope="col">Good for</th></tr></thead>
-            <tbody>
-              <tr><td>1 day</td><td class="num">$0.03</td><td>Trying it out, a launch day</td></tr>
-              <tr><td>7 days</td><td class="num">$0.20</td><td>A week of steady use</td></tr>
-              <tr><td>30 days</td><td class="num">$0.75</td><td>Month to month</td></tr>
-              <tr><td>Upload ticket</td><td class="num">$0.05</td><td>Putting a contract on-chain: Mana reserved for 24 hours</td></tr>
-            </tbody>
-          </table>
+        <ul class="prices">
+          <li><span class="term">1 day</span><span class="amount">$0.03</span><span class="per">for 1,000 Mana a day</span><span class="fit">Try it out, or cover a launch day</span></li>
+          <li><span class="term">7 days</span><span class="amount">$0.20</span><span class="per">for 1,000 Mana a day</span><span class="fit">A week of steady use</span></li>
+          <li class="best"><span class="tag">Best value</span><span class="term">30 days</span><span class="amount">$0.75</span><span class="per">for 1,000 Mana a day</span><span class="fit">Month to month, the lowest daily price</span></li>
+        </ul>
+        <div class="price-notes">
+          <p class="small">Need more or less? Pick any daily amount and the price scales with it. Putting a contract on chain? An upload ticket reserves the Mana for 24 hours at $0.05 per 1,000 Mana.</p>
+          <p class="small">Introductory prices. No auto-renew. Prices can change for new purchases, never for a term you've already paid for.</p>
         </div>
-        <div class="price-notes"><p class="small">Introductory prices. No auto-renew. Prices may rise for new purchases, never for a term you've already paid for. <a href="help.html">Questions? See Help.</a></p></div>
+      </div>
+    </section>
+
+    <section class="band" aria-labelledby="faq-title" style="padding-top:0">
+      <div class="wrap">
+        <div class="section-head"><h2 id="faq-title">Questions people ask</h2></div>
+        <div class="faq qa" data-faq>
+          <details><summary>What is Mana on Koinos?</summary><div><p>Mana is what a Koinos transaction costs, instead of a gas fee. Every wallet gets Mana from the KOIN it holds, and Mana refills by itself, about 20% a day. A wallet with no KOIN has no Mana, so it can't send anything on its own. <a href="koinos-mana.html">Read the full guide to Koinos Mana.</a></p></div></details>
+          <details><summary>Do I need KOIN to use Mana Station?</summary><div><p>No. You pay for a pass or app plan in a dollar stablecoin (vUSDT or vUSDC), and the station pays the Mana for that purchase too, so even a brand-new, empty wallet can start.</p></div></details>
+          <details><summary>How much does it cost?</summary><div><p>From $0.03 for 1,000 Mana a day for one day, $0.20 for seven days or $0.75 for thirty. 1,000 Mana covers about 6,000 simple actions.</p></div></details>
+          <details><summary>Can my app's users make free, gasless transactions?</summary><div><p>Yes. Buy an app plan for your contract and the station pays your users' transactions with your app, with fair per-user limits so nobody can drain it. If your plan ends, your app keeps working: users simply pay with their own Mana again.</p></div></details>
+          <details><summary>Does it work with my wallet?</summary><div><p>On a computer, the free <a href="helper.html">pass helper</a> for Chrome, Brave and Edge sets the station as the payer before your wallet asks you to approve. Apps that support Mana Station do this by themselves, in any wallet and browser.</p></div></details>
+          <details><summary>Does it work on my phone?</summary><div><p>Yes, in every app that supports Mana Station: those apps ask the station first, with nothing to install. Phone browsers can't add extensions, so the pass helper is for computers.</p></div></details>
+          <details><summary>Is it safe? Who holds my money?</summary><div><p>The station never holds your keys and can only pay for transactions, never change them. Your payment is held by the station contract until your term ends. Moving funds or changing the code takes two of three council members and a public waiting period. Cancel any time and get back every unused day.</p></div></details>
+          <details><summary>What happens when my pass ends?</summary><div><p>Nothing breaks. There's no auto-renew; your transactions are simply paid with your own Mana again until you renew.</p></div></details>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" aria-labelledby="cta-title" style="padding-top:0">
+      <div class="wrap">
+        <div class="cta">
+          <div class="stack" style="gap:10px"><h2 id="cta-title">Ready when you are.</h2><p>Grab a pass in under a minute, or send a free test transaction first.</p></div>
+          <div class="actions"><a class="btn btn-spark btn-big" href="get.html">Get Mana</a><a class="btn btn-ghost btn-big" href="play.html">Try it free</a></div>
+        </div>
       </div>
     </section>
   </main>
@@ -102,15 +134,21 @@
 {{FOOT}}
   <script>
   (async () => {
+    const $ = (id) => document.getElementById(id);
     try {
-      const st = await MS.read("get_status"); const mana = Number(BigInt(st.mana || 0)) / 1e8; const full = Number(BigInt(st.config?.koin_amount || 0)) / 1e8 || mana;
-      const pct = Math.max(0, Math.min(1, mana / full));
-      document.getElementById("tankReading").textContent = MS.mana(st.mana, 0) + " Mana";
-      const cells = [...document.querySelectorAll("#tank .cell")];
-      cells.forEach((c, i) => { const f = Math.max(0, Math.min(1, pct * 5 - i)); c.firstChild.style.height = (f * 100).toFixed(0) + "%"; c.classList.toggle("refill", f > 0 && f < 1); });
-      document.getElementById("tank").setAttribute("aria-label", `The playground station holds ${MS.mana(st.mana, 0)} Mana, ${Math.round(pct * 100)}% full.`);
-      document.getElementById("tankNote").textContent = `This is the live playground station on the Koinos testnet: ${Math.round(pct * 100)}% full. Mana refills by itself, about a fifth of its KOIN every day.`;
-    } catch { document.getElementById("tankReading").textContent = ""; }
+      const st = await MS.read("get_status");
+      const mana = Number(BigInt(st.mana || 0)) / 1e8, full = Number(BigInt(st.config?.koin_amount || 0)) / 1e8 || mana;
+      const pct = Math.max(0, Math.min(1, full ? mana / full : 0));
+      $("meterReading").innerHTML = ""; $("meterReading").append(MS.mana(st.mana, 0)); const s = document.createElement("small"); s.textContent = "Mana"; $("meterReading").append(s);
+      $("factFull").textContent = Math.round(pct * 100) + "% full";
+      $("factActions").textContent = "≈ " + Math.floor(mana / 0.16).toLocaleString("en-US");
+      const segs = [...document.querySelectorAll("#meter .seg")];
+      requestAnimationFrame(() => segs.forEach((c, i) => { const f = Math.max(0, Math.min(1, pct * 10 - i)); c.firstChild.style.width = (f * 100).toFixed(0) + "%"; c.classList.toggle("refill", f > 0 && f < 1); }));
+      $("meter").setAttribute("aria-label", `The playground station holds ${MS.mana(st.mana, 0)} Mana, ${Math.round(pct * 100)}% full.`);
+    } catch {
+      $("meterReading").textContent = "Mana on tap"; $("factFull").textContent = "–"; $("factActions").textContent = "–";
+      $("meterNote").textContent = "Couldn't reach the Koinos testnet just now. Refresh to see the live reading.";
+    }
   })();
   </script>
 </body>

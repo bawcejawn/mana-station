@@ -31,3 +31,10 @@ Every page shares the same header with a **wallet chip** (top right): pick a tes
 1. Point `playground.js` at the mainnet station and stablecoins, and drop the testnet bar in `src/parts/top.html`.
 2. Raise the size presets in `src/get.html` (they're at playground scale).
 3. Add `<link rel="canonical">`, `og:url` and an `og:image`; fill in the domain in `sitemap.xml` and `robots.txt`.
+
+## Search and sharing (built automatically)
+`node site/tools/build-pages.mjs` writes, for every page, the canonical address, Open Graph and Twitter cards
+(`og-image.png`), structured data (breadcrumbs; FAQ from the `<details>` after a `data-faq` marker; site, app and
+prices on Home), plus `sitemap.xml`, `robots.txt` and `site.webmanifest`. The public address lives in one place,
+`site/tools/site.config.mjs` (`SITE`): change it when the domain is ready, rebuild and republish.
+After the first publish, add the site in Google Search Console and Bing Webmaster Tools and submit `sitemap.xml`.
