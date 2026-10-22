@@ -8,7 +8,7 @@ Status on 2026-10-20 (branch `fix/squat-freeze-stall`, PR #1):
 - **Three ways in (Oct 20):** a **Mana pass** for a wallet, an **app plan** for a contract, and **free Mana** the owner gives their own apps. A wallet with no KOIN and no Mana can buy, renew and cancel (free checkout).
 - **Not done yet:** mainnet deployment, a legal review of the terms, and a domain.
 - **Audit Bot audit (2026-10-22, commit 4343f83):** fixes on branch `audit-fixes-1` (AB-001 … AB-022). Unit tests: 78
-  original + 51 audit proof tests + 27 regression tests, all pass. The rules below are updated to match.
+  original + 51 audit proof tests + 28 regression tests (157), all pass. The rules below are updated to match.
 
 ## 1. Access: who can do what
 
