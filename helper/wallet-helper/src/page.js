@@ -46,12 +46,13 @@
     if ((standAside[me] || 0) > now()) return null;
     return c;
   }
-  // The limit to ask about: the site's own, if it's a sensible size; otherwise the configured default. A limit worked
-  // out from the user's balance (very large, or 0 for a wallet with no Mana) is never carried over. Kondor's
-  // "optimize mana" then sets the final limit to about 1.1x what the transaction really uses.
+  // The limit to ask about: the site's own whenever the station could accept it (up to the station's per-transaction
+  // maximum), so bigger transactions keep the room they need. The default (0.5 Mana) is used only when the site gave
+  // none, 0 (a wallet with no Mana) or more than the station's maximum (usually a whole wallet balance). Kondor's
+  // "optimize mana" then sets the final limit to about 1.1x what the transaction really uses, up or down.
   function rcFor(h) {
     const v = typeof h.rc_limit === "string" || typeof h.rc_limit === "number" ? String(h.rc_limit) : "";
-    if (/^[0-9]{1,20}$/.test(v)) { const n = BigInt(v); if (n >= BigInt(CFG.minRc) && n <= BigInt(CFG.defaultRc)) return v; }
+    if (/^[0-9]{1,20}$/.test(v)) { const n = BigInt(v); if (n >= BigInt(CFG.minRc) && n <= BigInt(CFG.maxRc)) return v; }
     return CFG.defaultRc;
   }
   function ask(payee, operations, rcLimit) {

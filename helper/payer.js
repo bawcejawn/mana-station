@@ -14,6 +14,14 @@ export const STATION = "<station address>";               // set at launch
 // to 0.01 Mana. The station's per-action cap for the entry point (set_entry) must be at least this.
 export const EP_CAP = { play: 19_000_000n };              // per action, in Mana base units (1 Mana = 1e8)
 
+/** A Mana limit for actions whose cost grows with their size (e.g. SwarmTales text): measured base cost plus a cost per
+ *  byte of arguments, with a 15% margin, rounded up to 0.01 Mana. Measure base and perByte on the testnet for each
+ *  action. Keeps passes and plans from being charged more than the action needs (they count the limit, not the use). */
+export function limitForSize({ base, perByte, bytes, marginPct = 115n }) {
+  const raw = (BigInt(base) + BigInt(perByte) * BigInt(bytes)) * BigInt(marginPct) / 100n;
+  return ((raw + 999_999n) / 1_000_000n) * 1_000_000n;
+}
+
 /** Choose who pays: { payer, payee?, rcLimit, route }. route "" = the user's own Mana. */
 export async function payerOptions({ provider, user, operations, rcLimit, station = STATION }) {
   return MSC.choosePayer({ rpc: provider, station, payee: user, operations, rcLimit });
