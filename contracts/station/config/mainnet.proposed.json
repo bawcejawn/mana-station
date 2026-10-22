@@ -21,6 +21,8 @@
     "big_ticket_ms": "86400000",
     "ticket_fee_bp": 500,
     "max_allowances": 50,
+    "open_cap": 50,
+    "_open_cap": "AB-002 follow-up (Oct 22): the most open allowances the station accepts (1 to 256; Mana sold decides below it; renewals unaffected). Start at 50. Raise open_cap only after measuring buy_allowance and the heaviest authorize route on a node at the new value",
     "_max_allowances": "IGNORED since audit-fixes-1 (AB-002): open allowances are limited by Mana sold (sellable capacity), with a fixed safety cap of 256 open allowances and 512 open purchases in the contract",
     "max_days": "90",
     "treasury": "empty = release destination is the owner wallet (DECIDED by Carl 5:18 PM; since 7:47 PM payments are escrowed first). Owner-changeable to another external wallet; the station's own id is refused",

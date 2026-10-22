@@ -137,7 +137,7 @@ const koinAmt = 60n * M;                 // configured capacity → daily budget
 const base = { owner: OWN, paused: false, koin_amount: String(koinAmt), refill_bp: 2000, admin_min: String(M / 2n), hard_max: String(2n * M),
   per_min: 10, cooldown_ms: "60000", day_actions: 50, day_mana: String(40n * M), new_actions: 50, new_mana: String(40n * M), new_pct: 100, max_ops: 2,
   big_max: String(5n * M), big_cooldown_ms: "86400000", big_week_cap: String(15n * M), big_max_debt: String(10n * M), big_ticket_ms: "0",
-  max_allowances: 4, max_days: "30", buffer_bp: 0, alert_mana: "0", ticket_fee_bp: 0,
+  max_allowances: 4, open_cap: 50, max_days: "30", buffer_bp: 0, alert_mana: "0", ticket_fee_bp: 0,
   council: [A("council1"), A("council2"), A("council3")], threshold: 2, guard_delay_ms: "70000" }; // audit #1: 2 of 3, 70 s (testnet floor 60 s)
 // ---------------------------------------------------------------- 1. deploys (paid by the funder, before it sends KOIN out)
 // Upload rc limit sized from the chain's real resource prices (bytes × (disk + network) cost, + 1 Mana for compute), × 1.5.

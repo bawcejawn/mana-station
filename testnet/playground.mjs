@@ -58,7 +58,7 @@ const CONFIG = {
   owner: A("owner"), paused: false, koin_amount: String(100n * M), refill_bp: 2000, admin_min: String(M), hard_max: String(2n * M),
   per_min: 10, cooldown_ms: "60000", day_actions: 200, day_mana: String(20n * M), new_actions: 100, new_mana: String(10n * M), new_pct: 100, max_ops: 2,
   big_max: String(10n * M), big_cooldown_ms: "3600000", big_week_cap: String(30n * M), big_max_debt: String(10n * M), big_ticket_ms: "0",
-  max_allowances: 10, max_days: "30", buffer_bp: 2000, alert_mana: String(20n * M), ticket_fee_bp: 0, max_per_buyer: 5,
+  max_allowances: 10, open_cap: 50, max_days: "30", buffer_bp: 2000, alert_mana: String(20n * M), ticket_fee_bp: 0, max_per_buyer: 5,
   council: [A("c1"), A("c2"), A("c3")], threshold: 2, guard_delay_ms: "120000",               // 2 of 3, 2-minute wait (testnet)
 };
 
