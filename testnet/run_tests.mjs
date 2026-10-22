@@ -325,7 +325,9 @@ const tokT = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spe
 check("designated", "allowance targeting a token contract refused", !tokT.ok, tokT.error || "");
 const tr = await send(tok("user1"), "transfer", { from: U1, to: U2, value: "1" }, sponsored(U1, L));
 check("designated", "token transfer by a paying app's user still refused", !tr.ok, tr.error || "");
+const bs0 = await tbal(BUY);                          // AB-001: reason 1 refunds the unused share at once
 const su = await admin("suspend_allowance", { buyer: BUY, reason: 1 });
+const susRef = (await tbal(BUY)) - bs0;
 check("suspend", "owner suspends buyer (reason 1 abuse), buyer_suspended event", su.ok && su.events.includes("station.buyer_suspended"), su.error || su.events);
 const b2 = await xfer(); check("suspend", "suspended buyer's allowance no longer sponsors", !b2.ok, b2.error || "");
 const mix = await sendOps("user1", [[C(PAYAPP, abiA, "user1"), "play", { user: U1 }], [app("user1"), "play", { user: U1 }]], sponsored(U1, L));
@@ -336,10 +338,32 @@ check("suspend", "unsuspend, buyer_unsuspended event", us.ok && us.events.includ
 const b3 = await xfer(); check("suspend", "after unsuspend: sponsored again", b3.ok, b3.error || "");
 const preRel = await send(sta("user1"), "release", { purchase_id: 1 }, { rcLimit: 2n * M });
 check("escrow", "release before the term ends refused", !preRel.ok, preRel.error || "");
+// Expected buyer-cancel refund from the term as stored now, mirroring Station.termRefund (keepMin): the Mana part pays the
+// days used at the 1-day price (AB-010), never more than its unused days' share, keeps the minimum charge; the slot fee
+// is kept for the days held and refunded for unused days. The current day counts as used. The suspension above already
+// refunded 6 of 7 days pro rata of the whole price (slot fee included, no minimum) and cut the term to the day in
+// progress, so this cancel should return 0 and emit no escrow_refunded event.
+const DAY = 86_400_000n;
+function cancelRefund(e, now) {
+  const amount = BigInt(e.amount || 0), days = BigInt(e.days || 0), start = BigInt(e.start || 0), end = BigInt(e.end || 0);
+  if (e.closed || now >= end || days === 0n) return 0n;
+  const used = now < start ? 0n : (now - start) / DAY + 1n; if (used >= days) return 0n;
+  const u = days - used, slotDay = BigInt(e.slot_fee_per_day || 0), slot = slotDay * days;
+  const m = amount > slot ? amount - slot : amount, dayPrice = BigInt(e.day_price || 0), minKeep = BigInt(e.min_keep || 0);
+  let r = m * u / days;
+  if (dayPrice > 0n) { const charge = used * dayPrice > m ? m : used * dayPrice; if (m - charge < r) r = m - charge; }
+  const cap = m > minKeep ? m - minKeep : 0n; if (r > cap) r = cap;
+  if (amount > slot) r += slotDay * u;
+  const held = amount - BigInt(e.refunded || 0) - BigInt(e.released || 0); return r > held ? held : r;
+}
+const esc = (await read(sta(), "get_escrow", { purchase_id: 1 })).purchase || {};
 const bb0 = await tbal(BUY);
+const expA = cancelRefund(esc, BigInt(Date.now()));   // wall clock vs block time: minutes into a 24 h day, no boundary
 const ca = await send(sta("buyer"), "cancel_allowance", { buyer: BUY, id: aid }, { rcLimit: M / 2n });
-const refundA = (await tbal(BUY)) - bb0, expA = price * 6n / 7n;
-check("escrow", "cancel day 0 of 7: refund = floor(paid × 6/7) (current day used), escrow_refunded event", ca.ok && refundA === expA && ca.events.includes("station.escrow_refunded"), `paid ${price} refund ${refundA} expected ${expA} ${ca.error || ""}`);
+const refundA = (await tbal(BUY)) - bb0, expSus = BigInt(esc.amount || 0) * 6n / 7n;   // pro rata of what was paid
+check("escrow", "cancel after the suspension refund: AB-001 refunded 6/7 of the whole price; the cancel adds what AB-010 + slot fee allow (0: the term was cut to the day in progress)",
+  su.ok && susRef === expSus && ca.ok && refundA === expA && expA === 0n && !ca.events.includes("station.escrow_refunded") && ca.events.includes("station.allowance_cancelled"),
+  `paid ${price} (slot fee ${q.slot_fee || 0}) suspension refund ${susRef} expected ${expSus}; cancel refund ${refundA} expected ${expA}; term days ${esc.days} slot/day ${esc.slot_fee_per_day || 0} day_price ${esc.day_price || 0} ${ca.error || ""}`);
 const b4 = await xfer(); note(`after cancel, same day: allowance ${b4.ok ? "still sponsors (current day was paid)" : "no longer sponsors"}`);
 
 // ---------------------------------------------------------------- 8. big-upload tickets: buffer, fee, anti-spam
