@@ -173,3 +173,11 @@ Something has to name the station as payer; the chain only asks the named payer.
 - **App snippet (covers every user, nothing to install):** `sendWithStation` in `helper/payer.js`. It asks the station first; if the plan is active the station pays, otherwise the user's own Mana pays. When a plan ends the app needs no change.
 - **Pass helper (for pass holders, any app):** `helper/wallet-helper/`, a userscript and an unpacked Chrome extension built from the same code (`node helper/wallet-helper/build.mjs testnet`). It sees a site's signing request to Kondor, asks `would_pay`, and if yes sets payer = station, payee = the user before Kondor opens. Holds no keys, signs nothing, changes only who pays; leaves alone requests with another payer (Kondor free mana, app sponsors) or existing signatures; stands aside 2 minutes after a refusal. Offline rule tests: `helper/wallet-helper/test/test_helper.py` (9/9).
 - **Kondor and this testnet:** Kondor's public code knows only mainnet and the older Harbinger testnet (chain id `EiBncD4p…`), so on this testnet the playground's helper page uses a stand-in wallet that answers signing requests the way Kondor does. Real-Kondor testing happens on mainnet.
+
+## 7. Later: wallets (not before the station is proven with Knode and SwarmTales)
+
+- **Phones:** apps that add the station check cover everyone, pass holders included, in any browser. A wallet-level
+  option is the only way to cover passes in apps that don't.
+- **KOIN Vault** (koinvault.app, passkey phone wallet, someone else's): Carl may offer a pull request adding a
+  "pay with Mana Station when it agrees" option, using `would_pay` (helper/mana-station-client.js).
+- **Kondor:** same idea, much later; no contact until then (Carl, Oct 21).
