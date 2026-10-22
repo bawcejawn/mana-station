@@ -21,6 +21,7 @@
     "big_ticket_ms": "86400000",
     "ticket_fee_bp": 500,
     "max_allowances": 50,
+    "_max_allowances": "IGNORED since audit-fixes-1 (AB-002): open allowances are limited by Mana sold (sellable capacity), with a fixed safety cap of 256 open allowances and 512 open purchases in the contract",
     "max_days": "90",
     "treasury": "empty = release destination is the owner wallet (DECIDED by Carl 5:18 PM; since 7:47 PM payments are escrowed first). Owner-changeable to another external wallet; the station's own id is refused",
     "buffer_bp": 2000,
@@ -67,7 +68,8 @@
       "big_min_mana": "500000000000",
       "max_per_purchase": "50000000000",
       "_max": "500 vUSDT (DECIDED by Carl 7:32 PM)",
-      "min_purchase": "0"
+      "min_purchase": "0",
+      "pass_min_purchase": "25000000"
     },
     "vUSDC 1N8iYrYEJdCVK1rhbqv3qZUzHcpoeKmFnj": {
       "active": true,
@@ -78,13 +80,15 @@
       "big_min_mana": "500000000000",
       "max_per_purchase": "10000000000",
       "_max": "100 vUSDC: lower on purpose because vUSDC liquidity on Koinos is thinner (stablecoins.md); DECIDED by Carl 7:32 PM",
-      "min_purchase": "0"
+      "min_purchase": "0",
+      "pass_min_purchase": "25000000"
     },
     "_units": "token base units, 8 decimals. Allowance prices are per 1,000 Mana/day for the whole term ($0.03 / $0.20 / $0.75); big upload $0.05 per 1,000 Mana, minimum 5,000 Mana = 25,000,000 ($0.25). Price = ceil(whole Mana × tier / 1,000)",
     "_source": "Carl approved via Orchestrator 2026-10-19 17:11 UTC; monetization_legal.md §8b (introductory; may increase for new purchases)",
     "_rules": "durations only 1, 7, 30 days (others refused). Price changes apply to new purchases and renewals only; each allowance/ticket stores token, tier price and amount paid. Renewal is charged at the price current at renewal time. No auto-renew: renew needs the payer's own signature",
     "rejected": "Chainge USDT 19WrWze3XAoMa3Mwqys4rJMP6emZX2wfpH (set_price refuses it)",
-    "_min_purchase": "0 = no minimum (Carl, Oct 19 8:43 PM: no default minimum). The owner can still set one per token. Slot squatting is limited by the target-app signature, max_per_buyer and max_allowances instead; see engineering.md for the residual risk"
+    "_min_purchase": "0 = no minimum for app plans and tickets (Carl, Oct 19 8:43 PM). The owner can still set one per token",
+    "_pass_min_purchase": "DECIDED by Carl (Oct 22, Audit Bot AB-002): every Mana pass purchase or renewal costs at least $0.25 (25,000,000 base units); shown in the quote (min_charge) and kept on a buyer cancel. With Mana (not a count) deciding capacity, 50 one-Mana passes use 50 of 3,000 sellable Mana and block nobody, and squatting costs at least $0.25 per pass per day"
   },
   "_big_upload_limits": {
     "status": "DECIDED by Carl (7:32 PM): approved as proposed; all owner-adjustable via set_config",
@@ -93,7 +97,7 @@
     "big_max_debt": "6,000 Mana outstanding",
     "scaling": "debt is repaid at the sellable slice's rate: 6,000 takes 6,000 / sellable days (e.g. 40k KOIN → 2,000/day → 3 days). Suggested rule: big_max_debt ≈ 3 × sellable/day, week cap ≈ 2 × big_max; re-set when koin_amount changes",
     "at_30k": "unavailable: sellable slice is 0 (quote reason 'no repayment capacity')",
-    "big_ticket_ms": "24 h (DECIDED 8:02 PM; 0 also means 24 h); owner-adjustable",
+    "big_ticket_ms": "24 h (DECIDED 8:02 PM; 0 also means 24 h); owner-adjustable from 1 hour to 7 days only (AB-001). The quote shows lifetime_ms and buy_big_upload refuses a ticket shorter than the buyer's min_lifetime_ms",
     "big_cooldown_ms": "24 h between purchases PER BUYER, counted from the purchase (audit #2: was station-wide, which let one buyer block everyone)"
   },
   "_buffer": {
@@ -116,7 +120,7 @@
       "3": "AUP violation",
       "4": "legal or other"
     },
-    "effect": "all allowances and big-upload tickets paid for by that buyer stop being sponsored; new buys/renewals by them refused; no money moves, no refund; suspended time is not extended or credited",
+    "effect": "all allowances and big-upload tickets paid for by that buyer stop being sponsored; new buys/renewals by them refused; suspended time is not extended or credited. AB-001 (Carl, Oct 22): for reasons 1, 3 and 4 the unused share is refunded automatically when the suspension starts (whole unused days pro rata, the unexpired unused share of a ticket, no minimum or fee kept); the owner keeps only what was served. Reason 2 (sanctions) freezes refund and release",
     "events": "station.buyer_suspended / station.buyer_unsuspended (suspend_event: buyer, reason, suspended, at)"
   },
   "_escrow": {
@@ -128,7 +132,8 @@
     "release": "release(purchase_id): anyone, only after the term ends, exactly once, to the treasury (owner wallet by default; the station itself is refused). No early release, no owner withdrawal of escrow",
     "rounding": "refund = floor(amount × unused / total): rounds down by < 1 base unit (1e-8 token) in Carl's favour; refund + release always equals the amount paid",
     "pause": "paused time is credited: the escrow clock stops while paused and every running/upcoming term, allowance and ticket is extended by the pause on unpause",
-    "suspension": "owner_refund refunds unused days/Mana (no minimum charge) for buyers not at fault (reason 4) or by owner choice for abuse/AUP; sanctions (reason 2): refund AND release frozen until legal review (reclassify a false match to reason 4)",
+    "suspension": "AB-001: suspension for reasons 1, 3, 4 refunds the unused share at once (no minimum charge); sanctions (reason 2): refund AND release frozen until legal review (reclassify a false match to reason 4, which refunds then)",
+    "buyer_cancel_rate": "AB-010 (Carl, Oct 22): a buyer cancel charges the days used at the 1-day price for that size at purchase (refund = paid - min(paid, used x 1-day price), never more than the unused days' pro-rata share); owner and suspension refunds stay pro rata",
     "invariant": "per token: station balance == held == collected − refunded − released",
     "ticket_anti_spam": "Audit #2: one ticket per buyer per big_cooldown_ms (24 h) from purchase; no station-wide wait. Unused Mana is still released from the outstanding and weekly counters at settlement. Holding a ticket now costs its full price",
     "auto_close": "Audit #4 + review M1: every buy_allowance / renew / buy_big_upload first closes up to 8 finished purchases IN THE SAME TOKEN (ended terms, expired or used-up tickets), so the open list (cap 128) can't fill up and one broken token can't block purchases in the other. Purchases of suspended payers or suspended allowance owners are skipped",
