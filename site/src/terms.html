@@ -11,7 +11,7 @@
   <main id="main" class="wrap page legal">
     <div class="page-head">
       <h1>Terms of service</h1>
-      <p class="msg">Draft for legal review, version 2026-10-21. Not yet in force for real money. On the Koinos testnet playground nothing has value and these terms describe how the service will work.</p>
+      <p class="msg">Draft for legal review, version 2026-10-22. Not yet in force for real money. On the Koinos testnet playground nothing has value and these terms describe how the service will work.</p>
     </div>
 
     <section class="panel" aria-labelledby="t1"><h2 id="t1">1. Who we are and what this is</h2>
@@ -23,9 +23,10 @@
     <section class="panel" aria-labelledby="t2"><h2 id="t2">2. What you can buy</h2>
       <ul class="ticks">
         <li><b>Mana pass:</b> a daily amount of Mana for one wallet, for 1, 7 or 30 days. The station pays that wallet's own transactions to any contract except the station and token contracts, never token transfers, approvals or burns, and never contract uploads, up to the daily amount.</li>
-        <li><b>App plan:</b> a daily amount of Mana for one app contract, shared by all its users. The station pays a transaction only when every top-level operation calls that app. Per-user limits apply. The app's own key must approve the purchase.</li>
-        <li><b>Upload ticket:</b> Mana reserved for one wallet for 24 hours, at the full price whether used or not, to upload or call that wallet's own contract.</li>
+        <li><b>App plan:</b> a daily amount of Mana for one app contract, shared by all its users. The station pays a transaction only when every top-level operation calls that app, and never a token transfer, approval or burn. Per-user limits apply. The app's own key must approve the purchase.</li>
+        <li><b>Upload ticket:</b> Mana reserved for one wallet for the ticket's lifetime, at the full price whether used or not, to upload or call that wallet's own contract. The lifetime is shown before you buy (24 hours by default; the operator can set 1 hour to 7 days) and the station refuses a shorter one than you were shown. That wallet must approve the ticket.</li>
       </ul>
+      <p>Over a whole term a pass or plan never pays for more than its daily amount times the days you paid for.</p>
       <p>A transaction counts against a pass or plan by its Mana limit (the most it may use, set when it is signed), not by what it finally uses, because the station decides before the transaction runs. Wallets that estimate the limit, such as Kondor with "optimize mana", keep it close to real use.</p>
             <p>Each wallet may hold a limited number of open purchases at a time. Purchases are paid in the stablecoins the station accepts (vUSDT or vUSDC on mainnet). You see the exact price before you buy, and the price of a term you have paid never changes.</p>
       <p>Purchases are prepaid service credit for transaction fees. They are not money, not a deposit, not an investment, not a token and not transferable, and they can't be redeemed for crypto or cash except through the refunds below.</p>
@@ -33,9 +34,9 @@
 
     <section class="panel" aria-labelledby="t3"><h2 id="t3">3. Cancelling and refunds</h2>
       <ul class="ticks">
-        <li><b>Passes and app plans:</b> cancel any time. You get back every whole day you haven't started; the current day counts as used, so the minimum charge is one day. Service continues to the end of that day.</li>
-        <li><b>Upload tickets:</b> end early and you get back the value of the Mana you haven't used, reduced in a straight line by the time already passed, always keeping a fee (currently 5%). A ticket that runs its full 24 hours refunds nothing.</li>
-        <li>If the operator sets a minimum charge, it is shown in the quote and kept if you cancel.</li>
+        <li><b>Passes and app plans:</b> cancel any time. The days you used are charged at the 1-day price for the same Mana a day (the price when you bought); the current day counts as used, so you always pay at least one day. You get back the rest, never more than the share of the whole days you haven't started. Example: a 30-day term at $0.75, cancelled on day 1 when a 1-day term costs $0.03, returns $0.72. Service continues to the end of that day.</li>
+        <li><b>Upload tickets:</b> end early and you get back the value of the Mana you haven't used, reduced in a straight line by the time already passed, always keeping a fee (currently 5%). A ticket that runs its full lifetime refunds nothing.</li>
+        <li>If the operator sets a minimum charge, it is shown in the quote and kept if you cancel. Mana passes may have a higher minimum charge than app plans (proposed for mainnet: $0.25 a pass).</li>
         <li>Refunds are paid only in the stablecoin you paid with, to the wallet that bought, by the station contract.</li>
         <li>If the operator pauses the station, the paused time is added back to your term.</li>
         <li>There is no auto-renew. Service stops when your term ends unless you renew, at the price current then.</li>
@@ -44,11 +45,22 @@
 
     <section class="panel" aria-labelledby="t4"><h2 id="t4">4. Who holds your payment</h2>
       <p>Your payment is held by the station contract until your term ends. Then it is released to the operator's treasury, or returned to you if you cancel. The station's own key can't move it. Any other movement of money, an upgrade of the station's code, or a change of its owner or council needs approval by at least two of the station's council members, then a public waiting period (48 hours on mainnet) during which any one member can veto. This is council custody, not fully trustless escrow.</p>
+      <p>A vetoed action can't be proposed again for 14 days, whoever sits on the council then. A majority of the council can replace a member (a member can't veto their own removal), so a change that one member vetoed can still pass, after at least those 14 days plus the waiting period. The owner can never be a council member.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="t4b"><h2 id="t4b">4a. What the operator can do without the council</h2>
+      <ul class="ticks">
+        <li>Pause the station (paused time is added back to every running term) and resume it. Any council member can also pause.</li>
+        <li>Change prices, minimum charges and limits for new purchases and renewals. A term or ticket you have already paid for keeps its price and lifetime. Limits that would stop paid service (for example a per-transaction maximum below 1 Mana, or a safety floor above 10% of the station's capacity) are refused by the contract.</li>
+        <li>Choose which free apps the station supports. A contract with a paid plan still running can't be switched to a free app.</li>
+        <li>Suspend a buyer (see section 5).</li>
+      </ul>
+      <p>The operator can't move your payment, change who holds it, or change the station's code alone.</p>
     </section>
 
     <section class="panel" aria-labelledby="t5"><h2 id="t5">5. Limits, refusals and suspension</h2>
       <p>The station applies limits so that one user can't use up what others paid for: a few transactions a minute, daily caps, and a daily budget for the whole station. A transaction the station refuses is not charged to anyone; your wallet may then pay it from your own Mana if you choose. In rare cases a transaction the station first agreed to pay can still be refused when it lands, for example if the station's Mana falls below its safety floor.</p>
-      <p>We may suspend a buyer for abuse, for breaking these terms, for sanctions or for legal reasons. Suspended time is not added back. We may refund the unused part of a suspended purchase, never to a sanctioned party. We may pause the whole station in an emergency.</p>
+      <p>We may suspend a buyer for abuse, for breaking these terms, for sanctions or for legal reasons. A suspended buyer's purchases stop being paid for, and suspended time is not added back. For abuse, breaking these terms or legal reasons, the contract refunds the unused part automatically when the suspension starts: every whole day not yet started, and the unexpired, unused share of a ticket, with no minimum charge or fee kept. The operator keeps only what was already served. For sanctions, the payment stays frozen in the station (neither refunded nor released) pending legal review. We may pause the whole station in an emergency.</p>
       <p>You may not use the service to break any law, to attack or overload the station or the Koinos network, or to get around its limits (for example with many wallets).</p>
     </section>
 
