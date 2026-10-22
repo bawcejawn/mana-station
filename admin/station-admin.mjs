@@ -6,6 +6,7 @@
 // Read (no key needed):
 //   list                              free apps, paid allowances, today's budget
 //   proposals                         open council proposals
+//   check                             open allowances vs open_cap; exits 2 at 80% or more (run it daily, e.g. from cron)
 // Owner:
 //   connect <app contract> <Mana/day> [strict]   connect or update a free app
 //   disconnect <app contract>
@@ -29,13 +30,19 @@ const STATION = process.env.STATION;
 const M = 100_000_000n;
 const KIND = { 1: "upgrade", 2: "withdraw KOIN", 3: "rescue token", 4: "change council", 5: "change delay", 6: "change treasury", 7: "change ticket fee", 8: "change owner" };
 const [cmd, ...args] = process.argv.slice(2);
-if (!cmd || !STATION) { console.log(fs.readFileSync(new URL(import.meta.url)).toString().split("\n").slice(1, 22).map((l) => l.replace(/^\/\/ ?/, "")).join("\n")); process.exit(cmd ? 1 : 0); }
+if (!cmd || !STATION) { console.log(fs.readFileSync(new URL(import.meta.url)).toString().split("\n").slice(1, 23).map((l) => l.replace(/^\/\/ ?/, "")).join("\n")); process.exit(cmd ? 1 : 0); }
 
 const provider = new Provider([RPC]);
 const abi = JSON.parse(fs.readFileSync(new URL("../contracts/station/abi/station.koilib.json", import.meta.url)));
 const reader = new Contract({ id: STATION, abi, provider });
 const mana = (v) => (Number(BigInt(v || 0)) / 1e8).toLocaleString(undefined, { maximumFractionDigits: 2 });
 const read = async (fn, a = {}) => (await reader.functions[fn](a)).result || {};
+// Owner decision (Oct 22): warn when open allowances reach 80% of open_cap (the last app_reserved are for real apps).
+function slots(st) {
+  const open = Number(st.open_allowances || 0), cap = Number(st.open_cap || 0), res = Number(st.app_reserved || 0);
+  const warn = cap > 0 && open * 5 >= cap * 4;
+  return { warn, line: `Open allowances ${open} of open_cap ${cap} (the last ${res} only for app plans on deployed contracts)${warn ? "  WARNING: 80% or more of open_cap" : ""}` };
+}
 
 function hiddenPrompt(q) {
   return new Promise((resolve) => {
@@ -67,7 +74,8 @@ async function write(fn, a, { anyone = false } = {}) {
 if (cmd === "list") {
   const L = await read("list_connected"); const st = await read("get_status");
   console.log(`Station ${STATION} on ${RPC}${st.config?.paused ? "  [PAUSED]" : ""}`);
-  console.log(`Mana ${mana(L.mana)}   daily budget ${mana(L.daily_budget)}   reserved ${mana(L.reserved)}   sellable ${mana(L.sellable)}   sold ${mana(L.sold)}\n`);
+  console.log(`Mana ${mana(L.mana)}   daily budget ${mana(L.daily_budget)}   reserved ${mana(L.reserved)}   sellable ${mana(L.sellable)}   sold ${mana(L.sold)}`);
+  console.log(slots(st).line + "\n");
   console.log("Free apps:");
   for (const a of L.free_apps || []) console.log(`  ${(a.contract_id || `(slot ${a.app}, no contract)`).padEnd(36)} ${mana(a.mana_per_day).padStart(10)} Mana/day   used ${mana(a.used_24h)}${a.strict ? "   listed functions only" : ""}`);
   if (!(L.free_apps || []).length) console.log("  none");
@@ -81,6 +89,10 @@ if (cmd === "list") {
     console.log(`#${p.id} ${KIND[a.kind] || a.kind}${a.kind === 2 ? ` ${mana(a.amount)} KOIN to ${a.to}` : ""}${a.kind === 1 ? ` ${a.hash}` : ""}  approvals ${(p.approvals || []).length}/${st.config?.threshold}  ${p.ready_at && p.ready_at !== "0" ? "ready " + new Date(Number(p.ready_at)).toISOString() : "needs approvals"}`);
   }
   if (!P.length) console.log("No open proposals.");
+} else if (cmd === "check") {
+  const st = await read("get_status");
+  if (st.open_cap === undefined) { console.error("get_status has no open_cap: this station predates the Oct 22 contract"); process.exit(1); }
+  const x = slots(st); console.log(x.line); process.exit(x.warn ? 2 : 0);
 } else if (cmd === "connect") {
   const [contract, perDay, strict] = args; if (!contract || !(Number(perDay) >= 1)) { console.error("usage: connect <app contract> <Mana per day, at least 1> [strict]"); process.exit(1); }
   await write("connect_app", { contract_id: contract, mana_per_day: String(BigInt(Math.round(Number(perDay) * 1e8))), strict: strict === "strict" });
