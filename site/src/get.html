@@ -146,23 +146,27 @@
 
     // ---------- quotes ----------
     // kind: 2 = Mana pass, 1 = app plan (passes may have a higher minimum charge, shown in the price)
-    async function quote(mana, days, kind) {
+    // target: the app plan's contract, so the station can offer it the slots kept for deployed apps
+    async function quote(mana, days, kind, target) {
       if (!(mana >= 1)) return { reason: "choose at least 1 Mana a day" };
-      return MS.read("quote_allowance", { token: TOK, mana_per_day: String(MS.units(mana)), days: String(days), kind }).catch((e) => ({ reason: MS.friendly(e) }));
+      const a = { token: TOK, mana_per_day: String(MS.units(mana)), days: String(days), kind }; if (target) a.target = target;
+      return MS.read("quote_allowance", a).catch((e) => ({ reason: MS.friendly(e) }));
     }
     let qPass = {}, qApp = {};
     async function quoteAll() {
       const pm = picked($("passSize")), pd = picked($("passDays")), am = picked($("appSize")), ad = picked($("appDays"));
       $("passWhat").textContent = `${pm} Mana a day for ${pd} day${pd === 1 ? "" : "s"}`;
       $("appWhat").textContent = `${am} Mana a day for ${ad} day${ad === 1 ? "" : "s"}, about ${MS.actions(am)} user actions a day`;
-      [qPass, qApp] = await Promise.all([quote(pm, pd, 2), quote(am, ad, 1)]);
-      const minNote = (q) => (q.available && BigInt(q.min_charge || 0) > 0n && BigInt(q.price || 0) === BigInt(q.min_charge) ? ` Minimum charge ${MS.usd(q.min_charge)}, kept if you cancel.` : "");
+      [qPass, qApp] = await Promise.all([quote(pm, pd, 2), quote(am, ad, 1, $("appSel").value)]);
+      const slot = (q) => BigInt(q.slot_fee || 0);
+      const minNote = (q) => (q.available && BigInt(q.min_charge || 0) > 0n && BigInt(q.price || 0) - slot(q) === BigInt(q.min_charge) ? ` Minimum charge ${MS.usd(q.min_charge)}, kept if you cancel.` : "");
       show(qPass, "passPrice", "passBuy", "passNote", `About ${MS.actions(pm)} actions a day.` + minNote(qPass));
       show(qApp, "appPrice", "appBuy", null);
       if (qPass.terms) $("passTerms").textContent = qPass.terms;
     }
     function show(q, priceId, btnId, noteId, okNote) {
-      $(priceId).textContent = q.available ? MS.usd(q.price) : "";
+      const slot = BigInt(q.slot_fee || 0);                  // shown on its own; already in the price
+      $(priceId).textContent = q.available ? MS.usd(q.price) + (slot > 0n ? ` (incl. ${MS.usd(slot)} slot fee)` : "") : "";
       $(btnId).disabled = !q.available;
       const reason = q.available ? "" : "Not available right now: " + (q.reason || "the station can't sell this amount at the moment") + (/capacity/.test(q.reason || "") ? `. Today the station has ${MS.mana(room())} Mana a day left to sell.` : ".");
       if (noteId) $(noteId).textContent = q.available ? okNote : reason;
@@ -293,7 +297,7 @@
     async function renew(p) {
       const days = 7; const q = await MS.read("quote_allowance", { token: TOK, mana_per_day: p.mana_per_day, days: String(days), kind: p.kind || 0 });
       if (!q.available) throw new Error(q.reason || "not available");
-      if (!confirm(`Add 7 more days at ${MS.mana(p.mana_per_day)} Mana a day for ${MS.usd(q.price)}?`)) return "Nothing changed.";
+      if (!confirm(`Add 7 more days at ${MS.mana(p.mana_per_day)} Mana a day for ${MS.usd(q.price)}${BigInt(q.slot_fee || 0) > 0n ? ` (incl. ${MS.usd(q.slot_fee)} slot fee)` : ""}?`)) return "Nothing changed.";
       await MS.send(approveAnd("renew", { payer: me, id: p.id, days: String(days), token: TOK, max_price: q.price }, q.price));
       await refresh(); return "Renewed for 7 more days.";
     }
