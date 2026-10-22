@@ -19,7 +19,7 @@ import { station } from "./proto/station";
 
 const S_CONFIG: u32 = 0, S_APPS: u32 = 1, S_ENTRIES: u32 = 2, S_USERS: u32 = 3, S_APPWIN: u32 = 4,
   S_PRICES: u32 = 5, S_ALLOW: u32 = 6, S_TARGET: u32 = 7, S_TICKETS: u32 = 8, S_BIG: u32 = 9, S_REVENUE: u32 = 10, S_EXEMPT: u32 = 11, S_REGISTRY: u32 = 12, S_GLOBALWIN: u32 = 13, S_OVERFLOWWIN: u32 = 14, S_BUFFERWIN: u32 = 15, S_SUSPEND: u32 = 16, S_ESCROW: u32 = 17, S_ESCROWTOT: u32 = 18, S_TICKETCD: u32 = 19,
-  S_PROPOSALS: u32 = 20, S_VETOED: u32 = 21, S_TESTLEDGER: u32 = 90;
+  S_PROPOSALS: u32 = 20, S_VETOED: u32 = 21, S_TESTLEDGER: u32 = 90, S_TESTCONTRACTS: u32 = 91;
 const DAY: u64 = 86_400_000;
 const MANA: u64 = 100_000_000;
 const USER_SLOT: u64 = 21_600_000; const USER_N: i32 = 4;   // 4 × 6 h
@@ -40,6 +40,11 @@ const MAX_EXEMPT: i32 = 64;                         // connected free apps (boun
 // config.open_cap (1 to this) sets the working limit, so a launch can start low until the cost is measured on a node.
 const MAX_OPEN_ALLOWANCES: i32 = 256;
 const DEFAULT_OPEN_CAP: u32 = 50;                  // open_cap 0 (stored before the field existed) reads as 50
+// Owner decision (Oct 22), against slot squatting: every allowance pays a slot fee per day of its term, and the last
+// app_reserved slots below open_cap are kept for app plans on deployed contracts.
+const DEFAULT_SLOT_FEE: u64 = 2_000_000;           // slot_fee_per_day 0 reads as $0.02 a day (8-decimal stablecoins)
+const MAX_SLOT_FEE: u64 = 100_000_000;              // at most $1 a day
+const DEFAULT_APP_RESERVED: u32 = 10;              // app_reserved 0 reads as 10
 // AB-001: the owner can set the ticket lifetime only within these bounds (0 = the 24 h default).
 const MIN_TICKET_MS: u64 = 3_600_000, MAX_TICKET_MS: u64 = 7 * 86_400_000;
 // AB-011: a vetoed action can't be proposed again for this long (also after a council change).
@@ -59,6 +64,17 @@ function ledger(): Storage.Map<Uint8Array, station.revenue_object> {
 function lk(token: Uint8Array, who: Uint8Array): Uint8Array { const k = new Uint8Array(token.length + who.length); k.set(token, 0); k.set(who, token.length); return k; }
 export function testSetToken(token: Uint8Array, who: Uint8Array, amount: u64): void { ledger().put(lk(token, who), new station.revenue_object(amount)); }
 export function testGetToken(token: Uint8Array, who: Uint8Array): u64 { return ledger().get(lk(token, who))!.total; }
+// MockVM's get_contract_metadata ignores the id it is asked about (one value for every address), so the test build
+// reads "is this a deployed contract?" from this list instead. The real build asks the chain (isContract).
+function testContracts(): Storage.Map<Uint8Array, station.revenue_object> {
+  return new Storage.Map(System.getContractId(), S_TESTCONTRACTS, station.revenue_object.decode, station.revenue_object.encode, null);
+}
+export function testSetContract(id: Uint8Array, deployed: bool): void { if (deployed) testContracts().put(id, new station.revenue_object(1)); else testContracts().remove(id); }
+// The test build allows slot_fee_per_day 0 (no fee); this applies the real-build rule instead (0 refused, 0 reads as $0.02).
+export let TEST_REAL_SLOT_FEE: bool = false;
+export function testRealSlotFee(on: bool): void { TEST_REAL_SLOT_FEE = on; }
+/** slot_fee_per_day 0 means "no fee" only in a testing build. */
+function zeroSlotFeeOk(): bool { return BUILD_FOR_TESTING && !TEST_REAL_SLOT_FEE; }
 
 function isAddress(a: Uint8Array | null): bool { return a != null && a.length == 25; }
 /** AB-004: `who` is calling the station itself (a top-level operation, or its own contract code), not through some
@@ -69,7 +85,7 @@ function entryKey(contract: Uint8Array, ep: u32): Uint8Array { const k = new Uin
 function pct(amount: u64, bp: u32): u64 { return amount / 10_000 * u64(bp); }
 function wholeManaUp(m: u64): u64 { return (m + MANA - 1) / MANA; }
 // DRAFT terms (audit #1/#6, 2026-10-19; Audit Bot AB-001/010/011, 2026-10-22): promise only what the code does. Pending legal review.
-export const ALLOWANCE_TERMS = "DRAFT, pending legal review. Prepaid daily Mana, either for one app contract (app plan) or for one wallet (Mana pass). App plan: the station sponsors a transaction only when every top-level operation in it calls that app, and never a token transfer, approval or burn; what the app does internally when called is up to the app. The app's own key must approve the purchase. Per-user anti-spam limits apply to each of the app's users. Mana pass: the station sponsors the pass wallet's own transactions (the wallet is the payee and signs), calling any contract except the station and token contracts, never token transfers, approvals or burns, and never contract uploads, up to the daily amount. The wallet itself must approve the purchase. Over a whole term the station never sponsors more than the daily amount times the days paid. Each wallet may hold a limited number of open allowances and tickets at once (those it bought and those for it). Payment is held by the station contract until the term ends, then released to the operator. Its key alone can't move it: funds leave only through these rules (refunds, releases) or a council decision that needs at least two of its members' approvals, a public waiting period (48 hours) and no veto from any member during that wait. A vetoed action can't be proposed again for 14 days. A majority of the council can replace a member (a member can't veto their own removal), so a change one member vetoed can still pass after at least 14 days plus the waiting period. This is council custody, not fully trustless escrow. If the operator sets a minimum charge (Mana passes may have a higher one), it is shown in the quote and kept if you cancel. Cancel any time: unused whole days are refunded, but the days used (the current day counts as used, so 1 day is the minimum) are charged at the 1-day price for the same Mana per day as at purchase: you get back what you paid minus that charge, never more than the unused days' share of what you paid. If the operator pauses the station, paused time is credited: your term is extended by the pause. No auto-renew: service stops at expiry unless you renew, at the price current then. 1-, 7- and 30-day terms only. Non-transferable; not redeemable for crypto or cash except these refunds. Without the council the operator can only: pause the station; change prices, minimum charges and per-user limits for new purchases and renewals (limits that would stop paid service are refused); connect free apps (never a contract with a live paid allowance); and suspend a buyer for abuse, sanctions, AUP or legal reasons. A suspended buyer's allowances are no longer sponsored. For abuse, AUP or legal reasons the unused share is refunded automatically when the suspension starts (whole unused days, pro rata of what was paid, no minimum charge kept): the operator keeps only what was served. For sanctions the funds stay frozen in escrow, neither refunded nor released, pending legal review.";
+export const ALLOWANCE_TERMS = "DRAFT, pending legal review. Prepaid daily Mana, either for one app contract (app plan) or for one wallet (Mana pass). App plan: the station sponsors a transaction only when every top-level operation in it calls that app, and never a token transfer, approval or burn; what the app does internally when called is up to the app. The app's own key must approve the purchase. Per-user anti-spam limits apply to each of the app's users. Mana pass: the station sponsors the pass wallet's own transactions (the wallet is the payee and signs), calling any contract except the station and token contracts, never token transfers, approvals or burns, and never contract uploads, up to the daily amount. The wallet itself must approve the purchase. Over a whole term the station never sponsors more than the daily amount times the days paid. Each wallet may hold a limited number of open allowances and tickets at once (those it bought and those for it). Payment is held by the station contract until the term ends, then released to the operator. Its key alone can't move it: funds leave only through these rules (refunds, releases) or a council decision that needs at least two of its members' approvals, a public waiting period (48 hours) and no veto from any member during that wait. A vetoed action can't be proposed again for 14 days. A majority of the council can replace a member (a member can't veto their own removal), so a change one member vetoed can still pass after at least 14 days plus the waiting period. This is council custody, not fully trustless escrow. If the operator sets a minimum charge (Mana passes may have a higher one), it is shown in the quote and kept if you cancel. Every allowance also pays a slot fee for each day of its term, shown in the quote and included in the price; if you cancel, the slot fee is kept for the days already held and refunded for the rest. Cancel any time: unused whole days are refunded, but the days used (the current day counts as used, so 1 day is the minimum) are charged at the 1-day price for the same Mana per day as at purchase: you get back what you paid minus that charge, never more than the unused days' share of what you paid. If the operator pauses the station, paused time is credited: your term is extended by the pause. No auto-renew: service stops at expiry unless you renew, at the price current then. 1-, 7- and 30-day terms only. Non-transferable; not redeemable for crypto or cash except these refunds. Without the council the operator can only: pause the station; change prices, minimum charges and per-user limits for new purchases and renewals (limits that would stop paid service are refused); connect free apps (never a contract with a live paid allowance); and suspend a buyer for abuse, sanctions, AUP or legal reasons. A suspended buyer's allowances are no longer sponsored. For abuse, AUP or legal reasons the unused share is refunded automatically when the suspension starts (whole unused days, pro rata of what was paid, no minimum charge kept): the operator keeps only what was served. For sanctions the funds stay frozen in escrow, neither refunded nor released, pending legal review.";
 export const BIG_TERMS = "DRAFT, pending legal review. Prepaid big upload: the station reserves the Mana you buy for you for the ticket's lifetime, at the full price, whether you use it or not. The lifetime is shown in the quote (one 24-hour period by default; the operator can set 1 hour to 7 days) and you can refuse a shorter one when buying; a ticket already bought keeps its lifetime. Reserved Mana is not sold again or spent by the station's other services. The payee wallet must approve (sign) the purchase. Paid in vUSDT or vUSDC and held by the station contract (council custody: its key alone can't move funds; money moves need two or more council approvals, a 48-hour public wait and no veto). If the lock runs its full period, nothing is refunded. If you end it early, you get back the value of the Mana you have not used, reduced in a straight line by the time already passed (for example, half the Mana left with three quarters of the time left returns 37.5% of the price), always keeping a fee (currently 5%). If the operator sets a minimum charge, it is shown in the quote and kept if you cancel. Refunds are only in the stablecoin you paid, never in Mana or KOIN. Each buyer can buy one ticket per cooldown period (default 24 hours). Tickets only sponsor uploading or calling the payee's own contract. In rare cases (for example if the station's Mana falls below its safety floor) a transaction can still be refused; tell the operator, who may refund the unexpired share. Paused time extends the lock. No auto-renew. Non-transferable; not redeemable for crypto or cash except these refunds. Each wallet may hold a limited number of open allowances and tickets at once. A buyer may be suspended for abuse, sanctions, AUP or legal reasons. For abuse, AUP or legal reasons the unexpired, unused share is refunded automatically when the suspension starts (no fee): the operator keeps only what was served. For sanctions the funds stay frozen in escrow pending legal review.";
 // Bounded loops (pause credit, sweep, suspension refunds). AB-002: 512, so that the 256 open allowances (each holds at
 // least one open purchase) plus renewals and tickets fit and Mana sold, not this count, decides what a buyer gets.
@@ -240,16 +256,21 @@ export class Station {
   /** Refund = floor(amount × unused / days): rounds down by < 1 base unit (in Carl's favour); never creates value.
    *  AB-010: a buyer cancel (keepMin) also charges the days used at the 1-day price for this size at purchase:
    *  refund = min(that, amount − min(amount, used × day_price)), so a long term cancelled early never costs less than
-   *  1-day terms would have. Owner and suspension refunds (buyer not at fault) stay plain pro rata. */
+   *  1-day terms would have. Owner and suspension refunds (buyer not at fault) stay plain pro rata.
+   *  Slot fee (Oct 22): on a buyer cancel these rules apply to the Mana price only; the slot fee is kept for the days
+   *  held and refunded for unused days (so the total stays within the unused days' share of what was paid). */
   termRefund(e: station.escrow_object, t: u64, keepMin: bool = true): u64 {
     const u = this.unusedDays(e, t); if (u == 0) return 0;
-    let r = mulDiv(e.amount, u, e.days);
+    const slot = e.slot_fee_per_day * e.days;                         // e.days is still the whole term while u > 0
+    const m = keepMin && e.amount > slot ? e.amount - slot : e.amount; // buyer cancel: the Mana price alone
+    let r = mulDiv(m, u, e.days);
     if (keepMin && e.day_price > 0) {
       const used = e.days - u;                                       // u > 0 here, so used < days (no overflow below)
-      const charge = used > 0 && e.day_price > e.amount / used ? e.amount : used * e.day_price;
-      const r2 = e.amount - charge; if (r2 < r) r = r2;
+      const charge = used > 0 && e.day_price > m / used ? m : used * e.day_price;
+      const r2 = m - charge; if (r2 < r) r = r2;
     }
-    if (keepMin) { const cap = e.amount > e.min_keep ? e.amount - e.min_keep : 0; if (r > cap) r = cap; } // review M3: the minimum charge stays
+    if (keepMin) { const cap = m > e.min_keep ? m - e.min_keep : 0; if (r > cap) r = cap; } // review M3: the minimum charge stays
+    if (keepMin && e.amount > slot) r += e.slot_fee_per_day * u;      // unused days' slot fee back
     const h = this.held(e); return r > h ? h : r;
   }
   /** Ticket refund (Carl, Oct 19 8:19 PM + 8:43 PM): a ticket LOCKS its Mana for one full period at the full price.
@@ -320,6 +341,16 @@ export class Station {
   }
   maxPerBuyer(c: station.config_object): u32 { return c.max_per_buyer > 0 ? c.max_per_buyer : DEFAULT_MAX_PER_BUYER; }
   openCap(c: station.config_object): u32 { return c.open_cap > 0 ? c.open_cap : DEFAULT_OPEN_CAP; }
+  appReserved(c: station.config_object): u32 { return c.app_reserved > 0 ? c.app_reserved : DEFAULT_APP_RESERVED; }
+  /** Slots any allowance may take; the app_reserved above it are for app plans on deployed contracts only. */
+  publicCap(c: station.config_object): u32 { const cap = this.openCap(c), r = this.appReserved(c); return cap > r ? cap - r : 0; }
+  slotFee(c: station.config_object): u64 { return c.slot_fee_per_day > 0 ? c.slot_fee_per_day : (zeroSlotFeeOk() ? 0 : DEFAULT_SLOT_FEE); }
+  /** A deployed contract: the chain has contract metadata (code) for it. Nothing back = a plain wallet. */
+  isContract(id: Uint8Array): bool {
+    if (BUILD_FOR_TESTING) return testContracts().has(id);
+    const m = System.getContractMetadata(id);
+    return m != null && m.hash.length > 0;
+  }
   /** Audit #3 (Carl, 8:43 PM): what one wallet has open = its unexpired allowances + its open big-upload tickets.
    *  AB-002: allowances FOR the wallet (it is the target) count too, so one buyer's wallets can't each add a full quota.
    *  Counts two wallets in one pass (the buyer and the target of a purchase). Bounded: <= 256 + 512 reads. */
@@ -715,6 +746,8 @@ export class Station {
     r.big_debt = this.debtNow(c, this.big.get()!, now);
     const bw = this.bufferWin.get()!; roll(bw, now / APP_SLOT, APP_N, false);
     r.buffer_used_24h = sumMana(bw); r.alert_level = this.alertLevel(c); r.treasury = this.treasury(c);
+    r.open_allowances = u32(cm[1]); r.open_cap = this.openCap(c); r.app_reserved = this.appReserved(c); // warn at 80% of open_cap
+    r.slot_fee_per_day = this.slotFee(c);
     return r;
   }
   get_user(args: station.get_user_arguments): station.get_user_result {
@@ -733,7 +766,7 @@ export class Station {
   get_entry(args: station.get_entry_arguments): station.get_entry_result {
     const r = new station.get_entry_result(); r.entry = this.entries.get(entryKey(args.contract_id!, args.entry_point)); return r;
   }
-  allowanceQuote(c: station.config_object, token: Uint8Array, manaPerDay: u64, days: u64, now: u64, ignoreId: u32, kind: u32, sold: u64[] | null = null): station.quote_allowance_result {
+  allowanceQuote(c: station.config_object, token: Uint8Array, manaPerDay: u64, days: u64, now: u64, ignoreId: u32, kind: u32, target: Uint8Array | null, sold: u64[] | null = null): station.quote_allowance_result {
     const r = new station.quote_allowance_result(); r.terms = ALLOWANCE_TERMS; r.refundable = true;
     const p = this.prices.get(token);
     if (p == null || !p.active) { r.reason = "token not accepted"; return r; }
@@ -743,6 +776,7 @@ export class Station {
     if (wholeManaUp(manaPerDay) > MAX_WHOLE_MANA) { r.reason = "too large"; return r; }
     r.price = per1000(manaPerDay, unit); r.unit_price = unit; r.min_charge = this.minCharge(p, kind);
     if (r.price < r.min_charge) r.price = r.min_charge;               // audit #3 / AB-002: minimum charge per purchase
+    r.slot_fee = this.slotFee(c) * days; r.price += r.slot_fee;        // slot fee: shown on its own and in the total
     if (r.price > p.max_per_purchase) { r.reason = "above the per-purchase maximum"; return r; }
     const cm = sold != null ? sold! : this.committed(c, now, false);   // buy passes in the count it just made
     let held: u64 = 0;
@@ -750,11 +784,15 @@ export class Station {
     if (cm[0] - held + manaPerDay > this.soldCap(c)) { r.reason = "sold capacity full"; return r; }
     // AB-002: Mana sold (above) decides whether a new allowance fits, up to the owner's open_cap (renewals: held > 0).
     if (held == 0 && cm[1] >= u64(this.openCap(c))) { r.reason = "too many open allowances"; return r; }
+    // Owner decision (Oct 22): the last app_reserved slots go only to app plans for deployed contracts.
+    if (held == 0 && cm[1] >= u64(this.publicCap(c)) && !(kind == 1 && target != null && this.isContract(target!))) {
+      r.reason = "the last open slots are kept for app plans on deployed contracts"; return r;
+    }
     if (this.registry.get()!.open_purchases.length >= MAX_OPEN_PURCHASES) { r.reason = "too many open purchases"; return r; }
     r.available = true; return r;
   }
   quote_allowance(args: station.quote_allowance_arguments): station.quote_allowance_result {
-    return this.allowanceQuote(this.config.get()!, args.token!, args.mana_per_day, args.days, this.now(), 0, args.kind);
+    return this.allowanceQuote(this.config.get()!, args.token!, args.mana_per_day, args.days, this.now(), 0, args.kind, isAddress(args.target) ? args.target : null);
   }
   bigQuote(c: station.config_object, token: Uint8Array, mana: u64, now: u64): station.quote_allowance_result {
     const r = new station.quote_allowance_result(); r.terms = BIG_TERMS; r.refundable = true; const p = this.prices.get(token);
@@ -816,7 +854,7 @@ export class Station {
     System.require(Arrays.equal(args.target!, args.buyer!) || open[1] < this.maxPerBuyer(c), "the target already has the most open allowances and tickets allowed");
     const existing = this.targets.get(args.target!);
     if (existing != null) { const e = this.allowances.get(u32Key(u32(existing.total))); System.require(e == null || e.expiry <= now, "target already has an allowance; renew it"); }
-    const q = this.allowanceQuote(c, args.token!, args.mana_per_day, args.days, now, 0, args.kind, sold);
+    const q = this.allowanceQuote(c, args.token!, args.mana_per_day, args.days, now, 0, args.kind, args.target, sold);
     System.require(q.available, q.reason != null ? q.reason! : "unavailable");
     System.require(q.price <= args.max_price, "price above the accepted quote");
     const b = this.big.get()!; b.next_id += 1; this.big.put(b);
@@ -824,7 +862,8 @@ export class Station {
     a.token = args.token; a.term_days = args.days; a.unit_price = q.unit_price; a.paid = q.price; a.term_start = now; a.total_paid = q.price;
     a.cap_total = args.mana_per_day * args.days;                          // AB-006 (quote bounds it: <= 1e16 × 30)
     const e = this.newPurchase(1, args.buyer!, args.token!, q.price, now, a.expiry);
-    e.days = args.days; e.per_day = q.price / args.days; e.allowance_id = a.id; e.min_keep = this.minKeep(args.token!, q.price, args.kind);
+    e.days = args.days; e.per_day = q.price / args.days; e.allowance_id = a.id; e.min_keep = this.minKeep(args.token!, q.price - q.slot_fee, args.kind);
+    e.slot_fee_per_day = q.slot_fee / args.days;                         // slot fee: kept for days held on a cancel
     e.day_price = this.dayPrice(args.token!, args.mana_per_day, args.kind); this.escrow.put(u32Key(e.id), e); // AB-010
     a.purchase_ids.push(e.id);
     this.allowances.put(u32Key(a.id), a);
@@ -843,7 +882,7 @@ export class Station {
     this.sweep(c, now, args.token!);                                    // audit #4
     const t = this.targets.get(a!.target!); System.require(t != null, "target was taken by another allowance");
     System.require(u32(t!.total) == a!.id, "target was taken by another allowance");
-    const q = this.allowanceQuote(c, args.token!, a!.mana_per_day, args.days, now, a!.id, a!.kind);
+    const q = this.allowanceQuote(c, args.token!, a!.mana_per_day, args.days, now, a!.id, a!.kind, a!.target);
     System.require(q.available, q.reason != null ? q.reason! : "unavailable");
     const start = a!.expiry > now ? a!.expiry : now;
     System.require(start + args.days * DAY <= now + c.max_days * DAY, "prepaid period too long");
@@ -857,7 +896,8 @@ export class Station {
     for (let i = 0; i < a!.purchase_ids.length; i++) { const x = this.escrow.get(u32Key(a!.purchase_ids[i])); if (x != null && !x.closed) keep.push(x.id); }
     System.require(keep.length < MAX_TERMS, "too many open terms on this allowance");
     const e = this.newPurchase(1, args.payer!, args.token!, q.price, start, a!.expiry);
-    e.days = args.days; e.per_day = q.price / args.days; e.allowance_id = a!.id; e.min_keep = this.minKeep(args.token!, q.price, a!.kind);
+    e.days = args.days; e.per_day = q.price / args.days; e.allowance_id = a!.id; e.min_keep = this.minKeep(args.token!, q.price - q.slot_fee, a!.kind);
+    e.slot_fee_per_day = q.slot_fee / args.days;                         // a renewal pays the slot fee for its own term
     e.day_price = this.dayPrice(args.token!, a!.mana_per_day, a!.kind); this.escrow.put(u32Key(e.id), e); // AB-010
     keep.push(e.id); a!.purchase_ids = keep;
     this.allowances.put(u32Key(a!.id), a!);
@@ -945,6 +985,9 @@ export class Station {
     System.require(c.admin_min <= c.koin_amount / 10, "admin_min above 10% of koin_amount would stop paid service");
     System.require(c.max_ops >= 2 && c.per_min >= 1 && c.day_actions >= 1 && c.new_actions >= 1, "per-user limits would stop paid service");
     System.require(c.open_cap >= 1 && c.open_cap <= u32(MAX_OPEN_ALLOWANCES), "open_cap: 1 to 256 open allowances");
+    System.require(this.appReserved(c) < c.open_cap, "app_reserved (0 = 10) must be below open_cap");
+    System.require(c.slot_fee_per_day <= MAX_SLOT_FEE, "slot fee above $1 a day");
+    System.require(c.slot_fee_per_day > 0 || zeroSlotFeeOk(), "slot_fee_per_day must be above 0 (0 only in a testing build)");
     System.require(c.day_mana >= c.hard_max && c.new_mana >= c.hard_max, "per-user daily Mana below hard_max would stop paid service");
     this.checkCouncil(c.council, c.threshold, c.guard_delay_ms, c.owner);
     this.validateReservations(c, 0, null);
