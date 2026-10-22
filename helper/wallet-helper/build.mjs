@@ -18,7 +18,7 @@ const pg = net === "testnet" ? JSON.parse(fs.readFileSync(path.join(dir, "../../
 const station = net === "testnet" ? pg.station : process.argv[3];
 if (!/^1[1-9A-HJ-NP-Za-km-z]{25,34}$/.test(station || "")) throw new Error("station address needed (mainnet: build.mjs mainnet <station> <max rc> <site url>)");
 const maxRc = (net === "testnet" ? "200000000" : process.argv[4]) || "300000000";            // the station's hard_max
-const site = (net === "testnet" ? "https://bawcejawn.github.io/mana-station-site/" : process.argv[5]) || "https://bawcejawn.github.io/mana-station-site/";
+const site = (net === "testnet" ? "https://bawcejawn.github.io/mana-station/" : process.argv[5]) || "https://bawcejawn.github.io/mana-station/";
 const version = JSON.parse(fs.readFileSync(path.join(dir, "version.json"))).version;
 // defaultRc: the limit asked about when the site's own limit isn't a sensible size (0.5 Mana; a simple action uses ~0.17);
 // Kondor's "optimize mana" then sets the final limit to ~1.1x real use. maxRc: the station's per-transaction maximum.
