@@ -51,6 +51,7 @@ function cfg(): station.config_object {
   c.new_actions = 10; c.new_mana = 25 * M; c.new_pct = 100; c.max_ops = 2;
   c.big_max = 300 * M; c.big_cooldown_ms = DAYMS; c.big_week_cap = 500 * M; c.big_max_debt = 400 * M; c.big_ticket_ms = 3 * DAYMS;
   c.max_allowances = 8; c.max_days = 90; c.buffer_bp = 2000; c.alert_mana = 600 * M;
+  c.open_cap = 50;                                                         // audit-fixes-1: required, 1 to 256
   c.council = [C1, C2, C3]; c.threshold = 2; c.guard_delay_ms = 2 * DAYMS;   // audit #1: 2 of 3, 48 h
   return c;
 }
@@ -168,8 +169,8 @@ function refusedPropose(s: Station, who: Uint8Array, a: station.guarded_action, 
 }
 
 describe("AB-002 slot squat: Mana sold decides, passes have a minimum charge, targets count per wallet", () => {
-  it("with 50 tiny passes open, an honest small buyer still gets a quote and buys (max_allowances 8 is ignored)", () => {
-    const s = setupWide();
+  it("below open_cap, Mana sold decides: with 50 tiny passes open and open_cap 100, an honest small buyer still buys", () => {
+    const s = setupWide(); const c = cfg(); c.open_cap = 100; setConfig(s, c);   // at open_cap 50 the 51st is refused (see below)
     for (let b = 0; b < 10; b++) {
       const B = user(600 + b); testSetToken(USDT, B, 10 * USD);
       for (let k = 0; k < 5; k++) buyPass(s, B, user(700 + b * 5 + k), 1 * M, 1);
@@ -207,27 +208,68 @@ describe("AB-002 slot squat: Mana sold decides, passes have a minimum charge, ta
     gB1 = new station.buy_allowance_arguments(Z, 2, user(675), 1 * M, 1, USDT, 1000 * USD); signedBy([Z, user(675)]); MockVM.commitTransaction();
     expect(() => { gS1!.buy_allowance(gB1!); }).toThrow("Z: 1 for it + 4 bought = 5"); signedBy([]);
   });
-  it("authorize cost at the new cap: 256 open allowances (probe; the 257th is refused)", () => {
+  it("cost probe at 50, 100 and 256 open allowances (open_cap 256); the 257th is refused", () => {
     const s = setup(); testSetBalance(5000 * M); testSetMana(5000 * M);
-    const c = cfg(); c.koin_amount = 5000 * M; setConfig(s, c);                  // budget 1,000; sellable 840
+    const c = cfg(); c.koin_amount = 5000 * M; c.open_cap = 256; setConfig(s, c); // budget 1,000; sellable 840
     signedBy([OWNER]); s.set_exempt(new station.set_exempt_arguments(OTHER, new station.exempt_object(0, false), false)); signedBy([]);
     let n = 0;
     for (let b = 0; b < 52 && n < 256; b++) {
       const B = user(1000 + b); testSetToken(USDT, B, 10 * USD);
       for (let k = 0; k < 5 && n < 256; k++) {
-        if (n == 50) { at(NOW + 61_000); tx(U1, 1 * M, [op(OTHER, EP_PLAY)]); costBegin(); const ok50 = ok(s); costEnd(50); expect(ok50).toBe(true); }
-        if (n == 255) { signedBy([B, user(2000 + n)]); costBegin(); s.buy_allowance(new station.buy_allowance_arguments(B, 2, user(2000 + n), 1 * M, 1, USDT, 1000 * USD)); costEnd(9256); signedBy([]); }
-        else buyPass(s, B, user(2000 + n), 1 * M, 1);
+        const T = user(2000 + n);
+        if (n == 50 || n == 100 || n == 255) {
+          // heaviest authorize route (an unreserved free app: it sums every open allowance), with n open
+          at(NOW + 61_000); tx(user(3000 + n), 1 * M, [op(OTHER, EP_PLAY)]); costBegin(); const okA = ok(s); costEnd(n); expect(okA).toBe(true);
+          // buy_allowance with n open (it sweeps, cleans, counts the buyer and target, and quotes)
+          signedBy([B, T]); costBegin(); s.buy_allowance(new station.buy_allowance_arguments(B, 2, T, 1 * M, 1, USDT, 1000 * USD)); costEnd(9000 + n); signedBy([]);
+        } else buyPass(s, B, T, 1 * M, 1);
         n++;
       }
     }
     expect(s.list_connected(new station.list_connected_arguments()).paid.length).toBe(256);
-    at(NOW + 61_000); tx(U2, 1 * M, [op(OTHER, EP_PLAY)]); costBegin(); const okFree = ok(s); costEnd(256); // heaviest route: unreserved free app
+    at(NOW + 61_000); tx(U2, 1 * M, [op(OTHER, EP_PLAY)]); costBegin(); const okFree = ok(s); costEnd(256);
     expect(okFree).toBe(true);
     at(NOW + 61_000); tx(user(2000), 1 * M, [op(SOLDAPP, EP_PLAY)]); costBegin(); const okPass = ok(s); costEnd(1256); // a pass
     expect(okPass).toBe(true);
     const q = s.quote_allowance(new station.quote_allowance_arguments(USDT, 1 * M, 1, 2));
     expect(q.available).toBe(false); expect(q.reason!).toBe("too many open allowances");
+  });
+  it("open_cap: set_config needs 1 to 256; a stored 0 (config from before the field) reads as 50", () => {
+    const s = setupWide();
+    const z = cfg(); z.open_cap = 0; refusedConfig(s, z, "open_cap 0");
+    const big = cfg(); big.open_cap = 257; refusedConfig(s, big, "open_cap 257");
+    const top = cfg(); top.open_cap = 256; setConfig(s, top);
+    const one = cfg(); one.open_cap = 1; setConfig(s, one);
+    buyPass(s, U1, U1, 1 * M, 1);
+    expect(s.quote_allowance(new station.quote_allowance_arguments(USDT, 1 * M, 1, 2)).reason!).toBe("too many open allowances"); // 1 open = cap 1
+    const legacy = s.config.get()!; legacy.open_cap = 0; s.config.put(legacy);   // as stored before the field existed
+    for (let b = 0; b < 10; b++) {
+      const B = user(600 + b); testSetToken(USDT, B, 10 * USD);
+      for (let k = 0; k < 5 && 1 + b * 5 + k < 49; k++) buyPass(s, B, user(700 + b * 5 + k), 1 * M, 1);
+    }
+    expect(s.list_connected(new station.list_connected_arguments()).paid.length).toBe(49);  // U1's + 48
+    expect(s.quote_allowance(new station.quote_allowance_arguments(USDT, 1 * M, 1, 2)).available).toBe(true, "49 open: below the default 50");
+    buyPass(s, BUYER, user(691), 1 * M, 1);
+    const q = s.quote_allowance(new station.quote_allowance_arguments(USDT, 1 * M, 1, 2));
+    expect(q.available).toBe(false, "50 open: 0 reads as 50"); expect(q.reason!).toBe("too many open allowances");
+  });
+  it("squatting all 50 slots (open_cap 50) costs at least 50 x the pass minimum; the quote shows it; renewals still work", () => {
+    const s = setupWide(); const p = PRICE(); p.pass_min_purchase = 25_000_000;     // $0.25, as proposed for mainnet
+    signedBy([OWNER]); s.set_price(new station.set_price_arguments(USDT, p)); signedBy([]);
+    let paid: u64 = 0; let first: u32 = 0;
+    for (let b = 0; b < 10; b++) {
+      const B = user(600 + b); testSetToken(USDT, B, 10 * USD);
+      for (let k = 0; k < 5; k++) { const r = buyPass(s, B, user(700 + b * 5 + k), 1 * M, 1); paid += r.paid; if (first == 0) first = r.id; }
+    }
+    log<string>("50 one-Mana passes cost " + paid.toString() + " base units");
+    expect(paid).toBeGreaterThanOrEqual(50 * 25_000_000, "squatting the 50 open slots costs at least 50 x $0.25");
+    const q = s.quote_allowance(new station.quote_allowance_arguments(USDT, 1 * M, 1, 2));
+    expect(q.available).toBe(false); expect(q.reason!).toBe("too many open allowances");
+    expect(q.min_charge).toBe(25_000_000, "the quote shows the minimum charge"); expect(q.price).toBe(25_000_000);
+    expect(s.quote_allowance(new station.quote_allowance_arguments(USDT, 1 * M, 7, 1)).available).toBe(false, "app plans share the cap");
+    signedBy([user(600)]);                                                     // a renewal of an open allowance is not refused
+    expect(s.renew(new station.renew_arguments(user(600), first, 1, USDT, 1000 * USD)).paid).toBe(25_000_000);
+    signedBy([]); inv(s, USDT);
   });
 });
 

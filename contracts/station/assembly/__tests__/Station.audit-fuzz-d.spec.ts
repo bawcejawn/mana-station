@@ -51,6 +51,7 @@ function cfg(): station.config_object {
   c.new_actions = 10; c.new_mana = 25 * M; c.new_pct = 100; c.max_ops = 2;
   c.big_max = 300 * M; c.big_cooldown_ms = DAYMS; c.big_week_cap = 500 * M; c.big_max_debt = 400 * M; c.big_ticket_ms = 3 * DAYMS;
   c.max_allowances = 8; c.max_days = 90; c.buffer_bp = 2000; c.alert_mana = 600 * M;
+  c.open_cap = 50;                                                         // audit-fixes-1: required, 1 to 256
   c.council = [C1, C2, C3]; c.threshold = 2; c.guard_delay_ms = 2 * DAYMS;   // audit #1: 2 of 3, 48 h
   return c;
 }
