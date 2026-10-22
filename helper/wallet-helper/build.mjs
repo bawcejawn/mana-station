@@ -28,9 +28,12 @@ const out = path.join(dir, "dist", net);
 fs.rmSync(out, { recursive: true, force: true }); fs.mkdirSync(path.join(out, "icons"), { recursive: true });
 const src = (f) => fs.readFileSync(path.join(dir, "src", f), "utf8");
 const siteOrigin = new URL(site).origin;
+const siteOrigins = net === "mainnet" ? [siteOrigin] : [siteOrigin, "https://example.test"];
 fs.writeFileSync(path.join(out, "page.js"), src("page.js").replace("__CONFIG__", JSON.stringify({ network: net, chainId: cfg.chainId, station, version, targets: cfg.targets,
-  defaultRc: cfg.defaultRc, minRc: cfg.minRc, maxRc, siteOrigins: net === "mainnet" ? [siteOrigin] : [siteOrigin, "https://example.test"] })));
-for (const f of ["bridge.js", "background.js", "popup.html", "popup.js"]) fs.writeFileSync(path.join(out, f), src(f));
+  defaultRc: cfg.defaultRc, minRc: cfg.minRc, maxRc, siteOrigins })));
+// AB-014: bridge.js posts the on/off state only on these origins (the Mana Station site's own pages).
+fs.writeFileSync(path.join(out, "bridge.js"), src("bridge.js").replace("[] /*SITE_ORIGINS*/", JSON.stringify(siteOrigins)));
+for (const f of ["background.js", "popup.html", "popup.js"]) fs.writeFileSync(path.join(out, f), src(f));
 fs.copyFileSync(path.join(dir, "../mana-station-client.js"), path.join(out, "client.js"));
 fs.writeFileSync(path.join(out, "config.js"), "self.MS_CONFIG = " + JSON.stringify(cfg, null, 2) + ";\n");
 for (const s of [16, 32, 48, 128]) fs.copyFileSync(path.join(dir, "icons", `icon${s}.png`), path.join(out, "icons", `icon${s}.png`));

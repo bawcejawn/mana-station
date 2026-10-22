@@ -10,12 +10,15 @@
  * wallet for two minutes. If the extension doesn't answer within 3 seconds, the request goes to Kondor unchanged.
  * Audit 2026-10-21: every check is made on one private copy of the request, with built-ins saved before any site code
  * runs; requests it won't change are passed on at once, unchanged and synchronously.
+ * Audit Bot 2026-10-22: AB-014 questions carry a per-load secret shared with bridge.js, so other scripts can't probe for
+ * the helper, and the postMessage wrapper looks like the native function; AB-022 an answer must keep the exact Mana limit
+ * that was asked about (a forged answer can't raise it).
  */
 (function () {
   "use strict";
   const CFG = __CONFIG__;
   // Built-ins saved now, before any site script can replace them.
-  const W = window, nativePost = W.postMessage, call = Function.prototype.call.bind(Function.prototype.call), rApply = Reflect.apply;
+  const W = window, nativePost = W.postMessage, call = Function.prototype.call.bind(Function.prototype.call), rApply = Reflect.apply, Px = Proxy, rGet = Reflect.get;
   const parse = JSON.parse, stringify = JSON.stringify, now = Date.now.bind(Date), rand = Math.random.bind(Math);
   const setT = W.setTimeout.bind(W), clearT = W.clearTimeout.bind(W), addListener = W.addEventListener.bind(W);
   const origin = W.location.origin, target = origin === "null" ? "*" : origin;
@@ -25,6 +28,16 @@
   const isTarget = (to) => { for (let i = 0; i < CFG.targets.length; i++) if (CFG.targets[i] === to) return true; return false; };
   const isWalletRequest = (d) => !!(d && typeof d === "object" && isTarget(d.to) &&
     (d.command === "signer:sendTransaction" || d.command === "signer:signTransaction"));
+  // AB-014: the per-load secret shared with bridge.js through a DOM attribute before any site script runs (whichever of
+  // the two runs first creates it, the other takes it and removes the attribute). Questions carry it; bridge.js answers
+  // nothing else.
+  let token = "";
+  try {
+    const el = document.documentElement, A = "data-ms-helper";
+    const mine = () => { const b = new Uint8Array(16); crypto.getRandomValues(b); return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join(""); };
+    token = el.getAttribute(A) || "";
+    if (token) el.removeAttribute(A); else { token = mine(); el.setAttribute(A, token); }
+  } catch (e) { token = ""; }
   // Our own site may ask "is the helper on?" (for its check page). Other sites learn nothing.
   if (CFG.siteOrigins.indexOf(origin) >= 0 || (CFG.network !== "mainnet" && W.location.protocol === "file:")) {
     try { Object.defineProperty(W, "__manaStationHelper", { value: true }); } catch (e) { /* already defined */ }
@@ -60,13 +73,13 @@
       const id = "ms-" + rand().toString(36).slice(2) + now().toString(36);
       const t = setT(() => { delete asks[id]; resolve(null); }, 3000);
       asks[id] = (a) => { clearT(t); resolve(a); };
-      post({ __manaStation: "ask", id, payee, operations, rcLimit });
+      post({ __manaStation: "ask", id, payee, operations, rcLimit, token });
     });
   }
   async function rewrite(c) {
-    const tx = c.args.transaction, h = tx.header, me = c.args.signerAddress;
-    const a = await ask(me, tx.operations, rcFor(h));
-    if (!a || a.pay !== true || typeof a.rcLimit !== "string" || !/^[0-9]{1,20}$/.test(a.rcLimit)) return null;
+    const tx = c.args.transaction, h = tx.header, me = c.args.signerAddress, asked = rcFor(h);
+    const a = await ask(me, tx.operations, asked);
+    if (!a || a.pay !== true || a.rcLimit !== asked) return null;       // AB-022: exactly the limit asked about
     h.payer = CFG.station; h.payee = me; h.rc_limit = a.rcLimit;
     delete tx.id;                                                       // the wallet recomputes it
     ours[c.id] = me;
@@ -81,8 +94,8 @@
     const send = (msg) => { try { rApply(nativePost, W, [msg].concat(rest)); } catch (e) { post({ id: data.id, error: String(e && e.message || e) }); } };
     rewrite(c).then((r) => send(r || data), () => send(data));
   }
-  try { Object.defineProperty(wrapper, "length", { value: nativePost.length }); } catch (e) { /* cosmetic */ }
-  W.postMessage = wrapper;
+  // AB-014: installed as a Proxy of the native function, so it reads as native code with the native name and length.
+  W.postMessage = new Px(nativePost, { apply: (t, self, args) => rApply(wrapper, self, args), get: (t, k) => (k === "name" ? "postMessage" : rGet(t, k)) });
   addListener("message", (ev) => {
     if (ev.source !== W) return;
     const d = ev.data; if (!d || typeof d !== "object") return;

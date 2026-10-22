@@ -73,7 +73,9 @@
   }
   async function call(rpc, method, params) {
     if (rpc && typeof rpc.call === "function") return rpc.call(method, params);
-    const res = await fetch(rpc, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+    // AB-016: never wait on a node for more than 5 s (a hung request used to lock the helper off on that tab).
+    const signal = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined;
+    const res = await fetch(rpc, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }), signal });
     const j = await res.json(); if (j.error) throw new Error(JSON.stringify(j.error)); return j.result;
   }
 
