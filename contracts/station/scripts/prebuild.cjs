@@ -1,6 +1,6 @@
 // The contract builder writes into these folders but does not create them.
 const fs = require("fs"), path = require("path");
-for (const d of ["abi", "build/release", "build/debug"]) fs.mkdirSync(d, { recursive: true });
+for (const d of ["abi", "build/release", "build/debug", "build/sim"]) fs.mkdirSync(d, { recursive: true }); // sim: the test build (AB-007)
 // Route the koinos protoc plugins through scripts/proto-plugin-stdin.cjs: each reads protoc's pipe with readFileSync,
 // which intermittently fails with EAGAIN (seen locally and on CI).
 const wrap = path.resolve("scripts/proto-plugin-stdin.cjs");
