@@ -36,6 +36,8 @@ const FRESH = process.env.FRESH === "0" ? [] : ["station", "user1", "user2", "bu
 // with `playground.mjs sweep <run id>`. Still fresh every run: a new run id gives new accounts.
 const RUN = process.env.GITHUB_RUN_ID || String(Date.now());
 for (const r of FRESH) { const k = new Signer({ privateKey: crypto.createHash("sha256").update("mana-station-run/" + RUN + "/" + r + "/" + K.funder.wif).digest("hex") }); K[r] = { address: k.getAddress(), wif: k.getPrivateKey("wif") }; }
+// AB-018: on GitHub Actions, mask the derived keys too before anything else is logged (run.log is uploaded).
+if (process.env.GITHUB_ACTIONS) for (const r of FRESH) console.log("::add-mask::" + K[r].wif);
 const S = (r) => { const s = Signer.fromWif(K[r].wif); s.provider = provider; return s; };
 const A = (r) => K[r].address;
 const ST = A("station"), OWN = A("owner"), APP = A("app"), TOK = A("token"), FUN = A("funder");
@@ -346,8 +348,9 @@ let T = 5n * M; if (mana - bigFloor - M < T) T = mana - bigFloor - M; T = T / 1_
 note(`ticket size T = ${fmt(T)} (station mana ${fmt(mana)}, big floor ${fmt(bigFloor)})`);
 const qb = await read(sta(), "quote_big_upload", { token: TOK, mana: String(T) }); const tprice = BigInt(qb.price || 0);
 check("ticket", "quote_big_upload available, refundable; terms describe the 24 h lock, the 5% fee and stablecoin-only refunds", qb.available && /24-hour/.test(qb.terms || "") && /5%/.test(qb.terms || "") && /never in Mana or KOIN/.test(qb.terms || ""), `price ${tprice} reason ${qb.reason || ""}`);
-const buyT = (who, payee) => sendOps(who, [[tok(who), "approve", { owner: A(who), spender: ST, value: String(tprice) }], [sta(who), "buy_big_upload", { buyer: A(who), payee, mana: String(T), token: TOK, max_price: String(tprice), allow_upload: true }]], { rcLimit: M / 2n });
-const t1 = await buyT("buyer", U2);
+// AB-005: the payee co-signs its ticket; AB-001: the buyer passes the lifetime the quote showed.
+const buyT = (who, payeeRole) => sendOps(who, [[tok(who), "approve", { owner: A(who), spender: ST, value: String(tprice) }], [sta(who), "buy_big_upload", { buyer: A(who), payee: A(payeeRole), mana: String(T), token: TOK, max_price: String(tprice), allow_upload: true, min_lifetime_ms: String(qb.lifetime_ms || 0) }]], { rcLimit: M / 2n, cosigner: payeeRole });
+const t1 = await buyT("buyer", "user2");
 check("ticket", "buyer buys a ticket for user2 (big_upload_bought event)", t1.ok && t1.events.includes("station.big_upload_bought"), t1.error || t1.events); if (t1.ok) cost("buy_big_upload tx (approve + buy)", t1.rc);
 const code = wasm("../contracts/testapp/build/release/contract.wasm");
 let up = { ok: false };
@@ -367,9 +370,9 @@ const expHi = refAt(0n), expLo = refAt(600_000n);
 check("ticket", "cancel minutes into the 24 h lock: refund = unused share × time left (≤ 95%), rest released to the owner wallet, refund in tUSDT only", ct.ok && ref1 >= expLo && ref1 <= expHi && ref1 + rel1 === tprice, `paid ${tprice} used ${used}/${T} refund ${ref1} (expected ${expLo}..${expHi}) released ${rel1} events ${ct.events} ${ct.error || ""}`);
 const debt = BigInt((await read(sta(), "get_status")).big_debt || 0);
 check("ticket", "unused ticket Mana returned to the pool (only used Mana stays as debt)", debt <= used, `big_debt ${debt}, used ${used}`);
-const t2 = await buyT("buyer", SP1);
+const t2 = await buyT("buyer", "spam1");
 check("ticket", "anti-spam: one ticket per buyer per 24 h (counted from the purchase)", !t2.ok, t2.error || "");
-const t3 = await buyT("user1", SP1);
+const t3 = await buyT("user1", "spam1");
 check("ticket", "audit #2: another buyer can buy at once (the wait is per buyer, never station-wide)", t3.ok, t3.error || "");
 const ub0 = await tbal(U1);
 const ct3 = await send(sta("user1"), "cancel_big_upload", { buyer: U1, payee: SP1 }, { rcLimit: M / 2n });

@@ -21,7 +21,9 @@ if ((await provider.getChainId()) !== TESTNET_ID) throw new Error("not the Koino
 const K = JSON.parse(fs.readFileSync(new URL("./keys.testnet.json", import.meta.url)));
 const M = 100_000_000n;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const derive = (label) => { const s = new Signer({ privateKey: crypto.createHash("sha256").update("mana-station-playground/" + label + "/" + K.funder.wif).digest("hex") }); s.provider = provider; return s; };
+const derive = (label) => { const s = new Signer({ privateKey: crypto.createHash("sha256").update("mana-station-playground/" + label + "/" + K.funder.wif).digest("hex") }); s.provider = provider;
+  if (process.env.GITHUB_ACTIONS) console.log("::add-mask::" + s.getPrivateKey("wif"));     // AB-018: derived keys masked in CI logs
+  return s; };
 // Station generation: a new label = a brand-new station address (v2: wallet Mana passes; v3: free checkout, Oct 20). The owner and council
 // labels stay the same, so the same handover command works on every generation.
 const GEN = "-v3";
@@ -136,7 +138,7 @@ if (cmd === "sweep") {                      // sweep <run id>: return a test run
   const roles = ["station", "user1", "user2", "buyer", "spam1", "spam2", "council1", "council2", "council3", "app3", "player3"]; // as run_tests.mjs FRESH
   let total = 0n;
   for (const r of roles) {
-    const k = new Signer({ privateKey: crypto.createHash("sha256").update("mana-station-run/" + run + "/" + r + "/" + K.funder.wif).digest("hex") }); k.provider = provider;
+    const k = new Signer({ privateKey: crypto.createHash("sha256").update("mana-station-run/" + run + "/" + r + "/" + K.funder.wif).digest("hex") }); k.provider = provider; if (process.env.GITHUB_ACTIONS) console.log("::add-mask::" + k.getPrivateKey("wif"));
     const a = k.getAddress(); const bal = await kbal(a); if (bal < M) continue;
     const meta = await provider.invokeGetContractMetadata(a).catch(() => null);
     if (meta?.value?.hash) { log(`skip ${r} ${a}: a contract now (its KOIN leaves only by council withdrawal)`); continue; }
@@ -149,7 +151,7 @@ if (cmd === "sweep") {                      // sweep <run id>: return a test run
 
 if (cmd === "recover") {                    // recover <run id>: take a finished test run's station KOIN back to the funder
   const run = process.argv[3]; if (!/^[0-9]+$/.test(run || "")) throw new Error("usage: recover <run id>");
-  const dk = (r) => { const k = new Signer({ privateKey: crypto.createHash("sha256").update("mana-station-run/" + run + "/" + r + "/" + K.funder.wif).digest("hex") }); k.provider = provider; return k; };
+  const dk = (r) => { const k = new Signer({ privateKey: crypto.createHash("sha256").update("mana-station-run/" + run + "/" + r + "/" + K.funder.wif).digest("hex") }); k.provider = provider; if (process.env.GITHUB_ACTIONS) console.log("::add-mask::" + k.getPrivateKey("wif")); return k; };
   const RS = dk("station").getAddress(); const own = Signer.fromWif(K.owner.wif); own.provider = provider;
   const c0 = (signer) => new Contract({ id: RS, abi: abiS, provider, signer });
   const st = (await c0().functions.get_status({})).result || {}; const c = st.config || {};
