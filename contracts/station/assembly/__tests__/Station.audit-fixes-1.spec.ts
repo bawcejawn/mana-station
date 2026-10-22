@@ -3,7 +3,7 @@
 // Helpers below are copied unchanged from assembly/__tests__/Station.spec.ts (lines 1-117), as in the other audit specs.
 /** Mana Station v2 on a simulated chain (MockVM). Mana, KOIN balance and stablecoins are test values. Run: npm test */
 import { Base58, MockVM, authority, chain, System, protocol, Protobuf, Crypto } from "@koinos/sdk-as";
-import { Station, testSetMana, testSetBalance, testSetToken, testGetToken, VUSDT, VUSDC, ALLOWANCE_TERMS, BIG_TERMS, mulDiv } from "../Station";
+import { Station, testSetMana, testSetBalance, testSetToken, testGetToken, testSetContract, testRealSlotFee, VUSDT, VUSDC, ALLOWANCE_TERMS, BIG_TERMS, mulDiv } from "../Station";
 import { station } from "../proto/station";
 
 const STATION = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqe");
@@ -216,13 +216,15 @@ describe("AB-002 slot squat: Mana sold decides, passes have a minimum charge, ta
     for (let b = 0; b < 52 && n < 256; b++) {
       const B = user(1000 + b); testSetToken(USDT, B, 10 * USD);
       for (let k = 0; k < 5 && n < 256; k++) {
-        const T = user(2000 + n);
+        const T = user(2000 + n); const kind: u32 = n < 246 ? 2 : 1;          // Oct 22: the last 10 slots are for app plans
+        if (kind == 1) testSetContract(T, true);                                //   on deployed contracts (app_reserved 0 = 10)
         if (n == 50 || n == 100 || n == 255) {
           // heaviest authorize route (an unreserved free app: it sums every open allowance), with n open
           at(NOW + 61_000); tx(user(3000 + n), 1 * M, [op(OTHER, EP_PLAY)]); costBegin(); const okA = ok(s); costEnd(n); expect(okA).toBe(true);
           // buy_allowance with n open (it sweeps, cleans, counts the buyer and target, and quotes)
-          signedBy([B, T]); costBegin(); s.buy_allowance(new station.buy_allowance_arguments(B, 2, T, 1 * M, 1, USDT, 1000 * USD)); costEnd(9000 + n); signedBy([]);
-        } else buyPass(s, B, T, 1 * M, 1);
+          signedBy([B, T]); costBegin(); s.buy_allowance(new station.buy_allowance_arguments(B, kind, T, 1 * M, 1, USDT, 1000 * USD)); costEnd(9000 + n); signedBy([]);
+        } else if (kind == 2) buyPass(s, B, T, 1 * M, 1);
+        else { signedBy([B, T]); s.buy_allowance(new station.buy_allowance_arguments(B, 1, T, 1 * M, 1, USDT, 1000 * USD)); signedBy([]); }
         n++;
       }
     }
@@ -239,37 +241,136 @@ describe("AB-002 slot squat: Mana sold decides, passes have a minimum charge, ta
     const z = cfg(); z.open_cap = 0; refusedConfig(s, z, "open_cap 0");
     const big = cfg(); big.open_cap = 257; refusedConfig(s, big, "open_cap 257");
     const top = cfg(); top.open_cap = 256; setConfig(s, top);
-    const one = cfg(); one.open_cap = 1; setConfig(s, one);
+    // Oct 22: open_cap must also stay above app_reserved (0 = 10), so the smallest working cap is 2 with app_reserved 1.
+    const one = cfg(); one.open_cap = 2; one.app_reserved = 1; setConfig(s, one);
     buyPass(s, U1, U1, 1 * M, 1);
-    expect(s.quote_allowance(new station.quote_allowance_arguments(USDT, 1 * M, 1, 2)).reason!).toBe("too many open allowances"); // 1 open = cap 1
-    const legacy = s.config.get()!; legacy.open_cap = 0; s.config.put(legacy);   // as stored before the field existed
+    testSetContract(SOLDAPP, true); buyAccount(s, SOLDAPP, 1 * M, 1);          // the reserved slot: an app plan on a contract
+    expect(s.quote_allowance(new station.quote_allowance_arguments(USDT, 1 * M, 1, 2)).reason!).toBe("too many open allowances"); // 2 open = cap 2
+    const legacy = s.config.get()!; legacy.open_cap = 0; legacy.app_reserved = 0; s.config.put(legacy); // as stored before the fields existed
     for (let b = 0; b < 10; b++) {
       const B = user(600 + b); testSetToken(USDT, B, 10 * USD);
-      for (let k = 0; k < 5 && 1 + b * 5 + k < 49; k++) buyPass(s, B, user(700 + b * 5 + k), 1 * M, 1);
+      for (let k = 0; k < 5 && 2 + b * 5 + k < 40; k++) buyPass(s, B, user(700 + b * 5 + k), 1 * M, 1);
     }
-    expect(s.list_connected(new station.list_connected_arguments()).paid.length).toBe(49);  // U1's + 48
-    expect(s.quote_allowance(new station.quote_allowance_arguments(USDT, 1 * M, 1, 2)).available).toBe(true, "49 open: below the default 50");
-    buyPass(s, BUYER, user(691), 1 * M, 1);
-    const q = s.quote_allowance(new station.quote_allowance_arguments(USDT, 1 * M, 1, 2));
+    expect(s.list_connected(new station.list_connected_arguments()).paid.length).toBe(40);  // U1's + SOLDAPP's + 38
+    expect(s.quote_allowance(new station.quote_allowance_arguments(USDT, 1 * M, 1, 2)).reason!).toBe("the last open slots are kept for app plans on deployed contracts", "0 reads as 10 kept back");
+    for (let i = 0; i < 9; i++) {                                                // the reserved slots, up to 49
+      const B = user(800 + i), A = user(850 + i); testSetToken(USDT, B, 10 * USD); testSetContract(A, true);
+      signedBy([B, A]); s.buy_allowance(new station.buy_allowance_arguments(B, 1, A, 1 * M, 1, USDT, 1000 * USD)); signedBy([]);
+    }
+    const T = user(691); testSetContract(T, true);
+    const qa = new station.quote_allowance_arguments(USDT, 1 * M, 1, 1); qa.target = T;
+    expect(s.quote_allowance(qa).available).toBe(true, "49 open: below the default 50 for an app plan on a contract");
+    signedBy([BUYER, T]); s.buy_allowance(new station.buy_allowance_arguments(BUYER, 1, T, 1 * M, 1, USDT, 1000 * USD)); signedBy([]);
+    const q = s.quote_allowance(qa);
     expect(q.available).toBe(false, "50 open: 0 reads as 50"); expect(q.reason!).toBe("too many open allowances");
   });
-  it("squatting all 50 slots (open_cap 50) costs at least 50 x the pass minimum; the quote shows it; renewals still work", () => {
+  it("squat at open_cap 50 (Oct 22): the 40 non-reserved slots for one day cost at least 40 slot fees + 20 pass minimums; the 41st is refused, a contract's app plan still fits", () => {
     const s = setupWide(); const p = PRICE(); p.pass_min_purchase = 25_000_000;     // $0.25, as proposed for mainnet
     signedBy([OWNER]); s.set_price(new station.set_price_arguments(USDT, p)); signedBy([]);
+    const c = cfg(); c.slot_fee_per_day = 2_000_000; setConfig(s, c);              // $0.02 a day; app_reserved 0 = 10
     let paid: u64 = 0; let first: u32 = 0;
-    for (let b = 0; b < 10; b++) {
+    for (let b = 0; b < 10; b++) {                                                 // 20 passes + 20 plans on plain wallets
       const B = user(600 + b); testSetToken(USDT, B, 10 * USD);
-      for (let k = 0; k < 5; k++) { const r = buyPass(s, B, user(700 + b * 5 + k), 1 * M, 1); paid += r.paid; if (first == 0) first = r.id; }
+      for (let k = 0; k < 4; k++) {
+        const T = user(700 + b * 4 + k); const kind: u32 = k < 2 ? 2 : 1;
+        signedBy([B, T]); const r = s.buy_allowance(new station.buy_allowance_arguments(B, kind, T, 1 * M, 1, USDT, 1000 * USD)); signedBy([]);
+        paid += r.paid; if (first == 0) first = r.id;
+      }
     }
-    log<string>("50 one-Mana passes cost " + paid.toString() + " base units");
-    expect(paid).toBeGreaterThanOrEqual(50 * 25_000_000, "squatting the 50 open slots costs at least 50 x $0.25");
+    log<string>("40 one-day slots (20 passes, 20 plans on wallets) cost " + paid.toString() + " base units");
+    expect(paid).toBeGreaterThanOrEqual(40 * 2_000_000 + 20 * 25_000_000, "at least 40 x $0.02 + 20 x $0.25");
+    expect(s.get_status(new station.get_status_arguments()).open_allowances).toBe(40);
     const q = s.quote_allowance(new station.quote_allowance_arguments(USDT, 1 * M, 1, 2));
-    expect(q.available).toBe(false); expect(q.reason!).toBe("too many open allowances");
-    expect(q.min_charge).toBe(25_000_000, "the quote shows the minimum charge"); expect(q.price).toBe(25_000_000);
-    expect(s.quote_allowance(new station.quote_allowance_arguments(USDT, 1 * M, 7, 1)).available).toBe(false, "app plans share the cap");
+    expect(q.available).toBe(false); expect(q.reason!).toBe("the last open slots are kept for app plans on deployed contracts");
+    expect(q.min_charge).toBe(25_000_000, "the quote shows the minimum charge"); expect(q.slot_fee).toBe(2_000_000);
+    expect(q.price).toBe(27_000_000, "pass minimum + one day's slot fee");
+    const X = user(900); testSetToken(USDT, X, 10 * USD);
+    gS1 = s; gB1 = new station.buy_allowance_arguments(X, 2, X, 1 * M, 1, USDT, 1000 * USD); signedBy([X]); MockVM.commitTransaction();
+    expect(() => { gS1!.buy_allowance(gB1!); }).toThrow("the 41st pass is refused"); signedBy([]);
+    const W = user(901);                                                           // a plain wallet as an app-plan target
+    gB1 = new station.buy_allowance_arguments(X, 1, W, 1 * M, 1, USDT, 1000 * USD); signedBy([X, W]); MockVM.commitTransaction();
+    expect(() => { gS1!.buy_allowance(gB1!); }).toThrow("an app plan on a wallet is refused too"); signedBy([]);
+    const qw = new station.quote_allowance_arguments(USDT, 1 * M, 1, 1); qw.target = W;
+    expect(s.quote_allowance(qw).available).toBe(false, "quote for a wallet target");
+    expect(s.quote_allowance(new station.quote_allowance_arguments(USDT, 1 * M, 1, 1)).available).toBe(false, "no target given: not a contract");
+    testSetContract(SOLDAPP, true);                    // MockVM stand-in for get_contract_metadata (testnet check in LAUNCH.md)
+    const qc = new station.quote_allowance_arguments(USDT, 1 * M, 1, 1); qc.target = SOLDAPP;
+    expect(s.quote_allowance(qc).available).toBe(true, "a deployed contract may use the reserved slots");
+    signedBy([X, SOLDAPP]); expect(s.buy_allowance(new station.buy_allowance_arguments(X, 1, SOLDAPP, 1 * M, 1, USDT, 1000 * USD)).paid).toBe(2_003_000); signedBy([]);
     signedBy([user(600)]);                                                     // a renewal of an open allowance is not refused
-    expect(s.renew(new station.renew_arguments(user(600), first, 1, USDT, 1000 * USD)).paid).toBe(25_000_000);
+    expect(s.renew(new station.renew_arguments(user(600), first, 1, USDT, 1000 * USD)).paid).toBe(27_000_000, "and pays its own slot fee");
     signedBy([]); inv(s, USDT);
+  });
+});
+
+describe("Slot fee and slots kept for real apps (owner decision, Oct 22)", () => {
+  it("the slot fee shows in the quote, counts toward max_price, is kept for days held and refunded for unused days; renewals pay it again", () => {
+    const s = setupWide();
+    const qb0 = s.quote_big_upload(new station.quote_big_upload_arguments(USDT, 50 * M)).price;
+    const c = cfg(); c.slot_fee_per_day = 2_000_000; setConfig(s, c);
+    expect(s.quote_big_upload(new station.quote_big_upload_arguments(USDT, 50 * M)).price).toBe(qb0, "big-upload tickets pay no slot fee");
+    const q = s.quote_allowance(new station.quote_allowance_arguments(USDT, 10 * M, 7, 1));
+    expect(q.slot_fee).toBe(14_000_000, "7 days x $0.02"); expect(q.price).toBe(14_200_000, "Mana 200,000 + slot fee 14,000,000");
+    gS1 = s; gB1 = new station.buy_allowance_arguments(BUYER, 1, SOLDAPP, 10 * M, 7, USDT, q.price - 1); signedBy([BUYER, SOLDAPP]); MockVM.commitTransaction();
+    expect(() => { gS1!.buy_allowance(gB1!); }).toThrow("max_price must cover the slot fee too");
+    const r = s.buy_allowance(new station.buy_allowance_arguments(BUYER, 1, SOLDAPP, 10 * M, 7, USDT, q.price)); signedBy([]);
+    expect(r.paid).toBe(14_200_000);
+    at(NOW + HOUR); const b0 = bal(BUYER);
+    // Mana: the used day at the 1-day price (30,000) -> 170,000 back; slot fee: 6 unused days -> 12,000,000 back.
+    expect(cancelBy(s, BUYER, r.id).refund).toBe(12_170_000); expect(bal(BUYER) - b0).toBe(12_170_000);
+    at(NOW + DAYMS); expect(s.release(new station.release_arguments(1)).amount).toBe(2_030_000, "kept: 1 day's slot fee + 1 day's Mana");
+    // Pass with the minimum charge: the minimum is kept, the unused days' slot fee still comes back.
+    const p = PRICE(); p.pass_min_purchase = 25_000_000; signedBy([OWNER]); s.set_price(new station.set_price_arguments(USDT, p)); signedBy([]);
+    const pr = buyPass(s, U1, U1, 1 * M, 7);
+    expect(pr.paid).toBe(39_000_000, "pass minimum 25,000,000 + 7 x 2,000,000");
+    expect(cancelBy(s, U1, pr.id).refund).toBe(12_000_000, "6 unused days' slot fee; the minimum charge stays");
+    // Renewal: the new term pays its own slot fee and, cancelled before it starts, comes back whole.
+    const r2 = buyAccount(s, U2, 10 * M, 1);
+    expect(r2.paid).toBe(2_030_000);
+    signedBy([BUYER]); const rn = s.renew(new station.renew_arguments(BUYER, r2.id, 7, USDT, 1000 * USD)); signedBy([]);
+    expect(rn.paid).toBe(14_200_000, "the renewal pays 7 days of slot fee");
+    const a2 = s.get_allowance(new station.get_allowance_arguments(r2.id)).allowance!;
+    const e = s.get_escrow(new station.get_escrow_arguments(a2.purchase_ids[1])).purchase!;
+    expect(e.slot_fee_per_day).toBe(2_000_000); expect(e.amount).toBe(14_200_000);
+    expect(cancelBy(s, BUYER, r2.id).refund).toBe(14_200_000, "future term: nothing held yet, all of it back");
+    inv(s, USDT);
+  });
+  it("an owner refund (buyer not at fault) returns the unused days' share of the whole price, slot fee included", () => {
+    const s = setupWide(); const c = cfg(); c.slot_fee_per_day = 2_000_000; setConfig(s, c);
+    const r = buyAccount(s, SOLDAPP, 10 * M, 7); at(NOW + HOUR);
+    signedBy([OWNER]); const x = s.owner_refund(new station.owner_refund_arguments(r.id)); signedBy([]);
+    expect(x.refund).toBe(mulDiv(14_200_000, 6, 7));
+    inv(s, USDT);
+  });
+  it("bounds and defaults: slot_fee_per_day up to $1 (0 only in a testing build, else 0 reads as $0.02); app_reserved below open_cap (0 = 10)", () => {
+    const s = setupWide();
+    const hi = cfg(); hi.slot_fee_per_day = 100_000_001; refusedConfig(s, hi, "slot fee above $1");
+    const top = cfg(); top.slot_fee_per_day = 100_000_000; setConfig(s, top);
+    const zero = cfg(); setConfig(s, zero);                                         // testing build: 0 = no fee
+    expect(s.quote_allowance(new station.quote_allowance_arguments(USDT, 10 * M, 7, 1)).slot_fee).toBe(0);
+    testRealSlotFee(true);                                                          // the mainnet (and testnet) rule
+    refusedConfig(s, cfg(), "slot fee 0 on a real build");
+    expect(s.quote_allowance(new station.quote_allowance_arguments(USDT, 10 * M, 7, 1)).slot_fee).toBe(14_000_000, "stored 0 reads as $0.02 a day");
+    expect(s.get_status(new station.get_status_arguments()).slot_fee_per_day).toBe(2_000_000);
+    const one = cfg(); one.slot_fee_per_day = 1; setConfig(s, one);
+    expect(s.quote_allowance(new station.quote_allowance_arguments(USDT, 10 * M, 7, 1)).slot_fee).toBe(7);
+    testRealSlotFee(false);
+    const r0 = cfg(); r0.open_cap = 10; refusedConfig(s, r0, "app_reserved 0 = 10 is not below open_cap 10");
+    const r1 = cfg(); r1.open_cap = 11; setConfig(s, r1);
+    const r2 = cfg(); r2.app_reserved = 50; refusedConfig(s, r2, "app_reserved 50 = open_cap 50");
+    const r3 = cfg(); r3.app_reserved = 49; setConfig(s, r3);
+    expect(s.get_status(new station.get_status_arguments()).app_reserved).toBe(49);
+    const legacy = s.config.get()!; legacy.open_cap = 0; legacy.app_reserved = 0; s.config.put(legacy); // stored before the fields
+    const st = s.get_status(new station.get_status_arguments());
+    expect(st.open_cap).toBe(50); expect(st.app_reserved).toBe(10); expect(st.open_allowances).toBe(0);
+  });
+  it("get_status shows open allowances, open_cap and app_reserved (for the 80% warning)", () => {
+    const s = setupWide();
+    buyPass(s, U1, U1, 1 * M, 1); buyAccount(s, SOLDAPP, 1 * M, 1);
+    const st = s.get_status(new station.get_status_arguments());
+    expect(st.open_allowances).toBe(2); expect(st.open_cap).toBe(50); expect(st.app_reserved).toBe(10);
+    at(NOW + DAYMS);
+    expect(s.get_status(new station.get_status_arguments()).open_allowances).toBe(0, "expired ones don't count");
   });
 });
 
