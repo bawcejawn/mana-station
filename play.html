@@ -3,6 +3,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/koilib@9.4.1/dist/koinos.min.js https://cdn.jsdelivr.net/npm/kondor-js@1.3.0/dist/kondor.min.js 'unsafe-eval' 'sha256-dkbry6iUVPHITGr8FDtA06QNB/pQiXLK/CcYSi50Ru0='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://testnet.koinosfoundation.org https://harbinger-api.koinos.io https://api.koinos.io; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#17114a">
   <meta name="color-scheme" content="light dark">
@@ -32,7 +33,7 @@
   <meta name="twitter:title" content="Try a free Koinos transaction, no KOIN needed | Mana Station">
   <meta name="twitter:description" content="Tap a button and send a real Koinos testnet transaction from a wallet with no KOIN and no Mana. See gasless Koinos transactions in action.">
   <meta name="twitter:image" content="https://bawcejawn.github.io/mana-station/og-image.png">
-  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://bawcejawn.github.io/mana-station/play.html#page","url":"https://bawcejawn.github.io/mana-station/play.html","name":"Try a free Koinos transaction, no KOIN needed | Mana Station","description":"Tap a button and send a real Koinos testnet transaction from a wallet with no KOIN and no Mana. See gasless Koinos transactions in action.","inLanguage":"en","isPartOf":{"@id":"https://bawcejawn.github.io/mana-station/#site"},"dateModified":"2026-10-22","breadcrumb":{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://bawcejawn.github.io/mana-station/"},{"@type":"ListItem","position":2,"name":"Try it free","item":"https://bawcejawn.github.io/mana-station/play.html"}]}}]}</script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://bawcejawn.github.io/mana-station/play.html#page","url":"https://bawcejawn.github.io/mana-station/play.html","name":"Try a free Koinos transaction, no KOIN needed | Mana Station","description":"Tap a button and send a real Koinos testnet transaction from a wallet with no KOIN and no Mana. See gasless Koinos transactions in action.","inLanguage":"en","isPartOf":{"@id":"https://bawcejawn.github.io/mana-station/#site"},"dateModified":"2026-10-23","breadcrumb":{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://bawcejawn.github.io/mana-station/"},{"@type":"ListItem","position":2,"name":"Try it free","item":"https://bawcejawn.github.io/mana-station/play.html"}]}}]}</script>
   <style>
     .play { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: clamp(24px, 4vw, 48px); align-items: start; padding-block: 8px 80px; }
     .stage { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-big); padding: clamp(24px, 4vw, 40px); display: grid; gap: 22px; justify-items: center; text-align: center; }
@@ -155,8 +156,9 @@
       <p class="fine">Prepaid transaction-fee credit: not an investment, not money and not transferable. Payments are held by the station contract until a term ends; cancel any time for the unused part. The station's key alone can't move funds: that takes two of three council members, a public wait and no veto. Smart contracts and blockchains carry risk; always check transactions in your wallet. Nothing here is financial advice. Draft terms, under legal review. Mana Station is independent and not affiliated with the Koinos Group or Koinos Foundation.</p>
     </div>
   </footer>
-  <script src="https://cdn.jsdelivr.net/npm/koilib@9.4.1/dist/koinos.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/kondor-js@1.3.0/dist/kondor.min.js"></script>
+  <!-- AB-019: pinned files with Subresource Integrity (sha384 checked against cdn.jsdelivr.net and unpkg.com, 2026-10-22). -->
+  <script src="https://cdn.jsdelivr.net/npm/koilib@9.4.1/dist/koinos.min.js" integrity="sha384-IAL9o3r4bQJvWhvszkorFINY2ct4LBA/LvyXE9NSOPCyYB25BsFV12JITA7Gxbk6" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/kondor-js@1.3.0/dist/kondor.min.js" integrity="sha384-WOeNFfSdOron0s4x9jdzLtA7Ic7RSqZCXZAaeQd6HRL6WezQp0KAtIF2XSa+11TL" crossorigin="anonymous"></script>
   <script src="abis.js"></script>
   <script src="playground.js"></script>
   <script src="wallets.js"></script>
@@ -179,8 +181,8 @@
     function fillApps() {
       const sel = $("appPick"); sel.replaceChildren(new Option("Demo app (free Mana from the owner)", PG.demoApp));
       for (const w of MSWallets.list().filter((w) => /^App/.test(w.name))) sel.append(new Option(w.name + " (your app plan) · " + w.address.slice(0, 8) + "…", w.address));
+      // audit-2026-10 W1-12: a link may only pick one of the apps listed here, never add a contract of its choosing.
       const h = (location.hash.match(/app=([1-9A-HJ-NP-Za-km-z]{25,35})/) || [])[1];
-      if (h && ![...sel.options].some((o) => o.value === h)) sel.append(new Option("App " + h.slice(0, 8) + "…", h));
       let want = h; try { want = want || localStorage.getItem("ms.playApp"); } catch {}
       if (want && [...sel.options].some((o) => o.value === want)) sel.value = want;
       APP = sel.value;
@@ -198,7 +200,7 @@
         $("myKoin").innerHTML = '<span class="zero">' + fmt((koin.result || {}).value) + "</span>";
         $("myMana").innerHTML = '<span class="zero">' + fmt(rc) + "</span>";
         const u = (mine.result || {}).user || {}; const isNew = !u.first_seen || Date.now() - Number(u.first_seen) < 86_400_000;
-        $("myToday").textContent = String((mine.result || {}).actions_24h || 0) + " of " + ((isNew ? cfg.new_actions : cfg.day_actions) || "…") + (isNew ? " (new player)" : "");
+        $("myToday").textContent = String((mine.result || {}).actions_24h || 0) + " of " + ((isNew ? cfg.new_actions : cfg.day_actions && Math.max(24, cfg.day_actions)) || "…") + (isNew ? " (new player)" : "");
         $("stMana").textContent = fmt(st.result?.mana, 1);
         const free = ((L.result || {}).free_apps || []).find((a) => a.contract_id === APP);
         const paid = ((L.result || {}).paid || []).filter((p) => p.target === APP && Number(p.expiry) > Date.now() && !p.suspended);

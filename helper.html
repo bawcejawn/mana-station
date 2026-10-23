@@ -3,6 +3,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/koilib@9.4.1/dist/koinos.min.js https://cdn.jsdelivr.net/npm/kondor-js@1.3.0/dist/kondor.min.js 'unsafe-eval' 'sha256-Sod/M8CQwHPA0pg8l4/yxrUZdnRX2vdPmD8HpDK42EI='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://testnet.koinosfoundation.org https://harbinger-api.koinos.io https://api.koinos.io; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#17114a">
   <meta name="color-scheme" content="light dark">
@@ -32,7 +33,7 @@
   <meta name="twitter:title" content="Pass helper for Chrome, Brave and Edge | Mana Station">
   <meta name="twitter:description" content="The free Mana Station helper lets your Mana pass pay your Koinos transactions on any app. It holds no keys, signs nothing and only sets who pays.">
   <meta name="twitter:image" content="https://bawcejawn.github.io/mana-station/og-image.png">
-  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://bawcejawn.github.io/mana-station/helper.html#page","url":"https://bawcejawn.github.io/mana-station/helper.html","name":"Pass helper for Chrome, Brave and Edge | Mana Station","description":"The free Mana Station helper lets your Mana pass pay your Koinos transactions on any app. It holds no keys, signs nothing and only sets who pays.","inLanguage":"en","isPartOf":{"@id":"https://bawcejawn.github.io/mana-station/#site"},"dateModified":"2026-10-22","breadcrumb":{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://bawcejawn.github.io/mana-station/"},{"@type":"ListItem","position":2,"name":"Pass helper","item":"https://bawcejawn.github.io/mana-station/helper.html"}]}},{"@type":"SoftwareApplication","name":"Mana Station helper","applicationCategory":"BrowserApplication","operatingSystem":"Chrome, Brave, Microsoft Edge","url":"https://bawcejawn.github.io/mana-station/helper.html","description":"The free Mana Station helper lets your Mana pass pay your Koinos transactions on any app. It holds no keys, signs nothing and only sets who pays.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"publisher":{"@id":"https://bawcejawn.github.io/mana-station/#org"}}]}</script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://bawcejawn.github.io/mana-station/helper.html#page","url":"https://bawcejawn.github.io/mana-station/helper.html","name":"Pass helper for Chrome, Brave and Edge | Mana Station","description":"The free Mana Station helper lets your Mana pass pay your Koinos transactions on any app. It holds no keys, signs nothing and only sets who pays.","inLanguage":"en","isPartOf":{"@id":"https://bawcejawn.github.io/mana-station/#site"},"dateModified":"2026-10-23","breadcrumb":{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://bawcejawn.github.io/mana-station/"},{"@type":"ListItem","position":2,"name":"Pass helper","item":"https://bawcejawn.github.io/mana-station/helper.html"}]}},{"@type":"SoftwareApplication","name":"Mana Station helper","applicationCategory":"BrowserApplication","operatingSystem":"Chrome, Brave, Microsoft Edge","url":"https://bawcejawn.github.io/mana-station/helper.html","description":"The free Mana Station helper lets your Mana pass pay your Koinos transactions on any app. It holds no keys, signs nothing and only sets who pays.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"publisher":{"@id":"https://bawcejawn.github.io/mana-station/#org"}}]}</script>
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
@@ -126,8 +127,9 @@
       <p class="fine">Prepaid transaction-fee credit: not an investment, not money and not transferable. Payments are held by the station contract until a term ends; cancel any time for the unused part. The station's key alone can't move funds: that takes two of three council members, a public wait and no veto. Smart contracts and blockchains carry risk; always check transactions in your wallet. Nothing here is financial advice. Draft terms, under legal review. Mana Station is independent and not affiliated with the Koinos Group or Koinos Foundation.</p>
     </div>
   </footer>
-  <script src="https://cdn.jsdelivr.net/npm/koilib@9.4.1/dist/koinos.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/kondor-js@1.3.0/dist/kondor.min.js"></script>
+  <!-- AB-019: pinned files with Subresource Integrity (sha384 checked against cdn.jsdelivr.net and unpkg.com, 2026-10-22). -->
+  <script src="https://cdn.jsdelivr.net/npm/koilib@9.4.1/dist/koinos.min.js" integrity="sha384-IAL9o3r4bQJvWhvszkorFINY2ct4LBA/LvyXE9NSOPCyYB25BsFV12JITA7Gxbk6" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/kondor-js@1.3.0/dist/kondor.min.js" integrity="sha384-WOeNFfSdOron0s4x9jdzLtA7Ic7RSqZCXZAaeQd6HRL6WezQp0KAtIF2XSa+11TL" crossorigin="anonymous"></script>
   <script src="abis.js"></script>
   <script src="playground.js"></script>
   <script src="wallets.js"></script>
@@ -137,17 +139,22 @@
     const { $ } = MS;
     // ---- the stand-in wallet: answers signing requests the way Kondor does (it builds the transaction from the
     // request's header and operations, so a payer set by the helper is respected), signs with the chosen test wallet.
+    // AB-015: only this page's own requests (same window, same origin) are signed, only on the playground's chain, and
+    // the answer goes back to this origin only.
+    const own = location.origin === "null" ? "*" : location.origin;     // file:// pages have an opaque origin
     window.addEventListener("message", async (ev) => {
+      if (ev.source !== window || ev.origin !== location.origin) return;
       const d = ev.data; if (!d || d.to !== "ms-standin" || d.command !== "signer:sendTransaction") return;
       try {
         const h = d.args.transaction.header, me = d.args.signerAddress;
+        if (!MS.PG.chainId || h.chain_id !== MS.PG.chainId) throw new Error("the stand-in wallet signs only on the playground's network");
         const tx = new Transaction({ signer: MSWallets.signer(me, MS.provider), provider: MS.provider,
-          options: { chainId: h.chain_id, rcLimit: h.rc_limit, payer: h.payer || me, ...(h.payee ? { payee: h.payee } : {}) } });
+          options: { chainId: MS.PG.chainId, rcLimit: h.rc_limit, payer: h.payer || me, ...(h.payee ? { payee: h.payee } : {}) } });
         tx.transaction.operations = d.args.transaction.operations;
         await tx.prepare();
         const receipt = await tx.send(); await tx.wait("byBlock", 180000);
-        window.postMessage({ id: d.id, result: { receipt, header: tx.transaction.header } }, "*");
-      } catch (e) { window.postMessage({ id: d.id, error: String(e?.message || e) }, "*"); }
+        window.postMessage({ id: d.id, result: { receipt, header: tx.transaction.header } }, own);
+      } catch (e) { window.postMessage({ id: d.id, error: String(e?.message || e) }, own); }
     });
     // ---- the "app": asks the wallet to sign, exactly like kondor-js does (window.postMessage to the wallet).
     function askWallet(me, operations, rcLimit) {
@@ -156,7 +163,7 @@
         const done = (e) => { const x = e.data; if (!x || x.id !== id || x.command) return; window.removeEventListener("message", done); x.error ? reject(new Error(x.error)) : resolve(x.result); };
         window.addEventListener("message", done);
         window.postMessage({ id, command: "signer:sendTransaction", to: "ms-standin",
-          args: { signerAddress: me, transaction: { header: { chain_id: MS.PG.chainId, rc_limit: rcLimit, payer: me }, operations } } }, "*");
+          args: { signerAddress: me, transaction: { header: { chain_id: MS.PG.chainId, rc_limit: rcLimit, payer: me }, operations } } }, own);
       });
     }
 

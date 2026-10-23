@@ -3,6 +3,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/koilib@9.4.1/dist/koinos.min.js https://cdn.jsdelivr.net/npm/kondor-js@1.3.0/dist/kondor.min.js 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://testnet.koinosfoundation.org https://harbinger-api.koinos.io https://api.koinos.io; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#17114a">
   <meta name="color-scheme" content="light dark">
@@ -32,7 +33,7 @@
   <meta name="twitter:title" content="Privacy notice: Mana Station">
   <meta name="twitter:description" content="What the Mana Station website, contract and browser helper collect: no accounts, no tracking, public blockchain data, and one read-only question to a Koinos node.">
   <meta name="twitter:image" content="https://bawcejawn.github.io/mana-station/og-image.png">
-  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://bawcejawn.github.io/mana-station/privacy.html#page","url":"https://bawcejawn.github.io/mana-station/privacy.html","name":"Privacy notice: Mana Station","description":"What the Mana Station website, contract and browser helper collect: no accounts, no tracking, public blockchain data, and one read-only question to a Koinos node.","inLanguage":"en","isPartOf":{"@id":"https://bawcejawn.github.io/mana-station/#site"},"dateModified":"2026-10-22","breadcrumb":{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://bawcejawn.github.io/mana-station/"},{"@type":"ListItem","position":2,"name":"Privacy","item":"https://bawcejawn.github.io/mana-station/privacy.html"}]}}]}</script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://bawcejawn.github.io/mana-station/privacy.html#page","url":"https://bawcejawn.github.io/mana-station/privacy.html","name":"Privacy notice: Mana Station","description":"What the Mana Station website, contract and browser helper collect: no accounts, no tracking, public blockchain data, and one read-only question to a Koinos node.","inLanguage":"en","isPartOf":{"@id":"https://bawcejawn.github.io/mana-station/#site"},"dateModified":"2026-10-23","breadcrumb":{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://bawcejawn.github.io/mana-station/"},{"@type":"ListItem","position":2,"name":"Privacy","item":"https://bawcejawn.github.io/mana-station/privacy.html"}]}}]}</script>
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
@@ -84,7 +85,7 @@
     <section class="panel" aria-labelledby="p3"><h2 id="p3">The browser helper</h2>
       <ul class="ticks">
         <li>When a site asks your wallet to sign a transaction, before you approve it, the helper sends one read-only question to a public Koinos node (on mainnet, api.koinos.io): your wallet address and that transaction's operations (which contracts and functions it calls, with their arguments). The node, like any website, also sees your IP address. It answers whether the station would pay. Nothing is sent to us.</li>
-        <li>It runs only on web pages (https), not on other kinds of pages, and it doesn't tell the sites you visit that it is installed (except this website, so its check page can show it's on).</li>
+        <li>It runs only on web pages (https), not on other kinds of pages. It doesn't announce itself to the sites you visit (only this website's check page is told whether it's on), and it ignores questions from any script but its own. It isn't invisible, though: a site that looks closely can tell that the helper is installed. Its question to the station and the answer travel on a private channel inside your browser, named with a secret that changes on every page load, and the helper handles them only with the browser's own functions, saved before the site's scripts run. In our tests (including in Chromium with a site that replaces built-in functions and adds hooks to them), a site that asks your wallet to sign a Koinos transaction could not read the question, the answer or the secret. Such a site can still notice that something on the page read its own signing request.</li>
         <li>It stores only its on/off setting and a count of transactions offered to the station today, in your browser.</li>
         <li>It never reads your keys, passwords, page contents or browsing history, and never sends anything anywhere else.</li>
         <li>It needs permission to run on all websites so it can act on any Koinos app you use. Its code is open source.</li>
@@ -110,8 +111,9 @@
       <p class="fine">Prepaid transaction-fee credit: not an investment, not money and not transferable. Payments are held by the station contract until a term ends; cancel any time for the unused part. The station's key alone can't move funds: that takes two of three council members, a public wait and no veto. Smart contracts and blockchains carry risk; always check transactions in your wallet. Nothing here is financial advice. Draft terms, under legal review. Mana Station is independent and not affiliated with the Koinos Group or Koinos Foundation.</p>
     </div>
   </footer>
-  <script src="https://cdn.jsdelivr.net/npm/koilib@9.4.1/dist/koinos.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/kondor-js@1.3.0/dist/kondor.min.js"></script>
+  <!-- AB-019: pinned files with Subresource Integrity (sha384 checked against cdn.jsdelivr.net and unpkg.com, 2026-10-22). -->
+  <script src="https://cdn.jsdelivr.net/npm/koilib@9.4.1/dist/koinos.min.js" integrity="sha384-IAL9o3r4bQJvWhvszkorFINY2ct4LBA/LvyXE9NSOPCyYB25BsFV12JITA7Gxbk6" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/kondor-js@1.3.0/dist/kondor.min.js" integrity="sha384-WOeNFfSdOron0s4x9jdzLtA7Ic7RSqZCXZAaeQd6HRL6WezQp0KAtIF2XSa+11TL" crossorigin="anonymous"></script>
   <script src="abis.js"></script>
   <script src="playground.js"></script>
   <script src="wallets.js"></script>

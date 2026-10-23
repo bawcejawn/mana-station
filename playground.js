@@ -3,8 +3,8 @@ window.MS_PLAYGROUND = {
   "network": "Koinos testnet",
   "rpc": "https://testnet.koinosfoundation.org",
   "chainId": "EiAIKVvm6-V2qmsmUvPJy09vCCLbtn9lHFpwrJbcTIEWRQ==",
-  "station": "1JnSnBNHrKxWGwWeriuhK1DrG5rv3KRFqc",
-  "demoApp": "1JF71KYwaRa4XTfuL8fi4fkH8j4qUrN3Kn",
-  "openApp": "1MKjQ9zfcLetsQZD9g4JgdxoEpW6Z3kiQX",
-  "testStablecoin": "1G85uRcAKiMPQjXv7jYc7VQWMe37NtNT2q"
+  "station": "17cDBCCPLNtgAULweeiLeViBRKnaZFDGps",
+  "demoApp": "1Ehbp3bP8qv43bbwuSgHoLmW7NrdS6V6wU",
+  "openApp": "1Vi2rdbDVQsog192TqzcVTunJkHbPGmNw",
+  "testStablecoin": "1YWtATASNeTD7hoimcfxg13W1TCvhfESa"
 };
