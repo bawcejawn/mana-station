@@ -245,11 +245,21 @@
     function btn(label, fn, main = false) { const b = document.createElement("button"); b.type = "button"; b.className = "btn btn-small " + (main ? "btn-main" : "btn-quiet"); b.textContent = label; b.addEventListener("click", () => fn(b)); return b; }
 
     // ---------- actions ----------
+    // audit-2026-10 (Info): a quote is taken again at the moment of buying, for exactly what is picked; if the price
+    // differs from the one shown, the buyer confirms it first.
+    async function fresh(shown, mana, days, kind, target) {
+      const q = await quote(mana, days, kind, target);
+      if (!q.available) throw new Error(q.reason || "not available");
+      if (BigInt(q.price) !== BigInt(shown.price || 0) && !confirm(`The price is now ${MS.usd(q.price)} (shown: ${MS.usd(shown.price || 0)}). Buy at ${MS.usd(q.price)}?`)) throw new Error("Nothing was bought");
+      return q;
+    }
+    // audit-2026-10 M-5: refunds are owed by the station and collected with claim, in the same transaction.
+    const claimOp = (token) => [MS.station(), "claim", { token: token || TOK, to: me }];
     const approveAnd = (fn, args, price) => [[MS.token(), "approve", { owner: me, spender: ST, value: price }], [MS.station(), fn, args]];
     $("passForm").addEventListener("submit", (e) => { e.preventDefault(); MS.run($("passBuy"), "passMsg", async () => {
       if (!me) throw new Error("Choose a wallet first (top right).");
-      const q = qPass; if (!q.available) throw new Error(q.reason || "not available");
       const mana = picked($("passSize")), days = picked($("passDays"));
+      const q = await fresh(qPass, mana, days, 2);                  // audit-2026-10: quote what is picked NOW
       await MS.send(approveAnd("buy_allowance", { buyer: me, kind: 2, target: me, mana_per_day: String(MS.units(mana)), days: String(days), token: TOK, max_price: q.price }, q.price));
       await refresh(); return `Your pass is active: ${mana} Mana a day for ${days} day${days === 1 ? "" : "s"}. Press "Test my pass" to see it pay for a transaction.`;
     }); });
@@ -260,8 +270,8 @@
     $("appForm").addEventListener("submit", (e) => { e.preventDefault(); MS.run($("appBuy"), "appMsg", async () => {
       if (!me) throw new Error("Choose a wallet first (top right).");
       const a = $("appSel").value; if (!a) throw new Error("Create a test app first.");
-      const q = qApp; if (!q.available) throw new Error(q.reason || "not available");
       const mana = picked($("appSize")), days = picked($("appDays"));
+      const q = await fresh(qApp, mana, days, 1, a);
       await MS.send(approveAnd("buy_allowance", { buyer: me, kind: 1, target: a, mana_per_day: String(MS.units(mana)), days: String(days), token: TOK, max_price: q.price }, q.price), { cosign: a });
       await refresh(); return `Done: ${MS.short(a)}'s users now share ${mana} Mana a day for ${days} day${days === 1 ? "" : "s"}. Try it on the Try it page.`;
     }); });
@@ -290,7 +300,7 @@
       const c = new Contract({ id: a, abi: MS.ABI.app, provider: MS.provider, signer: MSWallets.signer(a, MS.provider), bytecode: code() });
       const { transaction, receipt } = await c.deploy({ payer: ST, payee: a, rcLimit: String(uploadRc()) }); await transaction.wait("byBlock", 120000);
       MS.say("appMsg", "3 of 3: ending the ticket and refunding the unused part…");
-      try { await MS.send([[MS.station(), "cancel_big_upload", { buyer: me, payee: a }]]); } catch {}
+      try { await MS.send([[MS.station(), "cancel_big_upload", { buyer: me, payee: a }], claimOp()]); } catch {}
       await refresh(); return `Your app is on chain at ${a}. The upload used ${MS.mana(receipt.rc_used)} Mana, paid by the station. Now choose a daily amount for its users.`;
     }));
 
@@ -310,7 +320,7 @@
     async function cancelAllowance(p) {
       const { refund } = await refundOf(p);
       if (!confirm(`Cancel? You get ${MS.usd(refund)} back. It keeps working to the end of today's paid day.`)) return "Nothing changed.";
-      await MS.send([[MS.station(), "cancel_allowance", { buyer: me, id: p.id }]]);
+      await MS.send([[MS.station(), "cancel_allowance", { buyer: me, id: p.id }], claimOp()]);
       await refresh(); return `Cancelled. ${MS.usd(refund)} went back to your wallet.`;
     }
 
@@ -331,8 +341,13 @@
         const e = await MS.read("get_escrow", { purchase_id: t.purchase_id }).catch(() => ({})); if (e.purchase?.closed) continue;
         const ended = Number(t.expiry) <= Date.now(); const refund = BigInt(e.refundable_now || 0);
         rows.push({ what: "Upload ticket for " + w.name, meta: `${MS.mana(t.remaining)} of ${MS.mana(t.mana)} Mana left · until ${MS.when(t.expiry)} · paid ${MS.usd(t.paid)}`, state: ended ? ["Ended", "warn"] : ["Active", "ok"], refund,
-          acts: ended ? [["Close", () => MS.send([[MS.station(), "close_ticket", { payee: w.address }]]).then(refresh).then(() => "Closed.")]] : [[`End early (get ${MS.usd(refund)} back)`, () => MS.send([[MS.station(), "cancel_big_upload", { buyer: me, payee: w.address }]]).then(refresh).then(() => "Ended. The refund went back to your wallet.")]] });
+          acts: ended ? [["Close", () => MS.send([[MS.station(), "close_ticket", { payee: w.address }], claimOp()]).then(refresh).then(() => "Closed.")]] : [[`End early (get ${MS.usd(refund)} back)`, () => MS.send([[MS.station(), "cancel_big_upload", { buyer: me, payee: w.address }], claimOp()]).then(refresh).then(() => "Ended. The refund went back to your wallet.")]] });
       }
+      // Anything the station owes this wallet (a refund it hasn't collected yet, e.g. from a suspension or a renewal it
+      // paid for someone else) can be collected here (audit-2026-10 M-5).
+      const owed = BigInt((await MS.read("get_owed", { token: TOK, who: me }).catch(() => ({}))).amount || 0);
+      if (owed > 0n) rows.unshift({ what: "Refund ready to collect", meta: `${MS.usd(owed)} the station owes this wallet`, state: ["Ready", "ok"], refund: owed,
+        acts: [[`Collect ${MS.usd(owed)}`, () => MS.send([claimOp()]).then(refresh).then(() => `${MS.usd(owed)} is in your wallet.`)]] });
       ul.replaceChildren(...rows.map((r) => {
         const li = document.createElement("li"); li.className = "item";
         li.innerHTML = `<div class="stack" style="gap:4px"><h3><span></span> <span class="pill"></span></h3><div class="meta"></div></div><div class="acts"></div>`;

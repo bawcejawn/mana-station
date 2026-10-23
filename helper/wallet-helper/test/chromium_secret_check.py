@@ -13,7 +13,7 @@ BRIDGE = """
 (() => { const P = JSON.parse, S = JSON.stringify, CE = CustomEvent, dispatch = EventTarget.prototype.dispatchEvent,
   listen = EventTarget.prototype.addEventListener, det = Object.getOwnPropertyDescriptor(CustomEvent.prototype, 'detail').get,
   st = setTimeout, rApply = Reflect.apply, push = (a, v) => { a[a.length] = v; };
-  const t = document.documentElement.getAttribute('data-ms-helper'); document.documentElement.removeAttribute('data-ms-helper');
+  const t = (() => { const b = new Uint8Array(16); crypto.getRandomValues(b); const tok = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join(''); const give = () => document.dispatchEvent(new CustomEvent('ms-hello-b', { detail: tok })); const onP = () => { document.removeEventListener('ms-hello-p', onP); give(); }; document.addEventListener('ms-hello-p', onP); give(); return tok; })();
   window.__asks = []; window.__answer = true;
   rApply(listen, document, ['ms-ask-' + t, (e) => { const d = P(rApply(det, e, [])); window.__asks.length += 1;
     st(() => rApply(dispatch, document, [new CE('ms-answer-' + t, { detail: S({ id: d.id, pay: window.__answer, rcLimit: d.rcLimit }) })]), 0); }]); })();

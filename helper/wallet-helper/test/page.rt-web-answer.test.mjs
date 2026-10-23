@@ -51,7 +51,10 @@ function load() {
   vm.runInContext(PAGE.replace("__CONFIG__", JSON.stringify(CFG)), ctx, { filename: "page.js" });
   // bridge.js's side: take the secret (and remove it), then answer each question with answer(question) (null: no answer).
   const bridge = (answer) => {
-    const token = attrs["data-ms-helper"]; delete attrs["data-ms-helper"];
+    const token = (() => { const b = new Uint8Array(16); globalThis.crypto.getRandomValues(b); const tok = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+      const add = EventTarget.prototype.addEventListener, off = EventTarget.prototype.removeEventListener;   // audit-2026-10 W1-01: the event handshake
+      const give = () => doc.dispatchEvent(new CustomEvent("ms-hello-b", { detail: tok })); const onP = () => { off.call(doc, "ms-hello-p", onP); give(); };
+      add.call(doc, "ms-hello-p", onP); give(); return tok; })();
     doc.addEventListener("ms-ask-" + token, (ev) => {
       const d = JSON.parse(ev.detail); channel.push(d); const a = answer(d);
       if (a) setImmediate(() => doc.dispatchEvent(new CustomEvent("ms-answer-" + token, { detail: JSON.stringify(a) })));

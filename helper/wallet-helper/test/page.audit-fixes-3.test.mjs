@@ -38,7 +38,10 @@ function page(pay, noRc = false) {
   main.window = main;
   const ctx = vm.createContext(main); self = vm.runInContext("globalThis", ctx);
   vm.runInContext(PAGE.replace("__CONFIG__", JSON.stringify(CFG)), ctx, { filename: "page.js" });
-  const t = attrs["data-ms-helper"]; delete attrs["data-ms-helper"];
+  const t = (() => { const b = new Uint8Array(16); globalThis.crypto.getRandomValues(b); const tok = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+      const add = EventTarget.prototype.addEventListener, off = EventTarget.prototype.removeEventListener;   // audit-2026-10 W1-01: the event handshake
+      const give = () => doc.dispatchEvent(new CustomEvent("ms-hello-b", { detail: tok })); const onP = () => { off.call(doc, "ms-hello-p", onP); give(); };
+      add.call(doc, "ms-hello-p", onP); give(); return tok; })();
   const nativeDetail = Object.getOwnPropertyDescriptor(CustomEvent.prototype, "detail").get;
   // Stand-in bridge (the extension's world: plain EventTarget registration, so no window.event). Answers `pay`.
   nativeAdd.call(doc, "ms-ask-" + t, (ev) => { const d = JSON.parse(nativeDetail.call(ev)); asked.push(d);

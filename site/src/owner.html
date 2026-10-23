@@ -65,7 +65,7 @@
         <p class="hint">Moving KOIN, upgrading the code and changing the owner or council need two of the three council members, then a waiting period. During the wait any one member can veto.</p>
       </div>
       <div id="upgradeBox" class="checkout" hidden>
-        <div class="what"><b>A new station version is ready</b><span class="hint" id="upNotes"></span><span class="hint">Fingerprint <span class="mono" id="upHash"></span></span><span class="hint" id="upState"></span></div>
+        <div class="what"><b>A new station version is ready</b><span class="hint" id="upNotes"></span><span class="hint">sha256 of the code: <span class="mono" id="upHash"></span></span><span class="hint" id="upRelease"></span><span class="hint" id="upState"></span></div>
         <div class="row" id="upActs"></div>
       </div>
       <ul class="items" id="props"><li class="empty">Loading…</li></ul>
@@ -76,17 +76,29 @@
           <button class="btn btn-quiet" type="submit" id="wBtn">Propose</button>
         </form>
       </div></details>
+      <details class="disclose" id="fBox"><summary>Settle a purchase frozen by sanctions</summary><div>
+        <p class="small">Sanctions freeze what the suspended wallet paid. Only the council decides what happens to it: how much goes back to the wallet that paid (it can collect once it is no longer suspended for sanctions); the rest goes to the treasury.</p>
+        <form id="fForm" class="row" style="align-items:end">
+          <div class="field" style="flex:1 1 120px"><label for="fId">Purchase #</label><input id="fId" type="number" min="1" step="1" required></div>
+          <div class="field" style="flex:1 1 160px"><label for="fAmt">Give back (tUSDT)</label><input id="fAmt" type="number" min="0" step="any" value="0" required></div>
+          <button class="btn btn-quiet" type="submit" id="fBtn">Review and propose</button>
+        </form>
+      </div></details>
       <p class="msg" id="councilMsg" hidden></p>
     </section>
   </main>
 
 {{FOOT}}
   <script src="station-code.js"></script>
+  <script src="proposal-text.js"></script>
   <script>
   (() => {
     const { $ } = MS;
-    const KIND = { 1: "Upgrade the station's code", 2: "Withdraw KOIN", 3: "Rescue a token sent by mistake", 4: "Change the council", 5: "Change the waiting period", 6: "Change the treasury", 7: "Change the upload ticket fee", 8: "Change the owner" };
-    let st = {}, L = {}, P = [], role = "visitor", editing = null;
+    // audit-2026-10 M-9: every proposal is shown in full (what it sends where, the new values, the code fingerprint), and
+    // a member confirms that text before approving, vetoing or carrying it out.
+    let st = {}, L = {}, P = [], role = "visitor", editing = null, frozen = {};
+    const expected = () => (window.MS_UPGRADE && window.MS_UPGRADE.hash) || "";
+    const linesOf = (p) => MSProposalText.describe(p.action, { config: st.config, purchase: frozen[p.action?.purchase_id], expectedHash: p.action?.kind === 1 ? expected() : "" });
 
     // App names: yours, kept in this browser. Test apps and the demo app are named for you.
     const names = () => { try { return JSON.parse(MS.store.get("ms.appnames") || "{}"); } catch { return {}; } };
@@ -118,7 +130,8 @@
     async function load() {
       try {
         const [s, l, p] = await Promise.all([MS.read("get_status"), MS.read("list_connected"), MS.read("list_proposals")]);
-        st = s; L = l; P = p.proposals || [];
+        st = s; L = l; P = p.proposals || []; frozen = {};
+        for (const q of P) if (q.action?.kind === 9) frozen[q.action.purchase_id] = (await MS.read("get_escrow", { purchase_id: q.action.purchase_id })).purchase || {};
       } catch (e) { MS.say("role", "Couldn't read the station: " + MS.friendly(e), "err"); return; }
       role = MS.roleOf(MS.active()?.address, st.config); render();
     }
@@ -183,19 +196,22 @@
       const isC = (c.council || []).includes(MS.active()?.address);
       for (const p of P) {
         const a = p.action || {}; const li = document.createElement("li"); li.className = "item";
-        let what = KIND[a.kind] || "Proposal"; if (a.kind === 1 && window.MS_UPGRADE && String(a.hash || "").toLowerCase() === window.MS_UPGRADE.hash.toLowerCase()) what += " (the new version above)"; if (a.kind === 2) what += `: ${MS.mana(a.amount)} KOIN to ${MS.short(a.to)}`; if (a.kind === 8) what += ` to ${MS.short(a.to)}`;
+        const lines = linesOf(p);
         const ready = p.ready_at && p.ready_at !== "0", due = ready && Number(p.ready_at) <= Date.now();
-        li.innerHTML = `<div class="stack" style="gap:4px"><h3></h3><div class="meta"></div></div><div class="acts"></div>`;
-        li.querySelector("h3").textContent = `#${p.id} ${what}`;
-        li.querySelector(".meta").textContent = `${(p.approvals || []).length} of ${c.threshold} approvals · ${!ready ? "needs approvals" : due ? "ready to carry out" : "waiting until " + MS.when(p.ready_at)}`;
-        const acts = li.querySelector(".acts");
-        if (isC && !(p.approvals || []).includes(MS.active().address)) acts.append(btn("Approve", (b) => council(b, "approve", { id: p.id }, `Approved #${p.id}.`)));
-        if (isC) acts.append(btn("Veto", (b) => council(b, "cancel_proposal", { id: p.id }, `Vetoed #${p.id}.`)));
-        if (due && a.kind !== 1 && MS.active()) acts.append(btn("Carry out", (b) => MS.run(b, "councilMsg", async () => { await MS.send([[MS.station(), "execute", { id: p.id }]]); await load(); return `Carried out #${p.id}.`; }), true));
+        li.innerHTML = `<div class="stack" style="gap:4px"><h3></h3><div class="small proposal-text" style="white-space:pre-line"></div><div class="meta"></div></div><div class="acts"></div>`;
+        li.querySelector("h3").textContent = `#${p.id} ${lines[0]}`;
+        li.querySelector(".proposal-text").textContent = lines.slice(1).join("\n");
+        li.querySelector(".meta").textContent = `Proposed by ${MS.short(p.proposer)} · ${(p.approvals || []).length} of ${c.threshold} approvals · ${!ready ? "needs approvals" : due ? "ready to carry out" : "waiting until " + MS.when(p.ready_at)}`;
+        const acts = li.querySelector(".acts"); const sure = (verb) => confirm(`${verb} proposal #${p.id}?\n\n${lines.join("\n")}`);
+        const mine = (p.approvals || []).includes(MS.active()?.address);
+        if (isC && !mine) acts.append(btn("Approve", (b) => { if (sure("Approve")) council(b, "approve", { id: p.id }, `Approved #${p.id}.`); }));
+        if (isC && mine && p.proposer !== MS.active().address) acts.append(btn("Withdraw my approval", (b) => council(b, "unapprove", { id: p.id }, `Your approval of #${p.id} is withdrawn.`)));
+        if (isC) acts.append(btn("Veto", (b) => { if (sure("Veto")) council(b, "cancel_proposal", { id: p.id }, `Vetoed #${p.id}.`); }));
+        if (due && a.kind !== 1 && MS.active()) acts.append(btn("Carry out", (b) => { if (sure("Carry out")) MS.run(b, "councilMsg", async () => { await MS.send([[MS.station(), "execute", { id: p.id }]]); await load(); return `Carried out #${p.id}.`; }); }, true));
         pr.append(li);
       }
       if (!pr.children.length) pr.innerHTML = '<li class="empty">No open proposals.</li>';
-      $("wBox").hidden = role !== "council";
+      $("wBox").hidden = role !== "council"; $("fBox").hidden = role !== "council";
       upgradeState();
     }
     // Upgrades: the council approves a code fingerprint; after the wait anyone installs exactly that code.
@@ -203,7 +219,10 @@
       const U = window.MS_UPGRADE, box = $("upgradeBox"); if (!U) { box.hidden = true; return; }
       const meta = await MS.provider.invokeGetContractMetadata(MS.ST).catch(() => null);
       if ((meta?.value?.hash || "").toLowerCase() === U.hash.toLowerCase()) { box.hidden = true; return; }
-      box.hidden = false; $("upNotes").textContent = U.notes; $("upHash").textContent = U.hash.slice(0, 14) + "…" + U.hash.slice(-6);
+      // audit-2026-10 M-10: the full fingerprint, and the release it must match (station-code.js is generated only from a
+      // tagged release build whose sha256 was checked).
+      box.hidden = false; $("upNotes").textContent = U.notes; $("upHash").textContent = U.hash.replace(/^0x1220/, "");
+      $("upRelease").textContent = U.tag ? `Release ${U.tag}. Before approving, check this sha256 is exactly the one published for ${U.tag} in docs/LAUNCH.md.` : "";
       const p = P.find((x) => x.action?.kind === 1 && String(x.action.hash || "").toLowerCase() === U.hash.toLowerCase());
       const acts = $("upActs"); acts.replaceChildren(); const c = st.config || {};
       const ready = p && p.ready_at && p.ready_at !== "0", due = ready && Number(p.ready_at) <= Date.now();
@@ -256,6 +275,17 @@
       if (role !== "council") throw new Error("Only a council member can propose this. Switch to a council wallet in the top right.");
       await MS.send([[MS.station(), "propose", { signer: MS.active().address, action: { kind: 2, to: $("wTo").value.trim(), amount: String(MS.units($("wAmt").value)) } }]]);
       await load(); return "Proposed. It needs a second council approval, then the waiting period.";
+    }); });
+    $("fForm").addEventListener("submit", (e) => { e.preventDefault(); MS.run($("fBtn"), "councilMsg", async () => {
+      if (role !== "council") throw new Error("Only a council member can propose this. Switch to a council wallet in the top right.");
+      const id = Number($("fId").value), back = MS.units($("fAmt").value || "0");
+      const ep = (await MS.read("get_escrow", { purchase_id: id })).purchase;
+      if (!ep || !ep.frozen || ep.closed) throw new Error(`Purchase #${id} isn't frozen by sanctions.`);
+      const action = { kind: 9, purchase_id: id, amount: String(back) };
+      const lines = MSProposalText.describe(action, { config: st.config, purchase: ep });
+      if (!confirm("Propose this?\n\n" + lines.join("\n"))) return "Nothing was proposed.";
+      await MS.send([[MS.station(), "propose", { signer: MS.active().address, action }]]);
+      await load(); return "Proposed. It needs another council approval, then the waiting period.";
     }); });
     MS.onWallet(() => { role = MS.roleOf(MS.active()?.address, st.config); render(); });
     load();

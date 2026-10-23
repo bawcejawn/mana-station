@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-eval' 'sha256-cGJl3LAQcaNR8nQb2pOYZgti6uxAXE0zoAMhyxzKELI='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://testnet.koinosfoundation.org https://harbinger-api.koinos.io https://api.koinos.io; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/koilib@9.4.1/dist/koinos.min.js https://cdn.jsdelivr.net/npm/kondor-js@1.3.0/dist/kondor.min.js 'unsafe-eval' 'sha256-dkbry6iUVPHITGr8FDtA06QNB/pQiXLK/CcYSi50Ru0='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://testnet.koinosfoundation.org https://harbinger-api.koinos.io https://api.koinos.io; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#17114a">
   <meta name="color-scheme" content="light dark">
@@ -181,8 +181,8 @@
     function fillApps() {
       const sel = $("appPick"); sel.replaceChildren(new Option("Demo app (free Mana from the owner)", PG.demoApp));
       for (const w of MSWallets.list().filter((w) => /^App/.test(w.name))) sel.append(new Option(w.name + " (your app plan) · " + w.address.slice(0, 8) + "…", w.address));
+      // audit-2026-10 W1-12: a link may only pick one of the apps listed here, never add a contract of its choosing.
       const h = (location.hash.match(/app=([1-9A-HJ-NP-Za-km-z]{25,35})/) || [])[1];
-      if (h && ![...sel.options].some((o) => o.value === h)) sel.append(new Option("App " + h.slice(0, 8) + "…", h));
       let want = h; try { want = want || localStorage.getItem("ms.playApp"); } catch {}
       if (want && [...sel.options].some((o) => o.value === want)) sel.value = want;
       APP = sel.value;

@@ -10,7 +10,7 @@ OP = {"call_contract": {"contract_id": "1MKjQ9zfcLetsQZD9g4JgdxoEpW6Z3kiQX", "en
 MOCK = """
 window.__seen = []; window.__asks = []; window.__answer = true; window.__noBridge = false; window.__failNext = false;
 // The stand-in bridge (AB-026): like bridge.js, it takes the per-load secret from the DOM and answers on the events it names.
-(() => { const t = document.documentElement.getAttribute('data-ms-helper'); document.documentElement.removeAttribute('data-ms-helper');
+(() => { const t = (() => { const b = new Uint8Array(16); crypto.getRandomValues(b); const tok = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join(''); const give = () => document.dispatchEvent(new CustomEvent('ms-hello-b', { detail: tok })); const onP = () => { document.removeEventListener('ms-hello-p', onP); give(); }; document.addEventListener('ms-hello-p', onP); give(); return tok; })();
   document.addEventListener('ms-ask-' + t, (e) => { if (window.__noBridge) return; const d = JSON.parse(e.detail); window.__asks.push(d);
     setTimeout(() => document.dispatchEvent(new CustomEvent('ms-answer-' + t, { detail: JSON.stringify({ id: d.id, pay: window.__answer, rcLimit: d.rcLimit }) })), 0); }); })();
 window.addEventListener('message', (e) => { const d = e.data;

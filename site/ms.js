@@ -13,7 +13,12 @@ window.MS = (() => {
   const usd = (v) => { const n = Number(BigInt(v || 0)) / 1e8; return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: n && n < 0.01 ? 6 : 2 }) + " tUSDT"; };
   const short = (a) => (a ? a.slice(0, 6) + "…" + a.slice(-4) : "");
   const when = (ms) => (ms && ms !== "0" ? new Date(Number(ms)).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "");
-  const units = (v) => BigInt(Math.round(Number(v) * 1e8));
+  // Whole and decimal Mana or tokens (8 decimals) to base units, exactly (audit-2026-10 Info: Number lost precision).
+  const units = (v) => {
+    const t = String(v).trim(); const m = t.match(/^(\d*)(?:\.(\d*))?$/);
+    if (!m || (m[1] === "" && !m[2])) throw new Error("Not a number: " + t);
+    return BigInt(m[1] || "0") * M + BigInt(((m[2] || "") + "00000000").slice(0, 8));
+  };
   const ACTION = 0.16;                                    // Mana for one simple action (measured on the testnet: 0.15–0.17)
   const actions = (manaPerDay) => Math.max(1, Math.floor(Number(manaPerDay) / ACTION)).toLocaleString();
 

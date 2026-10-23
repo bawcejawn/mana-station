@@ -32,7 +32,7 @@ const siteOrigins = net === "mainnet" ? [siteOrigin] : [siteOrigin, "https://exa
 fs.writeFileSync(path.join(out, "page.js"), src("page.js").replace("__CONFIG__", JSON.stringify({ network: net, chainId: cfg.chainId, station, version, targets: cfg.targets,
   defaultRc: cfg.defaultRc, minRc: cfg.minRc, maxRc, siteOrigins })));
 // AB-014: bridge.js posts the on/off state only on these origins (the Mana Station site's own pages).
-fs.writeFileSync(path.join(out, "bridge.js"), src("bridge.js").replace("[] /*SITE_ORIGINS*/", JSON.stringify(siteOrigins)));
+fs.writeFileSync(path.join(out, "bridge.js"), src("bridge.js"));
 for (const f of ["background.js", "popup.html", "popup.js"]) fs.writeFileSync(path.join(out, f), src(f));
 fs.copyFileSync(path.join(dir, "../mana-station-client.js"), path.join(out, "client.js"));
 fs.writeFileSync(path.join(out, "config.js"), "self.MS_CONFIG = " + JSON.stringify(cfg, null, 2) + ";\n");

@@ -20,6 +20,10 @@
  * Promise resolved with an object looks up `then`, and a site getter there ran during the answer event and read the
  * secret from window.event); the request is copied into objects and arrays with no prototype; answers are read from own
  * data properties only and handed on as plain values in a later task; no RegExp or string / number methods are called.
+ * audit-2026-10 W1-01: the secret no longer passes through a DOM attribute (a page could pre-set it in its HTML and so
+ * learn it). bridge.js hands it over with a synchronous event handshake that is over before any site script runs.
+ * W1-09: a payer, payee or limit in either send-options object leaves the request alone. W1-10: the on/off switch
+ * reaches this script on every site, over the private channel.
  */
 (function () {
   "use strict";
@@ -44,26 +48,41 @@
   const origin = W.location.origin, target = origin === "null" ? "*" : origin;
   const post = (msg) => call(nativePost, W, msg, target);
   const doc = W.document, CE = W.CustomEvent, ET = W.EventTarget;
-  const dispatch = ET && ET.prototype.dispatchEvent, listenOn = ET && ET.prototype.addEventListener;
+  const dispatch = ET && ET.prototype.dispatchEvent, listenOn = ET && ET.prototype.addEventListener, listenOff = ET && ET.prototype.removeEventListener;
   const detailD = CE && Object.getOwnPropertyDescriptor(CE.prototype, "detail"), detailOf = detailD && detailD.get;
   const standAside = Object.create(null), ours = Object.create(null), asks = Object.create(null);
   let enabled = true;
   const isTarget = (to) => { for (let i = 0; i < CFG.targets.length; i++) if (CFG.targets[i] === to) return true; return false; };
   const isWalletRequest = (d) => !!(d && typeof d === "object" && isTarget(d.to) &&
     (d.command === "signer:sendTransaction" || d.command === "signer:signTransaction"));
-  // AB-014: the per-load secret shared with bridge.js through a DOM attribute before any site script runs (whichever of
-  // the two runs first creates it, the other takes it and removes the attribute). AB-026: it names the private events
-  // that carry questions and answers, and is never sent anywhere.
+  // audit-2026-10 W1-01: the per-load secret (AB-014; AB-026: it names the private events) comes from bridge.js, which
+  // creates it. Both scripts run at document_start, before any site script, in either order: this one listens for
+  // "ms-hello-b" and announces itself with "ms-hello-p"; bridge.js answers "ms-hello-p" once and also announces the secret
+  // once when it starts. The first secret received is kept, the listener removed, and one more "ms-hello-p" uses up
+  // bridge.js's single answer, so no listener is left for a site script to talk to. The secret is never sent anywhere.
   let token = "";
-  try {
-    const el = document.documentElement, A = "data-ms-helper";
-    const mine = () => { const b = new Uint8Array(16); crypto.getRandomValues(b); return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join(""); };
-    token = el.getAttribute(A) || "";
-    if (token) el.removeAttribute(A); else { token = mine(); el.setAttribute(A, token); }
-  } catch (e) { token = ""; }
+  const HP = "ms-hello-p", HB = "ms-hello-b";
+  const ready = !!(doc && typeof CE === "function" && typeof dispatch === "function" && typeof listenOn === "function" && typeof listenOff === "function" && typeof detailOf === "function");
   // AB-026: the private channel. Without a DOM, events or a secret, nothing is asked (requests go to the wallet unchanged).
-  const ASK = "ms-ask-" + token, ANSWER = "ms-answer-" + token;
-  const channel = !!(token && doc && typeof CE === "function" && typeof dispatch === "function" && typeof listenOn === "function" && typeof detailOf === "function");
+  const ASK = () => "ms-ask-" + token, ANSWER = () => "ms-answer-" + token;
+  const channelOk = () => !!(ready && token);
+  if (ready) {
+    try {
+      const onB = (ev) => {
+        if (token) return;
+        let x; try { x = call(detailOf, ev); } catch (e) { return; }
+        if (typeof x !== "string" || x.length !== 32) return;
+        token = x; call(listenOff, doc, HB, onB); call(dispatch, doc, new CE(HP)); listenState();
+      };
+      call(listenOn, doc, HB, onB);
+      call(dispatch, doc, new CE(HP));
+    } catch (e) { token = ""; }
+  }
+  // W1-10: bridge.js tells this script whether the helper is switched on, on its private event (any site).
+  function listenState() {
+    call(listenOn, doc, "ms-state-" + token, (ev) => { let x; try { x = call(detailOf, ev); } catch (e) { return; } enabled = x !== "off"; });
+    call(listenOn, doc, ANSWER(), onAnswer);
+  }
   // Our own site may ask "is the helper on?" (for its check page). Other sites learn nothing.
   if (CFG.siteOrigins.indexOf(origin) >= 0 || (CFG.network !== "mainnet" && W.location.protocol === "file:")) {
     try { Object.defineProperty(W, "__manaStationHelper", { value: true }); } catch (e) { /* already defined */ }
@@ -77,13 +96,13 @@
     if (h.payer && h.payer !== me) return null;                         // someone else already pays
     if (h.payee && h.payee !== me) return null;
     if (tx.signatures && tx.signatures.length) return null;             // already signed: can't be changed
-    const o = a.optsSend || a.options;
-    if (o && (o.payer || o.payee || o.rcLimit)) return null;           // the site chose a payer / limit itself
+    const os = [a.optsSend, a.options];                                 // W1-09: both, even when one is an empty object
+    for (let i = 0; i < 2; i++) { const o = os[i]; if (o && typeof o === "object" && (o.payer || o.payee || o.rcLimit)) return null; } // the site chose a payer / limit itself
     const ops = tx.operations;
     if (!isArr(ops) || ops.length < 1 || ops.length > 10) return null;
     for (let i = 0; i < ops.length; i++) if (!ops[i] || !ops[i].call_contract) return null;   // calls only (uploads use tickets on the site)
     if ((standAside[me] || 0) > now()) return null;
-    if (!channel) return null;                                          // no private channel to the extension
+    if (!channelOk()) return null;                                      // no private channel to the extension
     return c;
   }
   // The limit to ask about: the site's own whenever the station could accept it (up to the station's per-transaction
@@ -108,7 +127,7 @@
     asks[id] = (pay, rc) => { clearT(t); finish(pay, rc); };
     const q = create(null); q.id = id; q.payee = payee; q.operations = operations; q.rcLimit = rcLimit;
     const init = create(null); init.detail = stringify(q);
-    try { call(dispatch, doc, new CE(ASK, init)); } catch (e) { clearT(t); finish(false, undefined); }
+    try { call(dispatch, doc, new CE(ASK(), init)); } catch (e) { clearT(t); finish(false, undefined); }
   }
   function rewrite(c, done) {
     const tx = c.args.transaction, h = tx.header, me = c.args.signerAddress, asked = rcFor(h);
@@ -133,18 +152,17 @@
   W.postMessage = new Px(nativePost, { apply: (t, self, args) => rApply(wrapper, self, args), get: (t, k) => (k === "name" ? "postMessage" : rGet(t, k)) });
   // AB-026: answers arrive only on the private channel (an answer posted to the window is ignored). AB-038: during this
   // event only saved built-ins run, the answer's own data properties are read, and plain values are passed on.
-  if (channel) call(listenOn, doc, ANSWER, (ev) => {
+  function onAnswer(ev) {
     let d; try { const x = call(detailOf, ev); d = typeof x === "string" ? parse(x) : null; } catch (e) { return; }
     if (d === null || typeof d !== "object" || isArr(d)) return;
     const id = own(d, "id"); if (typeof id !== "string") return;
     const f = asks[id]; if (!f) return;
     const pay = own(d, "pay"), rc = own(d, "rcLimit");
     f(pay === true, typeof rc === "string" ? rc : undefined);
-  });
+  }
   addListener("message", (ev) => {
     if (ev.source !== W) return;
     const d = ev.data; if (!d || typeof d !== "object") return;
-    if (d.__manaStation === "state") { enabled = d.enabled !== false; return; }
     if (d.command || typeof d.id !== "string" || !ours[d.id]) return;  // a wallet's reply to a request we changed
     const me = ours[d.id]; delete ours[d.id];
     if (d.error) standAside[me] = now() + 120000;

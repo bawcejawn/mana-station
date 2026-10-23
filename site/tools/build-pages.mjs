@@ -12,7 +12,10 @@ const part = (n) => fs.readFileSync(new URL("parts/" + n + ".html", dir), "utf8"
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const text = (h) => h.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").replace(/&#39;/g, "'").replace(/&quot;/g, "\"").replace(/&amp;/g, "&").trim();
 const urlOf = (f) => SITE + (f === "index.html" ? "" : f);
-const today = new Date().toISOString().slice(0, 10);
+// The date of the commit being built (not "today"), so a rebuild of the same commit gives the same files (audit-2026-10
+// W1-06: the publish script refuses files that differ from the commit).
+let today = new Date().toISOString().slice(0, 10);
+try { today = (await import("child_process")).execSync("git log -1 --format=%cs", { stdio: "pipe" }).toString().trim() || today; } catch {}
 const ORG = { "@type": "Organization", "@id": SITE + "#org", name: NAME, url: SITE, logo: SITE + "icon-512.png", sameAs: ["https://github.com/bawcejawn/mana-station"] };
 const WEBSITE = { "@type": "WebSite", "@id": SITE + "#site", name: NAME, url: SITE, publisher: { "@id": SITE + "#org" }, inLanguage: "en",
   description: "Pays the Mana that Koinos transactions need: daily Mana passes for wallets and free, gasless transactions for an app's users." };
@@ -22,9 +25,12 @@ const WEBSITE = { "@type": "WebSite", "@id": SITE + "#site", name: NAME, url: SI
 // koilib (its bundled protobufjs builds encoders with Function()). Network calls only to the Koinos RPC nodes below.
 // frame-ancestors can't be set from a meta tag (GitHub Pages sends no headers); helper.html checks message senders instead.
 const RPC = ["https://testnet.koinosfoundation.org", "https://harbinger-api.koinos.io", "https://api.koinos.io"];
+// audit-2026-10 W1-07: only the two pinned files, not all of cdn.jsdelivr.net (a CSP source may name an exact file).
+const CDN = ["https://cdn.jsdelivr.net/npm/koilib@9.4.1/dist/koinos.min.js", "https://cdn.jsdelivr.net/npm/kondor-js@1.3.0/dist/kondor.min.js"];
+const EVAL = process.env.CSP_NO_EVAL ? "" : "'unsafe-eval'";
 function csp(html) {
   const inline = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(([, js]) => `'sha256-${crypto.createHash("sha256").update(js, "utf8").digest("base64")}'`);
-  return ["default-src 'self'", `script-src 'self' https://cdn.jsdelivr.net 'unsafe-eval' ${inline.join(" ")}`.trim(),
+  return ["default-src 'self'", `script-src 'self' ${CDN.join(" ")} ${EVAL} ${inline.join(" ")}`.replace(/ +/g, " ").trim(),
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com", "font-src https://fonts.gstatic.com", "img-src 'self' data:",
     `connect-src 'self' ${RPC.join(" ")}`, "object-src 'none'", "base-uri 'self'", "form-action 'self'"].join("; ");
 }
