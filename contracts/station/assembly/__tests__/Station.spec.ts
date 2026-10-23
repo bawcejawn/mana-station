@@ -1283,7 +1283,10 @@ describe("audit #1: permission takeover, council, delay, veto (Oct 20)", () => {
     at(NOW + 2 * DAYMS); MockVM.commitTransaction(); expect(() => { gS!.execute(new station.execute_arguments(gId)); }).toThrow();
     expect(s.list_proposals(new station.list_proposals_arguments()).proposals.length).toBe(0);
     gA = a; signedBy([C1]); MockVM.commitTransaction(); expect(() => { gS!.propose(new station.propose_arguments(C1, gA)); }).toThrow(); // AB-011: vetoed, 14 days
-    const a2 = act(2); a2.to = OTHER; a2.amount = 90 * M;                                    // a different withdrawal
+    const a1 = act(2); a1.to = OTHER; a1.amount = 90 * M; gA = a1;                          // AB-025: another amount to the
+    clearRevert(); expect(() => { gS!.propose(new station.propose_arguments(C1, gA)); }).toThrow(); // same wallet: blocked too
+    revertedWith("an action of this kind for this target was vetoed less than 14 days ago");
+    const a2 = act(2); a2.to = U1; a2.amount = 90 * M;                                       // a withdrawal to another wallet
     const pid = s.propose(new station.propose_arguments(C1, a2)).id; gId = pid;            // pending withdrawal (C1 only)
     signedBy([C2]); s.approve(new station.approve_arguments(C2, pid)); signedBy([]);           // ready in 48 h
     const nc = act(4); nc.council = [C1, C3, cm(4)]; nc.threshold = 2; councilDo(s, nc);        // C2 replaced (C1 + C2 vote)

@@ -190,7 +190,7 @@ export class Station {
   bufferWin: Storage.Obj<station.window_object> = new Storage.Obj(System.getContractId(), S_BUFFERWIN, station.window_object.decode, station.window_object.encode, () => new station.window_object());
   proposals: Storage.Map<Uint8Array, station.proposal_object> = new Storage.Map(System.getContractId(), S_PROPOSALS, station.proposal_object.decode, station.proposal_object.encode, null);
   overflowWin: Storage.Obj<station.window_object> = new Storage.Obj(System.getContractId(), S_OVERFLOWWIN, station.window_object.decode, station.window_object.encode, () => new station.window_object());
-  // AB-011: action key (upgrade hash, or sha2-256 of any other action) → when it was last vetoed.
+  // AB-011 / AB-025: action key (kind, plus the target wallet for kinds 2, 3, 6, 8) → when it was last vetoed.
   vetoed: Storage.Map<Uint8Array, station.revenue_object> = new Storage.Map(System.getContractId(), S_VETOED, station.revenue_object.decode, station.revenue_object.encode, null);
   lastNew: bool = false;
   // would_pay (Oct 21): run the sponsorship rules as a dry run. Nothing is written and no event is emitted; `route`
@@ -1455,8 +1455,8 @@ export class Station {
     const c = this.config.get()!; System.require(isAddress(c.owner), "not initialized");
     this.requireCouncil(c, args.signer); System.require(args.action != null, "action required");
     this.checkAction(args.action!);
-    const v = this.vetoed.get(this.actionKey(args.action!));            // AB-011: 14 days, whoever sits on the council
-    System.require(v == null || this.now() >= v.total + VETO_BLOCK_MS, "this action was vetoed less than 14 days ago");
+    // AB-011 / AB-025: 14 days after a veto, whoever sits on the council, for any action of that kind and target.
+    System.require(!this.vetoBlocked(args.action!, this.now()), "an action of this kind for this target was vetoed less than 14 days ago");
     const reg = this.registry.get()!;
     System.require(reg.open_proposals.length < MAX_OPEN_PROPOSALS, "too many open proposals (16)");
     let mine = 0;
@@ -1489,16 +1489,20 @@ export class Station {
       System.require(stays, "a member can't veto their own removal");
     }
     p.cancelled = true; p.cancelled_by = args.signer; this.closeProposal(p);
-    if (p.action != null) this.vetoed.put(this.actionKey(p.action!), new station.revenue_object(this.now())); // AB-011
+    // AB-011 / AB-025: a veto blocks the action's kind and target. A proposer withdrawing their own proposal is not a
+    // veto (so one member can't block, say, every upgrade alone by proposing one and cancelling it).
+    if (p.action != null && !Arrays.equal(p.proposer, args.signer!)) this.vetoed.put(this.actionKey(p.action!), new station.revenue_object(this.now()));
     this.propEvent(p, args.signer!, "cancelled");
     return new station.cancel_proposal_result();
   }
-  /** AB-011: what a veto blocks. An upgrade by its bytecode hash; any other action by the hash of its exact contents. */
+  /** AB-025: what a veto blocks, whatever the exact bytes: the action's kind, plus the wallet `to` for kinds 2, 3, 6 and
+   *  8. So kind 1 blocks every upgrade of this contract, and kinds 4, 5 and 7 every change of that setting. Keys are 1 or
+   *  26 bytes, never the 34-byte hashes stored before AB-025 (those records are no longer consulted). */
   actionKey(a: station.guarded_action): Uint8Array {
-    if (a.kind == 1 && a.hash != null) return a.hash!;
-    const h = System.hash(Crypto.multicodec.sha2_256, Protobuf.encode(a, station.guarded_action.encode));
-    return h != null ? h! : new Uint8Array(0);
+    const to = (a.kind == 2 || a.kind == 3 || a.kind == 6 || a.kind == 8) && isAddress(a.to) ? a.to! : new Uint8Array(0);
+    const k = new Uint8Array(1 + to.length); k[0] = u8(a.kind); k.set(to, 1); return k;
   }
+  vetoBlocked(a: station.guarded_action, now: u64): bool { const v = this.vetoed.get(this.actionKey(a)); return v != null && now < v.total + VETO_BLOCK_MS; }
   /** Ready = threshold reached, delay passed, and still enough approvals from CURRENT council members. */
   isReady(c: station.config_object, p: station.proposal_object, now: u64): bool {
     return p.ready_at > 0 && now >= p.ready_at && this.validCount(c, p) >= c.threshold;
@@ -1510,6 +1514,7 @@ export class Station {
     System.require(p.ready_at > 0, "not enough approvals yet");
     System.require(now >= p.ready_at, "waiting period not over");
     System.require(this.validCount(c, p) >= c.threshold, "not enough approvals from current council members");
+    System.require(!this.vetoBlocked(a, now), "an action of this kind for this target was vetoed less than 14 days ago"); // AB-025
     p.executed = true; this.closeProposal(p);                            // state first, then any transfer
     if (a.kind == 2) {
       const bal = this.koinBalance();
@@ -1549,7 +1554,7 @@ export class Station {
       const p = this.proposals.get(u32Key(reg.open_proposals[i]));
       if (p == null || p.action == null || p.action!.kind != 1 || !Arrays.equal(p.action!.hash, h)) continue;
       if (!this.isReady(c, p, now) || now >= p.ready_at + UPGRADE_WINDOW_MS) continue;
-      const v = this.vetoed.get(h!); if (v != null && now < v.total + VETO_BLOCK_MS) continue;   // AB-011 (belt and braces)
+      if (this.vetoBlocked(p.action!, now)) continue;                    // AB-025: no upgrade within 14 days of a vetoed one
       p.executed = true; this.closeProposal(p);
       this.propEvent(p, new Uint8Array(0), "executed");
       return true;
