@@ -63,6 +63,15 @@ const CONFIG = {
 };
 
 if (cmd === "deploy") {
+  // 0. the test stablecoin (tUSDT) at the token key's address: after a key rotation (audit-2026-10 O1-01) it's a new
+  //    address with no code yet. The testnet station build embeds this address (MOCK_STABLE), so build after rotating.
+  const tm = await provider.invokeGetContractMetadata(TOK).catch(() => null);
+  if (!tm?.value?.hash) {
+    const code = wasm("../contracts/mocktoken/build/release/contract.wasm");
+    const tokKey = Signer.fromWif(K.token.wif); tokKey.provider = provider;
+    try { const c = new Contract({ id: TOK, abi: abiT, provider, signer: tokKey, bytecode: code }); const { transaction, receipt } = await c.deploy({ payer: FUN, payee: TOK, rcLimit: String(rcFor(code.length)), beforeSend: coSign("funder") }); await transaction.wait("byBlock", 120000); ok(`deploy test stablecoin ${TOK}`, { ok: !receipt.reverted }); }
+    catch (e) { ok("deploy test stablecoin", { ok: false, error: String(e.message).slice(0, 240) }); }
+  }
   // 1. fund the station (init checks its KOIN balance)
   const have = await kbal(ST);
   if (have < 110n * M) ok(`fund station ${ST} to 110 tKOIN`, await send(new Contract({ id: KOIN, abi: utils.tokenAbi, provider, signer: KEY.funder }), "transfer", { from: FUN, to: ST, value: String(110n * M - have) }, { rcLimit: M }));
