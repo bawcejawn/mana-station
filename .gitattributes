@@ -1,0 +1,4 @@
+# The site's pages carry sha256 hashes of their inline scripts in the security policy (AB-019): its sources must be
+# LF on every checkout, so a build on Windows hashes the same bytes that get published.
+site/** text eol=lf
+site/**/*.png binary
