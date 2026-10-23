@@ -173,7 +173,6 @@ function refusedPropose(s: Station, who: Uint8Array, a: station.guarded_action, 
 describe("VERIFY AB-024: per-user cooldown bounds", () => {
   it("a 1,000-year cooldown is refused; once the owner reverts the config, a running plan's users are served again", () => {
     const s = setup();
-    buyAccount(s, SOLDAPP, 10 * M, 7);
     const c = cfg(); c.per_min = 1; c.cooldown_ms = 1000 * 365 * DAYMS;
     // A refusal here is SAFE (it used to abort the test); asserted with its reason. (audit-fixes-1, AB-024 / AB-031)
     clearRevert(); refusedConfig(s, c, "AB-024: set_config(per_min 1, cooldown_ms 1,000 years) accepted");
@@ -181,6 +180,9 @@ describe("VERIFY AB-024: per-user cooldown bounds", () => {
     // The stored-cooldown half of the finding, with the longest cooldown still allowed (1 hour): a revert to the normal
     // limits (10 minutes) must apply at once, not after the hour stored when the setting was higher.
     const c1 = cfg(); c1.per_min = 1; c1.cooldown_ms = HOUR; setConfig(s, c1);
+    // audit-fixes-1, third round (AB-032): a running paid term keeps the limits it was SOLD with (more generous of those
+    // and the current ones), so the plan is bought under the 1-hour setting; the revert must still loosen it at once.
+    buyAccount(s, SOLDAPP, 10 * M, 7);
     at(NOW + 60_000); const first = play(s, U2, 2 * M, SOLDAPP);
     at(NOW + 60_000); const during = play(s, U2, 2 * M, SOLDAPP);
     setConfig(s, cfg());                                                       // owner reverts to the normal limits

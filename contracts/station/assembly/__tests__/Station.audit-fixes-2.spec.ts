@@ -170,7 +170,7 @@ function refusedPropose(s: Station, who: Uint8Array, a: station.guarded_action, 
 }
 
 // ───── helpers for this file ─────
-const VETOED = "an action of this kind for this target was vetoed less than 14 days ago";
+const VETOED = "an action of this kind was vetoed less than 14 days ago";
 let gR: station.renew_arguments | null = null;
 let gWho: Uint8Array = new Uint8Array(0);
 /** set_config is refused, for this reason. */
@@ -225,17 +225,19 @@ describe("AB-024 per-user cooldown", () => {
     const c2 = cfg(); c2.per_min = 1; c2.cooldown_ms = HOUR + 1;
     configRefused(s, c2, "cooldown above 1 hour would stop paid service");
   });
-  it("the cooldown in force is the current setting: raising it extends a running cooldown, lowering it ends one at once", () => {
-    const s = setup(); buyAccount(s, SOLDAPP, 10 * M, 7);
+  // audit-fixes-1, third round (AB-032): free use (here the Knode app) follows the current setting at once; a running
+  // PAID term keeps the limits it was sold with (tests in Station.audit-fixes-3.spec.ts).
+  it("the cooldown in force for free use is the current setting: raising it extends a running cooldown, lowering it ends one at once", () => {
+    const s = setup();
     const c = cfg(); c.per_min = 1; setConfig(s, c);                                   // 1 a minute, then 10 minutes
-    at(NOW + 60_000); const t1 = NOW; expect(play(s, U2, 2 * M, SOLDAPP)).toBe(true);
+    at(NOW + 60_000); const t1 = NOW; expect(play(s, U2, 2 * M)).toBe(true);
     const u = s.get_user(new station.get_user_arguments(U2)).user!;
     expect(u.cooldown_from).toBe(t1, "the start is stored"); expect(u.cooldown_until).toBe(0, "no end time is stored");
     const up = cfg(); up.per_min = 1; up.cooldown_ms = HOUR; setConfig(s, up);
-    at(t1 + 30 * 60_000); expect(play(s, U2, 2 * M, SOLDAPP)).toBe(false, "30 min in: the 1-hour setting now applies");
-    at(t1 + HOUR); expect(play(s, U2, 2 * M, SOLDAPP)).toBe(true, "served again exactly 1 hour after the start");
+    at(t1 + 30 * 60_000); expect(play(s, U2, 2 * M)).toBe(false, "30 min in: the 1-hour setting now applies");
+    at(t1 + HOUR); expect(play(s, U2, 2 * M)).toBe(true, "served again exactly 1 hour after the start");
     const t2 = NOW; const down = cfg(); down.per_min = 1; down.cooldown_ms = 60_000; setConfig(s, down);
-    at(t2 + 60_000); expect(play(s, U2, 2 * M, SOLDAPP)).toBe(true, "lowered to 1 minute: free after 1 minute, not 1 hour");
+    at(t2 + 60_000); expect(play(s, U2, 2 * M)).toBe(true, "lowered to 1 minute: free after 1 minute, not 1 hour");
   });
 });
 
@@ -274,29 +276,39 @@ describe("AB-025 veto block by kind and target", () => {
     at(NOW + 2 * DAYMS); expect(uploadOk(s, code(2))).toBe(true, "a new upgrade passes after 14 days + the wait");
     expect(NOW - start >= 16 * DAYMS).toBe(true);
   });
-  it("an upgrade proposed before another upgrade was vetoed can't be uploaded within 14 days of that veto", () => {
+  // audit-fixes-1, third round (owner decision, AB-033): a proposal that had all its approvals BEFORE a veto continues;
+  // one still waiting for approvals at the veto is held for the 14 days. (These two tests replace the AB-025 versions,
+  // which held every open proposal of the kind.)
+  it("an upgrade approved before another upgrade was vetoed still goes through; one approved after the veto waits 14 days", () => {
     const s = setup();
     const a = propose(s, C1, upgradeOf(code(1))); voteFor(s, C2, a);
-    const b = propose(s, C1, upgradeOf(code(2))); voteFor(s, C2, b);
-    veto(s, C3, a);
+    const b = propose(s, C1, upgradeOf(code(2))); voteFor(s, C2, b);                   // approved before the veto
+    const c3 = propose(s, C1, upgradeOf(code(3)));                                     // not yet approved
+    at(NOW + 60_000); veto(s, C3, a);
+    at(NOW + 60_000); voteFor(s, C2, c3);                                              // approved after the veto
     at(NOW + 2 * DAYMS + 60_000);
-    expect(uploadOk(s, code(2))).toBe(false, "AB-025: the other open upgrade went through 2 days after the veto");
+    expect(uploadOk(s, code(3))).toBe(false, "AB-025: an upgrade approved after the veto went through within 14 days");
+    expect(uploadOk(s, code(2))).toBe(true, "AB-033: the upgrade approved before the veto is held up");
   });
-  it("execute refuses a withdrawal proposed before a veto on the same kind and wallet, until 14 days have passed", () => {
+  it("execute: withdrawals approved before a veto proceed (any wallet); one approved after it waits 14 days; none can be proposed meanwhile", () => {
     const s = setup(); testSetBalance(1300 * M); const start = NOW;
     const a = propose(s, C1, withdraw(OTHER, 100 * M)); voteFor(s, C2, a);
     const b = propose(s, C1, withdraw(OTHER, 50 * M)); voteFor(s, C2, b);
     const d = propose(s, C2, withdraw(U1, 10 * M)); voteFor(s, C1, d);                  // another wallet
-    veto(s, C3, a);
-    at(NOW + 2 * DAYMS); gS1 = s; gId1 = b; MockVM.commitTransaction(); clearRevert();
-    expect(() => { gS1!.execute(new station.execute_arguments(gId1)); }).toThrow("AB-025: executed 2 days after a veto on the same kind and wallet");
+    const e = propose(s, C2, withdraw(U2, 20 * M));                                     // not yet approved
+    at(NOW + 60_000); veto(s, C3, a); at(NOW + 60_000); voteFor(s, C1, e);
+    proposeRefused(s, C1, withdraw(U2, 5 * M), VETOED);                                 // AB-034: any wallet
+    at(NOW + 2 * DAYMS);
+    s.execute(new station.execute_arguments(b)); s.execute(new station.execute_arguments(d));
+    expect(testGetToken(KOIN, OTHER)).toBe(50 * M, "approved before the veto: proceeds");
+    expect(testGetToken(KOIN, U1)).toBe(10 * M, "approved before the veto: proceeds");
+    gS1 = s; gId1 = e; MockVM.commitTransaction(); clearRevert();
+    expect(() => { gS1!.execute(new station.execute_arguments(gId1)); }).toThrow("AB-025: executed 2 days after a veto, approved after it");
     revertedWith(VETOED);
-    s.execute(new station.execute_arguments(d));                                       // another wallet: not blocked
-    expect(testGetToken(KOIN, U1)).toBe(10 * M);
-    at(start + 14 * DAYMS); s.execute(new station.execute_arguments(b));
-    expect(testGetToken(KOIN, OTHER)).toBe(50 * M, "executes once the 14 days are over");
+    at(start + 14 * DAYMS + 60_000); s.execute(new station.execute_arguments(e));
+    expect(testGetToken(KOIN, U2)).toBe(20 * M, "executes once the 14 days are over");
   });
-  it("kinds 4, 5 and 7 block every change of that setting; kind 6 only the same wallet; withdrawing your own proposal is not a veto", () => {
+  it("kinds 4, 5, 6 and 7 block every change of that setting; withdrawing your own proposal is not a veto; removing the vetoer is never blocked", () => {
     const s = setup();
     const d1 = act(5); d1.delay_ms = 3 * DAYMS; veto(s, C2, propose(s, C1, d1));
     const d2 = act(5); d2.delay_ms = 4 * DAYMS; proposeRefused(s, C1, d2, VETOED);
@@ -304,11 +316,12 @@ describe("AB-025 veto block by kind and target", () => {
     const f2 = act(7); f2.fee_bp = 200; proposeRefused(s, C3, f2, VETOED);
     const t1 = act(6); t1.to = U1; veto(s, C3, propose(s, C1, t1));
     const t2 = act(6); t2.to = U1; proposeRefused(s, C2, t2, VETOED);
-    const t3 = act(6); t3.to = U2; propose(s, C2, t3);                                  // another treasury wallet: fine
+    const t3 = act(6); t3.to = U2; proposeRefused(s, C2, t3, VETOED);                   // AB-034: another wallet too
     const w = propose(s, C3, withdraw(OTHER, 1 * M)); veto(s, C3, w);                    // C3 withdraws its own proposal
     propose(s, C3, withdraw(OTHER, 1 * M));                                             // not blocked
     const n1 = act(4); n1.council = [C1, C2, C3, cm(4)]; n1.threshold = 2; veto(s, C3, propose(s, C1, n1));
-    const n2 = act(4); n2.council = [C1, C2, cm(5)]; n2.threshold = 2; proposeRefused(s, C2, n2, VETOED); // also a removal
+    const n2 = act(4); n2.council = [C1, C2, C3, cm(5)]; n2.threshold = 2; proposeRefused(s, C2, n2, VETOED); // C3 stays: blocked
+    const n3 = act(4); n3.council = [C1, C2, cm(5)]; n3.threshold = 2; propose(s, C2, n3);   // removes the vetoer C3: never blocked
   });
 });
 

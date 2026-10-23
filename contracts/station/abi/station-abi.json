@@ -1232,6 +1232,95 @@
                                 "options": {
                                     "(koinos.btype)": "ADDRESS"
                                 }
+                            },
+                            "approvedAt": {
+                                "type": "uint64",
+                                "id": 10,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "veto_entry": {
+                        "fields": {
+                            "vetoer": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "proposer": {
+                                "type": "bytes",
+                                "id": 2,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "at": {
+                                "type": "uint64",
+                                "id": 3,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "veto_list": {
+                        "fields": {
+                            "entries": {
+                                "rule": "repeated",
+                                "type": "veto_entry",
+                                "id": 1
+                            }
+                        }
+                    },
+                    "term_limits": {
+                        "fields": {
+                            "hardMax": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "maxOps": {
+                                "type": "uint32",
+                                "id": 2
+                            },
+                            "perMin": {
+                                "type": "uint32",
+                                "id": 3
+                            },
+                            "cooldownMs": {
+                                "type": "uint64",
+                                "id": 4,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "dayActions": {
+                                "type": "uint32",
+                                "id": 5
+                            },
+                            "newActions": {
+                                "type": "uint32",
+                                "id": 6
+                            },
+                            "dayMana": {
+                                "type": "uint64",
+                                "id": 7,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "newMana": {
+                                "type": "uint64",
+                                "id": 8,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
                             }
                         }
                     },
@@ -1471,6 +1560,10 @@
                                 "options": {
                                     "jstype": "JS_STRING"
                                 }
+                            },
+                            "limits": {
+                                "type": "term_limits",
+                                "id": 19
                             }
                         }
                     },
@@ -1825,6 +1918,10 @@
                                 "options": {
                                     "jstype": "JS_STRING"
                                 }
+                            },
+                            "limits": {
+                                "type": "term_limits",
+                                "id": 10
                             }
                         }
                     },

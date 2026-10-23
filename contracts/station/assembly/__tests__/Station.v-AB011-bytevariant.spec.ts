@@ -199,7 +199,7 @@ describe("VERIFY AB-011 (AB-025): a vetoed upgrade, re-proposed with one byte ch
     // here). Assert that refusal and why, then still try the upload ~4 days after the veto as the test did.
     gS1 = s; gA1 = a3; signedBy([C1]); MockVM.commitTransaction(); clearRevert();
     expect(() => { gS1!.propose(new station.propose_arguments(C1, gA1)); }).toThrow("AB-011: the one-byte variant of the vetoed upgrade was proposed 2 days after the veto");
-    revertedWith("an action of this kind for this target was vetoed less than 14 days ago", "refused, but not by the veto block");
+    revertedWith("an action of this kind was vetoed less than 14 days ago", "refused, but not by the veto block");
     signedBy([]);
     at(NOW + 2 * DAYMS + 60_000);
     const up = upAll(s, evil2);

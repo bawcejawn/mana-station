@@ -98,6 +98,7 @@ export class Station {
     // res.unit_price = ;
     // res.min_charge = ;
     // res.slot_fee = ;
+    // res.limits = ;
 
     return res;
   }

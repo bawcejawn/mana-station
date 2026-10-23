@@ -19,7 +19,7 @@ import { station } from "./proto/station";
 
 const S_CONFIG: u32 = 0, S_APPS: u32 = 1, S_ENTRIES: u32 = 2, S_USERS: u32 = 3, S_APPWIN: u32 = 4,
   S_PRICES: u32 = 5, S_ALLOW: u32 = 6, S_TARGET: u32 = 7, S_TICKETS: u32 = 8, S_BIG: u32 = 9, S_REVENUE: u32 = 10, S_EXEMPT: u32 = 11, S_REGISTRY: u32 = 12, S_GLOBALWIN: u32 = 13, S_OVERFLOWWIN: u32 = 14, S_BUFFERWIN: u32 = 15, S_SUSPEND: u32 = 16, S_ESCROW: u32 = 17, S_ESCROWTOT: u32 = 18, S_TICKETCD: u32 = 19,
-  S_PROPOSALS: u32 = 20, S_VETOED: u32 = 21, S_TESTLEDGER: u32 = 90, S_TESTCONTRACTS: u32 = 91;
+  S_PROPOSALS: u32 = 20, S_VETOED: u32 = 21, S_VETOES: u32 = 22, S_TESTLEDGER: u32 = 90, S_TESTCONTRACTS: u32 = 91;
 const DAY: u64 = 86_400_000;
 const MANA: u64 = 100_000_000;
 const USER_SLOT: u64 = 21_600_000; const USER_N: i32 = 4;   // 4 × 6 h
@@ -51,9 +51,11 @@ const MIN_TICKET_MS: u64 = 3_600_000, MAX_TICKET_MS: u64 = 7 * 86_400_000;
 const MAX_COOLDOWN_MS: u64 = 3_600_000;
 // Same reason: the fewest daily actions per user the owner can set (1 an hour). A lower stored day_actions reads as this.
 const MIN_DAY_ACTIONS: u32 = 24;
-// AB-011 / AB-025: after a veto, no action of that kind (and target) can be proposed or carried out for this long (also
-// after a council change).
+// AB-011 / AB-025 / AB-034: after a veto, no action of that kind (any target) can be proposed or carried out for this
+// long (also after a council change), except proposals that had all their approvals before the veto (AB-033).
 const VETO_BLOCK_MS: u64 = 14 * 86_400_000;
+// AB-033: each member sets at most one veto block per kind in this period (a later veto still cancels, without a block).
+const VETO_BUDGET_MS: u64 = 30 * 86_400_000;
 const TEST_KOIN = "19GYjDBVXU7keLbYvMLazsGQn3GTWHjHkK"; // test build only: stands in for the KOIN contract
 export { VUSDT, VUSDC };
 const LEGACY_CHAINGE_USDT = "19WrWze3XAoMa3Mwqys4rJMP6emZX2wfpH"; // rejected
@@ -90,7 +92,7 @@ function entryKey(contract: Uint8Array, ep: u32): Uint8Array { const k = new Uin
 function pct(amount: u64, bp: u32): u64 { return amount / 10_000 * u64(bp); }
 function wholeManaUp(m: u64): u64 { return (m + MANA - 1) / MANA; }
 // DRAFT terms (audit #1/#6, 2026-10-19; Audit Bot AB-001/010/011, 2026-10-22): promise only what the code does. Pending legal review.
-export const ALLOWANCE_TERMS = "DRAFT, pending legal review. Prepaid daily Mana, either for one app contract (app plan) or for one wallet (Mana pass). App plan: the station sponsors a transaction only when every top-level operation in it calls that app, and never a token transfer, approval or burn; what the app does internally when called is up to the app. The app's own key must approve the purchase. Per-user anti-spam limits apply to each of the app's users. Mana pass: the station sponsors the pass wallet's own transactions (the wallet is the payee and signs), calling any contract except the station and token contracts, never token transfers, approvals or burns, and never contract uploads, up to the daily amount. The wallet itself must approve the purchase. Over a whole term the station never sponsors more than the daily amount times the days paid. Each wallet may hold a limited number of open allowances and tickets at once (those it bought and those for it). Payment is held by the station contract until the term ends, then released to the operator. Its key alone can't move it: funds leave only through these rules (refunds, releases) or a council decision that needs at least two of its members' approvals, a public waiting period (48 hours) and no veto from any member during that wait. After a veto, no action of the same kind for the same target (for upgrades: no upgrade at all) can be proposed or carried out for 14 days, whatever its exact contents and whoever sits on the council; a member withdrawing their own proposal is not a veto. A majority of the council can replace a member (a member can't veto their own removal), so a change one member vetoed can still pass after at least 14 days plus the waiting period. This is council custody, not fully trustless escrow. If the operator sets a minimum charge (Mana passes may have a higher one), it is shown in the quote and kept if you cancel. Every allowance also pays a slot fee for each day of its term, shown in the quote and included in the price; if you cancel, the slot fee is kept for the days already held and refunded for the rest. Cancel any time: unused whole days are refunded, but the days used (the current day counts as used, so 1 day is the minimum) are charged at the 1-day price for the same Mana per day as at purchase: you get back what you paid minus that charge, never more than the unused days' share of what you paid. If more Mana was sponsored than the days used cover (the daily amount is a rolling 24-hour window, so the first day can draw on the next), the days that Mana covers are charged instead. A renewed term that hasn't started yet is refunded in full, minimum charge included, to whoever paid for it. If the operator pauses the station, paused time is credited: your term is extended by the pause. No auto-renew: service stops at expiry unless you renew, at the price current then. 1-, 7- and 30-day terms only. Non-transferable; not redeemable for crypto or cash except these refunds. Without the council the operator can only: pause the station; change prices and minimum charges for new purchases and renewals; change per-user limits, which apply at once but can't stop paid service (limits that would are refused; for example a per-user cooldown is at most 1 hour); connect free apps (never a contract with a live paid allowance); and suspend a buyer for abuse, sanctions, AUP or legal reasons. A suspended buyer's allowances are no longer sponsored. For abuse, AUP or legal reasons the unused share is refunded automatically when the suspension starts (whole unused days, pro rata of what was paid, no minimum charge kept): the operator keeps only what was served. This can return more than your own cancel would (no 1-day charge or minimum is kept), because a suspension the operator decides must never cost you more than what was served. For sanctions the funds stay frozen in escrow, neither refunded nor released, pending legal review.";
+export const ALLOWANCE_TERMS = "DRAFT, pending legal review. Prepaid daily Mana, either for one app contract (app plan) or for one wallet (Mana pass). App plan: the station sponsors a transaction only when every top-level operation in it calls that app, and never a token transfer, approval or burn; what the app does internally when called is up to the app. The app's own key must approve the purchase. Per-user anti-spam limits apply to each of the app's users. Mana pass: the station sponsors the pass wallet's own transactions (the wallet is the payee and signs), calling any contract except the station and token contracts, never token transfers, approvals or burns, and never contract uploads, up to the daily amount. The wallet itself must approve the purchase. Over a whole term the station never sponsors more than the daily amount times the days paid. Each wallet may hold a limited number of open allowances and tickets at once (those it bought and those for it). Payment is held by the station contract until the term ends, then released to the operator. Its key alone can't move it: funds leave only through these rules (refunds, releases) or a council decision that needs at least two of its members' approvals, a public waiting period (48 hours) and no veto from any member during that wait. After a veto, no action of the same kind (any wallet, any contents; for upgrades: no upgrade at all) can be proposed or carried out for 14 days, whoever sits on the council, except one that already had all its approvals before the veto. Each member's vetoes set at most one such block per kind in 30 days (a later veto still cancels its proposal). A veto never holds up a council change that removes the member who cast it or the member whose proposal was vetoed, and a member withdrawing their own proposal is not a veto. A majority of the council can replace a member (a member can't veto their own removal), so a change one member vetoed can still pass after at least 14 days plus the waiting period. This is council custody, not fully trustless escrow. If the operator sets a minimum charge (Mana passes may have a higher one), it is shown in the quote and kept if you cancel. Every allowance also pays a slot fee for each day of its term, shown in the quote and included in the price; if you cancel, the slot fee is kept for the days already held and refunded for the rest. Cancel any time: unused whole days are refunded, but the days used (the current day counts as used, so 1 day is the minimum) are charged at the 1-day price for the same Mana per day as at purchase: you get back what you paid minus that charge, never more than the unused days' share of what you paid. If more Mana was sponsored than the days used cover (the daily amount is a rolling 24-hour window, so the first day can draw on the next), the days that Mana covers are charged instead. Days another wallet paid for can't be drawn on before they begin. A renewed term that hasn't started yet is refunded in full, minimum charge included, to whoever paid for it; a started term another wallet paid is refunded pro rata (its unused whole days), never charged for your use. If the operator pauses the station, paused time is credited: your term is extended by the pause. No auto-renew: service stops at expiry unless you renew, at the price current then. 1-, 7- and 30-day terms only. Non-transferable; not redeemable for crypto or cash except these refunds. Without the council the operator can only: pause the station; change prices, minimum charges and limits for new purchases and renewals (the limits you buy are the limits you keep until your term ends, unless the station is paused; a change can only loosen them for you); connect free apps (never a contract with a live paid allowance); and suspend a buyer for abuse, sanctions, AUP or legal reasons. A suspended buyer's allowances are no longer sponsored. For abuse, AUP or legal reasons the unused share is refunded automatically when the suspension starts (whole unused days, pro rata of what was paid, no minimum charge kept): the operator keeps only what was served. This can return more than your own cancel would (no 1-day charge or minimum is kept), because a suspension the operator decides must never cost you more than what was served. For sanctions the funds stay frozen in escrow, neither refunded nor released, pending legal review.";
 export const BIG_TERMS = "DRAFT, pending legal review. Prepaid big upload: the station reserves the Mana you buy for you for the ticket's lifetime, at the full price, whether you use it or not. The lifetime is shown in the quote (one 24-hour period by default; the operator can set 1 hour to 7 days) and you can refuse a shorter one when buying; a ticket already bought keeps its lifetime. Reserved Mana is not sold again or spent by the station's other services. The payee wallet must approve (sign) the purchase. Paid in vUSDT or vUSDC and held by the station contract (council custody: its key alone can't move funds; money moves need two or more council approvals, a 48-hour public wait and no veto). If the lock runs its full period, nothing is refunded. If you end it early, you get back the value of the Mana you have not used, reduced in a straight line by the time already passed (for example, half the Mana left with three quarters of the time left returns 37.5% of the price), always keeping a fee (currently 5%). If the operator sets a minimum charge, it is shown in the quote and kept if you cancel. Refunds are only in the stablecoin you paid, never in Mana or KOIN. Each buyer can buy one ticket per cooldown period (default 24 hours). Tickets only sponsor uploading or calling the payee's own contract. In rare cases (for example if the station's Mana falls below its safety floor) a transaction can still be refused; tell the operator, who may refund the unexpired share. Paused time extends the lock. No auto-renew. Non-transferable; not redeemable for crypto or cash except these refunds. Each wallet may hold a limited number of open allowances and tickets at once. A buyer may be suspended for abuse, sanctions, AUP or legal reasons. For abuse, AUP or legal reasons the unexpired, unused share is refunded automatically when the suspension starts (no fee): the operator keeps only what was served. For sanctions the funds stay frozen in escrow pending legal review.";
 // Bounded loops (pause credit, sweep, suspension refunds). AB-002: 512, so that the 256 open allowances (each holds at
 // least one open purchase) plus renewals and tickets fit and Mana sold, not this count, decides what a buyer gets.
@@ -192,8 +194,12 @@ export class Station {
   bufferWin: Storage.Obj<station.window_object> = new Storage.Obj(System.getContractId(), S_BUFFERWIN, station.window_object.decode, station.window_object.encode, () => new station.window_object());
   proposals: Storage.Map<Uint8Array, station.proposal_object> = new Storage.Map(System.getContractId(), S_PROPOSALS, station.proposal_object.decode, station.proposal_object.encode, null);
   overflowWin: Storage.Obj<station.window_object> = new Storage.Obj(System.getContractId(), S_OVERFLOWWIN, station.window_object.decode, station.window_object.encode, () => new station.window_object());
-  // AB-011 / AB-025: action key (kind, plus the target wallet for kinds 2, 3, 6, 8) → when it was last vetoed.
+  // AB-011 / AB-025: action key → when it was last vetoed. NO LONGER CONSULTED since AB-033 (kept so the space isn't reused).
   vetoed: Storage.Map<Uint8Array, station.revenue_object> = new Storage.Map(System.getContractId(), S_VETOED, station.revenue_object.decode, station.revenue_object.encode, null);
+  // AB-033 / AB-034: kind (1 byte) → the vetoes that set a block on that kind in the last 30 days.
+  vetoes: Storage.Map<Uint8Array, station.veto_list> = new Storage.Map(System.getContractId(), S_VETOES, station.veto_list.decode, station.veto_list.encode, () => new station.veto_list());
+  // AB-035: set by scanTerms: Mana per day × unused days of open terms another wallet paid (not yet usable by the buyer).
+  otherHeld: u64 = 0;
   lastNew: bool = false;
   // would_pay (Oct 21): run the sponsorship rules as a dry run. Nothing is written and no event is emitted; `route`
   // says which rule would pay ("checkout", "operator", "ticket", "free_app", "app_plan", "pass").
@@ -351,6 +357,45 @@ export class Station {
   openCap(c: station.config_object): u32 { return c.open_cap > 0 ? c.open_cap : DEFAULT_OPEN_CAP; }
   appReserved(c: station.config_object): u32 { return c.app_reserved > 0 ? c.app_reserved : DEFAULT_APP_RESERVED; }
   dayActions(c: station.config_object): u32 { return c.day_actions > MIN_DAY_ACTIONS ? c.day_actions : MIN_DAY_ACTIONS; }
+  /** AB-032: the limits that decide whether a transaction is paid, as currently set (what a new purchase is sold). */
+  curLimits(c: station.config_object): station.term_limits {
+    const l = new station.term_limits();
+    l.hard_max = c.hard_max; l.max_ops = c.max_ops; l.per_min = c.per_min; l.cooldown_ms = c.cooldown_ms;
+    l.day_actions = this.dayActions(c); l.new_actions = c.new_actions; l.day_mana = c.day_mana; l.new_mana = c.new_mana;
+    return l;
+  }
+  /** AB-032: a running paid term keeps the limits it was sold with: each limit is the more generous of the stored value
+   *  and the current setting (a lower cooldown, every other limit higher). No term or none stored: the current ones. */
+  paidLimits(c: station.config_object, e: station.escrow_object | null): station.term_limits {
+    const l = this.curLimits(c);
+    if (e == null || e.limits == null) return l;
+    const s = e.limits!;
+    if (s.hard_max > l.hard_max) l.hard_max = s.hard_max;
+    if (s.max_ops > l.max_ops) l.max_ops = s.max_ops;
+    if (s.per_min > l.per_min) l.per_min = s.per_min;
+    if (s.cooldown_ms < l.cooldown_ms) l.cooldown_ms = s.cooldown_ms;
+    if (s.day_actions > l.day_actions) l.day_actions = s.day_actions;
+    if (s.new_actions > l.new_actions) l.new_actions = s.new_actions;
+    if (s.day_mana > l.day_mana) l.day_mana = s.day_mana;
+    if (s.new_mana > l.new_mana) l.new_mana = s.new_mana;
+    return l;
+  }
+  /** The allowance's term running at escrow time t (start <= t < end), or null. Also sets otherHeld (AB-035): Mana per
+   *  day × the unused days of open terms paid by a wallet other than the buyer, which the buyer can't draw on yet. */
+  scanTerms(a: station.allowance_object, t: u64): station.escrow_object | null {
+    let run: station.escrow_object | null = null; let other: u64 = 0;
+    for (let i = 0; i < a.purchase_ids.length; i++) {
+      const e = this.escrow.get(u32Key(a.purchase_ids[i]));
+      if (e == null || e.closed || t >= e.end) continue;
+      if (t >= e.start && run == null) run = e;
+      if (!Arrays.equal(e.buyer, a.buyer)) other += this.unusedDays(e, t);
+    }
+    this.otherHeld = a.mana_per_day * other;
+    return run;
+  }
+  /** AB-006 / AB-035: Mana the allowance may have drawn in total by now: what was paid for, less the days another wallet
+   *  paid that haven't been reached (so a burst can't draw on them and leave a charge nobody pays). */
+  capNow(a: station.allowance_object): u64 { return a.cap_total > this.otherHeld ? a.cap_total - this.otherHeld : 0; }
   /** Slots any allowance may take; the app_reserved above it are for app plans on deployed contracts only. */
   publicCap(c: station.config_object): u32 { const cap = this.openCap(c), r = this.appReserved(c); return cap > r ? cap - r : 0; }
   slotFee(c: station.config_object): u64 { return c.slot_fee_per_day > 0 ? c.slot_fee_per_day : (zeroSlotFeeOk() ? 0 : DEFAULT_SLOT_FEE); }
@@ -510,22 +555,23 @@ export class Station {
     return new authority.authorize_result(false);
   }
 
-  /** Per-user anti-spam. Returns the updated record to store on acceptance, or null to refuse. */
-  userCheck(c: station.config_object, payee: Uint8Array, now: u64, h: u64, rc: u64): station.user_object | null {
+  /** Per-user anti-spam, by limits `l` (curLimits, or a paid term's paidLimits). Returns the updated record to store on
+   *  acceptance, or null to refuse. */
+  userCheck(l: station.term_limits, payee: Uint8Array, now: u64, h: u64, rc: u64): station.user_object | null {
     let u = this.users.get(payee);
     if (u == null) { u = new station.user_object(); u.first_seen = now; u.last_block = u64.MAX_VALUE; }
     if (u.day == null) u.day = new station.window_object();
-    // AB-024: the cooldown is read from the current config (at most 1 hour), never a stored end time.
-    if ((u.cooldown_from > 0 && now < u.cooldown_from + c.cooldown_ms) || u.last_block == h) return null;
+    // AB-024: the cooldown is read from the limits in force (at most 1 hour for new sales), never a stored end time.
+    if ((u.cooldown_from > 0 && now < u.cooldown_from + l.cooldown_ms) || u.last_block == h) return null;
     const minute = now / 60_000;
     if (u.minute != minute) { u.minute = minute; u.n_min = 0; }
-    if (u.n_min >= c.per_min) return null;
+    if (u.n_min >= l.per_min) return null;
     const isNew = now - u.first_seen < DAY;
     roll(u.day!, now / USER_SLOT, USER_N, false);
-    if (sumN(u.day!) + 1 > (isNew ? c.new_actions : this.dayActions(c))) return null;
-    if (sumMana(u.day!) + rc > (isNew ? c.new_mana : c.day_mana)) return null;
+    if (sumN(u.day!) + 1 > (isNew ? l.new_actions : l.day_actions)) return null;
+    if (sumMana(u.day!) + rc > (isNew ? l.new_mana : l.day_mana)) return null;
     u.n_min += 1;
-    if (u.n_min >= c.per_min) u.cooldown_from = now;                  // stored by an ACCEPTED tx, so it survives
+    if (u.n_min >= l.per_min) u.cooldown_from = now;                  // stored by an ACCEPTED tx, so it survives
     u.last_block = h;
     add(u.day!, now / USER_SLOT, USER_N, rc, false);
     this.lastNew = isNew;
@@ -554,9 +600,12 @@ export class Station {
     // setup happens in the upload transaction itself (see init), which the chain authorizes before this code exists.
     if (payee.length == 0 || Arrays.equal(payee, this.contractId)) return false;
     if (!isAddress(c.owner)) return false;                              // everything else needs an initialized station
-    if (ops.length < 1 || ops.length > i32(c.max_ops)) return false;
+    if (ops.length < 1) return false;
+    // AB-032: max_ops and hard_max as currently set decide everything except a running paid term (Routes B and C), which
+    // is judged by the limits it was sold with when those are more generous.
+    const curOk = ops.length <= i32(c.max_ops) && rc <= c.hard_max;
     // Free checkout (Oct 20): a wallet with no Mana can still buy, renew or cancel its own purchases.
-    if (this.checkoutOk(c, ops, payee, rc, mana)) { this.route = "checkout"; return true; }
+    if (curOk && this.checkoutOk(c, ops, payee, rc, mana)) { this.route = "checkout"; return true; }
     let allSelf = true, hasUpload = false, allCalls = true, brakeOrVote = true;
     for (let i = 0; i < ops.length; i++) {
       const o = ops[i].call_contract;
@@ -566,21 +615,25 @@ export class Station {
     }
     if (allSelf) { // owner admin and council votes (kill switch etc.): work while paused
       // (dry run: the payee's signature can't be checked yet; the real transaction still needs it)
-      if (rc > c.hard_max || !this.isOperator(c, payee) || (!this.dry && !System.checkAuthority(authority.authorization_type.contract_call, payee))) return false;
+      if (!curOk || !this.isOperator(c, payee) || (!this.dry && !System.checkAuthority(authority.authorization_type.contract_call, payee))) return false;
       // AB-012: only the emergency brake and council votes / vetoes may go below the floor (down to rc <= mana);
       // every other admin transaction keeps admin_min and the tickets' locked Mana, like all paying routes.
       if (!brakeOrVote && mana - rc < this.payFloor(c)) return false;
       // Review M1: the same per-user limits as players (per minute, per day), so no operator can drain the station.
-      const u = this.userCheck(c, payee, this.now(), this.height(), rc); if (u == null) return false;
+      const u = this.userCheck(this.curLimits(c), payee, this.now(), this.height(), rc); if (u == null) return false;
       if (!this.dry) this.users.put(payee, u);
       this.route = "operator"; return true;
     }
     if (c.paused) return false;
     const now = this.now(), h = this.height();
-    // Big upload ticket.
+    // Big upload ticket. (AB-032: a call too big for the current hard_max that the ticket doesn't cover may still be
+    // paid by the payee's running paid term below, under the limits it was sold with.)
     const t = this.tickets.get(payee);
-    if (t != null && (rc > c.hard_max || hasUpload)) { const ok = this.bigOk(c, t, ops, rc, mana, now, payee); if (ok) this.route = "ticket"; return ok; }
-    if (!allCalls || rc > c.hard_max) return false;
+    if (t != null && (rc > c.hard_max || hasUpload) && ops.length <= i32(c.max_ops)) {
+      const ok = this.bigOk(c, t, ops, rc, mana, now, payee); if (ok) { this.route = "ticket"; return true; }
+      if (hasUpload) return false;
+    }
+    if (!allCalls) return false;
     if (mana - rc < this.payFloor(c)) return false;                   // AB-003: admin_min + tickets' locked Mana
     // Station-wide rolling 24 h cap: 20% of koin_amount (+ explicit owner boosts). App buffers are outside it (below).
     const gw = this.globalWin.get()!;
@@ -592,6 +645,7 @@ export class Station {
     for (let i = 1; i < ops.length; i++) if (!Arrays.equal(ops[i].call_contract!.contract_id, target0)) { oneTarget = false; break; }
     const ex = oneTarget ? this.exempt.get(target0) : null;
     if (ex != null) {
+      if (!curOk) return false;                                        // free use: the current limits (AB-032)
       let cap: u64 = 0;
       for (let i = 0; i < ops.length; i++) {
         const o = ops[i].call_contract!;
@@ -601,7 +655,7 @@ export class Station {
         else cap += c.hard_max;
       }
       if (rc > cap) return false;
-      const u = this.userCheck(c, payee, now, h, rc); if (u == null) return false;
+      const u = this.userCheck(this.curLimits(c), payee, now, h, rc); if (u == null) return false;
       const isNew = this.lastNew;
       if (ex.app > 0) {
         // Reserved app: its allowance, then up to buffer_bp more straight from the reserve (Carl, 5:22 PM).
@@ -655,12 +709,15 @@ export class Station {
     if (!globalRoom) return false;                                     // paid: hard cap, no buffer
     // Audit #2: big-upload debt no longer pauses paid allowances (one unused ticket could freeze every paying customer).
     // The reserve stays safe because big uploads and buffers can never take Mana below the big floor (bigOk, Route A).
+    // AB-032: judged by the running term's limits (the more generous of those sold and the current ones).
+    const lim = this.paidLimits(c, this.scanTerms(s, now));
+    if (ops.length > i32(lim.max_ops) || rc > lim.hard_max) return false;
     if (s.day == null) s.day = new station.window_object();
     roll(s.day!, now / USER_SLOT, USER_N, false);
     if (sumMana(s.day!) + rc > s.mana_per_day) return false;
-    if (s.cap_total > 0 && s.used_total + rc > s.cap_total) return false;  // AB-006: never more than the days paid
+    if (s.cap_total > 0 && s.used_total + rc > this.capNow(s)) return false;  // AB-006 / AB-035: never more than the days paid
     let u: station.user_object | null = null;
-    if (kind == 1) { u = this.userCheck(c, payee, now, h, rc); if (u == null) return false; }
+    if (kind == 1) { u = this.userCheck(lim, payee, now, h, rc); if (u == null) return false; }
     add(s.day!, now / USER_SLOT, USER_N, rc, false); add(gw, now / APP_SLOT, APP_N, rc, false); s.used_total += rc;
     if (!this.dry) { this.allowances.put(u32Key(s.id), s); this.globalWin.put(gw); if (u != null) this.users.put(payee, u); }
     this.watchReserve(c, mana - rc);
@@ -697,7 +754,7 @@ export class Station {
       else return false;
       if (!isAddress(who) || !Arrays.equal(who!, payee) || tok == null || !Arrays.equal(tok!, ap.contract_id)) return false;
     }
-    const u = this.userCheck(c, payee, this.now(), this.height(), rc); if (u == null) return false;
+    const u = this.userCheck(this.curLimits(c), payee, this.now(), this.height(), rc); if (u == null) return false;
     if (!this.dry) this.users.put(payee, u);
     return true;
   }
@@ -716,10 +773,12 @@ export class Station {
       if (o.entry_point == EP_KCS_TRANSFER || o.entry_point == EP_KCS_APPROVE || o.entry_point == EP_KCS_BURN) return false;
     }
     if (!globalRoom) return false;
+    const lim = this.paidLimits(c, this.scanTerms(s, now));            // AB-032: the running term's limits
+    if (ops.length > i32(lim.max_ops) || rc > lim.hard_max) return false;
     if (s.day == null) s.day = new station.window_object();
     roll(s.day!, now / USER_SLOT, USER_N, false);
     if (sumMana(s.day!) + rc > s.mana_per_day) return false;
-    if (s.cap_total > 0 && s.used_total + rc > s.cap_total) return false;  // AB-006: never more than the days paid
+    if (s.cap_total > 0 && s.used_total + rc > this.capNow(s)) return false;  // AB-006 / AB-035: never more than the days paid
     add(s.day!, now / USER_SLOT, USER_N, rc, false); add(gw, now / APP_SLOT, APP_N, rc, false); s.used_total += rc;
     if (!this.dry) { this.allowances.put(u32Key(s.id), s); this.globalWin.put(gw); }
     this.watchReserve(c, mana - rc);
@@ -787,6 +846,7 @@ export class Station {
     r.price = per1000(manaPerDay, unit); r.unit_price = unit; r.min_charge = this.minCharge(p, kind);
     if (r.price < r.min_charge) r.price = r.min_charge;               // audit #3 / AB-002: minimum charge per purchase
     r.slot_fee = this.slotFee(c) * days; r.price += r.slot_fee;        // slot fee: shown on its own and in the total
+    r.limits = this.curLimits(c);                                       // AB-032: kept until this term ends
     if (r.price > p.max_per_purchase) { r.reason = "above the per-purchase maximum"; return r; }
     const cm = sold != null ? sold! : this.committed(c, now, false);   // buy passes in the count it just made
     let held: u64 = 0;
@@ -875,6 +935,7 @@ export class Station {
     const e = this.newPurchase(1, args.buyer!, args.token!, q.price, now, a.expiry);
     e.days = args.days; e.per_day = q.price / args.days; e.allowance_id = a.id; e.min_keep = this.minKeep(args.token!, q.price - q.slot_fee, args.kind);
     e.slot_fee_per_day = q.slot_fee / args.days;                         // slot fee: kept for days held on a cancel
+    e.limits = this.curLimits(c);                                        // AB-032: the limits this term keeps
     e.day_price = this.dayPrice(args.token!, args.mana_per_day, args.kind); this.escrow.put(u32Key(e.id), e); // AB-010
     a.purchase_ids.push(e.id);
     this.allowances.put(u32Key(a.id), a);
@@ -909,6 +970,7 @@ export class Station {
     const e = this.newPurchase(1, args.payer!, args.token!, q.price, start, a!.expiry);
     e.days = args.days; e.per_day = q.price / args.days; e.allowance_id = a!.id; e.min_keep = this.minKeep(args.token!, q.price - q.slot_fee, a!.kind);
     e.slot_fee_per_day = q.slot_fee / args.days;                         // a renewal pays the slot fee for its own term
+    e.limits = this.curLimits(c);                                        // AB-032: the renewal is sold today's limits
     e.day_price = this.dayPrice(args.token!, a!.mana_per_day, a!.kind); this.escrow.put(u32Key(e.id), e); // AB-010
     keep.push(e.id); a!.purchase_ids = keep;
     this.allowances.put(u32Key(a!.id), a!);
@@ -1162,9 +1224,9 @@ export class Station {
   }
   // ═══════ escrow: cancel, settle, release, owner refund (Carl, 7:47 PM) ═══════
   /** AB-028: on a buyer cancel, the whole days of Mana sponsored beyond what the kept days allow (a burst across a 6 h
-   *  slot edge can use two days' Mana on the first day). These extra days are charged too (see endTerms). Whatever
-   *  can't be charged (at most about one day's Mana, only when another wallet paid the next term) isn't sponsored any
-   *  more: the cap stays below what was used, so the allowance serves nothing further. */
+   *  slot edge can use two days' Mana on the first day). These extra days are charged too (see cancelPlan). AB-035:
+   *  sponsorship never draws on days another wallet paid before they are reached (capNow), so the extra days always fit
+   *  in terms the buyer paid. */
   extraDays(a: station.allowance_object, t: u64): u64 {
     if (a.cap_total == 0 || a.mana_per_day == 0) return 0;              // not tracked (bought before AB-006)
     let cut: u64 = 0;
@@ -1175,19 +1237,35 @@ export class Station {
     const left = a.cap_total > cut ? a.cap_total - cut : 0;
     return a.used_total > left ? (a.used_total - left + a.mana_per_day - 1) / a.mana_per_day : 0;
   }
+  /** A buyer cancel at t, per entry of a.purchase_ids: the AB-028 extra days charged to that term. They go to terms the
+   *  buyer paid only (running first, then later ones, in order); a term another wallet paid is never charged for the
+   *  buyer's use (AB-035 / AB-036). Shared by endTerms and get_escrow, so the view is exactly what a cancel pays (AB-037). */
+  cancelPlan(a: station.allowance_object, t: u64): u64[] {
+    const xs = new Array<u64>(a.purchase_ids.length);
+    let extra = this.extraDays(a, t);
+    for (let i = 0; i < a.purchase_ids.length; i++) {
+      xs[i] = 0;
+      const e = this.escrow.get(u32Key(a.purchase_ids[i]));
+      if (e == null || e.closed || t >= e.end || !Arrays.equal(e.buyer, a.buyer)) continue;
+      const u0 = this.unusedDays(e, t);
+      const x = extra < u0 ? extra : u0; xs[i] = x; extra -= x;
+    }
+    return xs;
+  }
   /** End an allowance's terms at time t: refund unused whole days; return the new expiry (end of the paid current day).
-   *  Returns [total refunded, new expiry]. */
+   *  keepMin = a buyer cancel (the 1-day charge, the minimum and the AB-028 extra days apply, to the buyer's own terms
+   *  only); false = owner or suspension refund (plain pro rata). Returns [total refunded, new expiry]. */
   endTerms(a: station.allowance_object, t: u64, action: string, keepMin: bool = true): u64[] {
     let refund: u64 = 0; let newExpiry: u64 = t;
-    let extra = keepMin ? this.extraDays(a, t) : 0;                     // AB-028: buyer cancels only
+    const xs = keepMin ? this.cancelPlan(a, t) : new Array<u64>(0);
     for (let i = 0; i < a.purchase_ids.length; i++) {
       const e = this.escrow.get(u32Key(a.purchase_ids[i]));
       if (e == null || e.closed || t >= e.end) continue;                // finished terms: releasable as they are
-      // AB-028 extra days go to the running term (the Mana was drawn during it), then only to future terms the canceller
-      // paid: a term another wallet paid comes back whole (AB-029), so a burst can't cost that wallet anything.
+      // AB-036: a term another wallet paid is refunded pro rata (that wallet didn't cancel); AB-029: whole if not started.
+      const own = keepMin && Arrays.equal(e!.buyer, a.buyer);
       const u0 = this.unusedDays(e!, t);
-      const x = t >= e!.start || Arrays.equal(e!.buyer, a.buyer) ? (extra < u0 ? extra : u0) : 0; extra -= x;
-      const r = this.termRefund(e!, t, keepMin, x);
+      const x = own ? xs[i] : 0;
+      const r = this.termRefund(e!, t, own, x);
       // Shorten the term to what was used, so nothing can be refunded twice (later refunds compute 0 unused days).
       const unused = u0 - x; const used = e!.days - unused;
       const cut = a.mana_per_day * unused;                               // AB-006: refunded days no longer count
@@ -1304,12 +1382,24 @@ export class Station {
     const s = this.suspended.get(buyer);
     System.require(s == null || s.reason != 2, "buyer suspended for sanctions: no refund (reclassify a false match as reason 4)");
   }
+  /** AB-037: what a buyer cancel of e's allowance at t would refund for this term (cancelPlan + termRefund, as endTerms). */
+  cancelRefundOf(e: station.escrow_object, t: u64): u64 {
+    const a = this.allowances.get(u32Key(e.allowance_id));
+    if (a == null) return this.termRefund(e, t);
+    const xs = this.cancelPlan(a, t);
+    for (let i = 0; i < a.purchase_ids.length; i++) {
+      if (a.purchase_ids[i] != e.id) continue;
+      const own = Arrays.equal(e.buyer, a.buyer);
+      return this.termRefund(e, t, own, own ? xs[i] : 0);
+    }
+    return this.termRefund(e, t);
+  }
   get_escrow(args: station.get_escrow_arguments): station.get_escrow_result {
     const r = new station.get_escrow_result(); const e = this.escrow.get(u32Key(args.purchase_id));
     if (e == null) return r;
     const c = this.config.get()!; const t = this.clock(c, this.now());
     r.purchase = e;
-    if (e.kind == 1) { r.refundable_now = this.termRefund(e, t); r.releasable = !e.closed && t >= e.end; }
+    if (e.kind == 1) { r.refundable_now = this.cancelRefundOf(e, t); r.releasable = !e.closed && t >= e.end; }
     else { const tk = this.tickets.get(e.payee!); if (tk != null) r.refundable_now = this.ticketRefund(e, tk, t, this.ticketFeeBp(c)); }
     return r;
   }
@@ -1436,7 +1526,7 @@ export class Station {
     System.event("station.proposal_" + what, Protobuf.encode(new station.proposal_event(p, by, what), station.proposal_event.encode), [by]);
   }
   maybeReady(c: station.config_object, p: station.proposal_object, now: u64, by: Uint8Array): void {
-    if (p.ready_at == 0 && this.validCount(c, p) >= c.threshold) { p.ready_at = now + c.guard_delay_ms; this.propEvent(p, by, "ready"); }
+    if (p.ready_at == 0 && this.validCount(c, p) >= c.threshold) { p.ready_at = now + c.guard_delay_ms; p.approved_at = now; this.propEvent(p, by, "ready"); }
   }
   /** Review L1: after a council change every open proposal restarts its wait, counted from now with current members. */
   rearm(c: station.config_object, now: u64): void {
@@ -1477,7 +1567,7 @@ export class Station {
     this.requireCouncil(c, args.signer); System.require(args.action != null, "action required");
     this.checkAction(args.action!);
     // AB-011 / AB-025: 14 days after a veto, whoever sits on the council, for any action of that kind and target.
-    System.require(!this.vetoBlocked(args.action!, this.now()), "an action of this kind for this target was vetoed less than 14 days ago");
+    System.require(!this.vetoBlocked(args.action!, this.now()), "an action of this kind was vetoed less than 14 days ago");
     const reg = this.registry.get()!;
     System.require(reg.open_proposals.length < MAX_OPEN_PROPOSALS, "too many open proposals (16)");
     let mine = 0;
@@ -1504,26 +1594,44 @@ export class Station {
   cancel_proposal(args: station.cancel_proposal_arguments): station.cancel_proposal_result {
     const c = this.config.get()!; this.requireCouncil(c, args.signer);
     const p = this.openProposal(args.id);
-    // Review H1: a member can't veto a council change that removes them (or they could never be removed).
-    if (p.action != null && p.action!.kind == 4) {
-      let stays = false; for (let i = 0; i < p.action!.council.length; i++) if (Arrays.equal(p.action!.council[i], args.signer!)) stays = true;
-      System.require(stays, "a member can't veto their own removal");
-    }
+    const own = Arrays.equal(p.proposer, args.signer!);
+    // Review H1: a member can't veto a council change that removes them (or they could never be removed). AB-039: the
+    // proposer may still withdraw their own proposal (for example their own departure).
+    if (p.action != null && p.action!.kind == 4 && !own) System.require(this.inCouncil(p.action!.council, args.signer!), "a member can't veto their own removal");
     p.cancelled = true; p.cancelled_by = args.signer; this.closeProposal(p);
-    // AB-011 / AB-025: a veto blocks the action's kind and target. A proposer withdrawing their own proposal is not a
-    // veto (so one member can't block, say, every upgrade alone by proposing one and cancelling it).
-    if (p.action != null && !Arrays.equal(p.proposer, args.signer!)) this.vetoed.put(this.actionKey(p.action!), new station.revenue_object(this.now()));
+    // A proposer withdrawing their own proposal is not a veto. AB-033 / AB-034: a veto by another member blocks the
+    // action's whole kind, any target, for 14 days, but each member sets at most one such block per kind per 30 days
+    // (a later veto inside that period still cancels its proposal, without a new block or a longer one).
+    if (p.action != null && !own) {
+      const now = this.now(); const k = this.vetoKey(p.action!.kind);
+      const old = this.vetoes.get(k)!; const keep = new Array<station.veto_entry>(); let used = false;
+      for (let i = 0; i < old.entries.length; i++) {
+        const v = old.entries[i]; if (now >= v.at + VETO_BUDGET_MS) continue;  // older than 30 days: forgotten
+        keep.push(v); if (Arrays.equal(v.vetoer, args.signer!)) used = true;
+      }
+      if (!used) keep.push(new station.veto_entry(args.signer, p.proposer, now));
+      old.entries = keep; this.vetoes.put(k, old);
+    }
     this.propEvent(p, args.signer!, "cancelled");
     return new station.cancel_proposal_result();
   }
-  /** AB-025: what a veto blocks, whatever the exact bytes: the action's kind, plus the wallet `to` for kinds 2, 3, 6 and
-   *  8. So kind 1 blocks every upgrade of this contract, and kinds 4, 5 and 7 every change of that setting. Keys are 1 or
-   *  26 bytes, never the 34-byte hashes stored before AB-025 (those records are no longer consulted). */
-  actionKey(a: station.guarded_action): Uint8Array {
-    const to = (a.kind == 2 || a.kind == 3 || a.kind == 6 || a.kind == 8) && isAddress(a.to) ? a.to! : new Uint8Array(0);
-    const k = new Uint8Array(1 + to.length); k[0] = u8(a.kind); k.set(to, 1); return k;
+  inCouncil(m: Uint8Array[], w: Uint8Array): bool { for (let i = 0; i < m.length; i++) if (Arrays.equal(m[i], w)) return true; return false; }
+  vetoKey(kind: u32): Uint8Array { const k = new Uint8Array(1); k[0] = u8(kind); return k; }
+  /** AB-033 / AB-034: true while a veto of the same kind (any target, any contents) from the last 14 days blocks `a`.
+   *  Not blocking: a veto cast after `approvedAt` (the proposal had all its approvals first: it continues), and,
+   *  for a council change, a veto by a member it removes or on a proposal by a member it removes (so a majority can
+   *  always replace a member who vetoes, or one whose proposal was vetoed). approvedAt 0 = not yet approved (propose). */
+  vetoBlocked(a: station.guarded_action, now: u64, approvedAt: u64 = 0): bool {
+    const l = this.vetoes.get(this.vetoKey(a.kind))!;
+    for (let i = 0; i < l.entries.length; i++) {
+      const v = l.entries[i];
+      if (now >= v.at + VETO_BLOCK_MS) continue;
+      if (approvedAt > 0 && v.at > approvedAt) continue;
+      if (a.kind == 4 && (!this.inCouncil(a.council, v.vetoer!) || !this.inCouncil(a.council, v.proposer!))) continue;
+      return true;
+    }
+    return false;
   }
-  vetoBlocked(a: station.guarded_action, now: u64): bool { const v = this.vetoed.get(this.actionKey(a)); return v != null && now < v.total + VETO_BLOCK_MS; }
   /** Ready = threshold reached, delay passed, and still enough approvals from CURRENT council members. */
   isReady(c: station.config_object, p: station.proposal_object, now: u64): bool {
     return p.ready_at > 0 && now >= p.ready_at && this.validCount(c, p) >= c.threshold;
@@ -1535,7 +1643,7 @@ export class Station {
     System.require(p.ready_at > 0, "not enough approvals yet");
     System.require(now >= p.ready_at, "waiting period not over");
     System.require(this.validCount(c, p) >= c.threshold, "not enough approvals from current council members");
-    System.require(!this.vetoBlocked(a, now), "an action of this kind for this target was vetoed less than 14 days ago"); // AB-025
+    System.require(!this.vetoBlocked(a, now, p.approved_at), "an action of this kind was vetoed less than 14 days ago"); // AB-025 / AB-033
     p.executed = true; this.closeProposal(p);                            // state first, then any transfer
     if (a.kind == 2) {
       const bal = this.koinBalance();
@@ -1575,7 +1683,7 @@ export class Station {
       const p = this.proposals.get(u32Key(reg.open_proposals[i]));
       if (p == null || p.action == null || p.action!.kind != 1 || !Arrays.equal(p.action!.hash, h)) continue;
       if (!this.isReady(c, p, now) || now >= p.ready_at + UPGRADE_WINDOW_MS) continue;
-      if (this.vetoBlocked(p.action!, now)) continue;                    // AB-025: no upgrade within 14 days of a vetoed one
+      if (this.vetoBlocked(p.action!, now, p.approved_at)) continue;     // AB-025 / AB-033: no upgrade within 14 days of a veto cast before it was approved
       p.executed = true; this.closeProposal(p);
       this.propEvent(p, new Uint8Array(0), "executed");
       return true;

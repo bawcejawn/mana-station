@@ -1,5 +1,5 @@
 
-âk
+Æo
 assembly/proto/station.protostationkoinos/options.proto"¡
 config_object
 owner (BÄµRowner
@@ -188,7 +188,7 @@ exempt_ids (BÄµR	exemptIds%
 council (BÄµRcouncil
 	threshold (R	threshold
 delay_ms (B0RdelayMs
-fee_bp	 (RfeeBp"∏
+fee_bp	 (RfeeBp"›
 proposal_object
 id (Rid/
 action (2.station.guarded_actionRaction 
@@ -198,7 +198,29 @@ exempt_ids (BÄµR	exemptIds%
 ready_at (B0RreadyAt
 executed (Rexecuted
 	cancelled (R	cancelled'
-cancelled_by	 (BÄµRcancelledBy"p
+cancelled_by	 (BÄµRcancelledBy#
+approved_at
+ (B0R
+approvedAt"`
+
+veto_entry
+vetoer (BÄµRvetoer 
+proposer (BÄµRproposer
+at (B0Rat":
+	veto_list-
+entries (2.station.veto_entryRentries"É
+term_limits
+hard_max (B0RhardMax
+max_ops (RmaxOps
+per_min (RperMin#
+cooldown_ms (B0R
+cooldownMs
+day_actions (R
+dayActions
+new_actions (R
+newActions
+day_mana (B0RdayMana
+new_mana (B0RnewMana"p
 proposal_event4
 proposal (2.station.proposal_objectRproposal
 by (BÄµRby
@@ -225,7 +247,7 @@ manaPerDay
 expiry (B0Rexpiry
 used_24h (B0Rused24h
 	suspended (R	suspended
-kind (Rkind"à
+kind (Rkind"∂
 escrow_object
 id (Rid
 kind (Rkind
@@ -245,7 +267,8 @@ manaPerDay
 closed (Rclosed
 min_keep (B0RminKeep
 	day_price (B0RdayPrice+
-slot_fee_per_day (B0RslotFeePerDay"ê
+slot_fee_per_day (B0RslotFeePerDay,
+limits (2.station.term_limitsRlimits"ê
 escrow_totals_object
 held (B0Rheld 
 	collected (B0R	collected
@@ -306,7 +329,7 @@ entryPoint"?
 manaPerDay
 days (B0Rdays
 kind (Rkind
-target (BÄµRtarget"¢
+target (BÄµRtarget"–
 quote_allowance_result
 
 refundable (R
@@ -321,7 +344,9 @@ auto_renew (R	autoRenew
 unit_price (B0R	unitPrice!
 
 min_charge (B0R	minCharge
-slot_fee	 (B0RslotFee"P
+slot_fee	 (B0RslotFee,
+limits
+ (2.station.term_limitsRlimits"P
 quote_big_upload_arguments
 token (BÄµRtoken
 mana (B0Rmana"©

@@ -182,12 +182,12 @@ describe("FIX-CHECK AB-011: the 14-day veto block", () => {
     signedBy([C3]); s.cancel_proposal(new station.cancel_proposal_arguments(C3, id)); signedBy([]);
     gS1 = s; gAct = wd(0); signedBy([C1]); MockVM.commitTransaction();
     clearRevert(); expect(() => { gS1!.propose(new station.propose_arguments(C1, gAct)); }).toThrow("control: the identical action is blocked");
-    revertedWith("an action of this kind for this target was vetoed less than 14 days ago", "control: blocked by the veto");
+    revertedWith("an action of this kind was vetoed less than 14 days ago", "control: blocked by the veto");
     signedBy([]);
     at(NOW + 60_000);
     gAct = wd(1); signedBy([C1]); MockVM.commitTransaction();
     clearRevert(); expect(() => { gS1!.propose(new station.propose_arguments(C1, gAct)); }).toThrow("AB-011 bypass: the vetoed withdrawal was proposed again a minute later with fee_bp (ignored for kind 2) set to 1");
-    revertedWith("an action of this kind for this target was vetoed less than 14 days ago", "AB-011 bypass: refused, but not by the veto block");
+    revertedWith("an action of this kind was vetoed less than 14 days ago", "AB-011 bypass: refused, but not by the veto block");
     signedBy([]);
   });
   it("(b) one member alone can't block the council's upgrade bytecode for 14 days by proposing and vetoing it", () => {

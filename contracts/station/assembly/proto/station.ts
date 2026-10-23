@@ -2156,6 +2156,11 @@ export namespace station {
         writer.uint32(74);
         writer.bytes(unique_name_cancelled_by);
       }
+
+      if (message.approved_at != 0) {
+        writer.uint32(80);
+        writer.uint64(message.approved_at);
+      }
     }
 
     static decode(reader: Reader, length: i32): proposal_object {
@@ -2201,6 +2206,10 @@ export namespace station {
             message.cancelled_by = reader.bytes();
             break;
 
+          case 10:
+            message.approved_at = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -2219,6 +2228,7 @@ export namespace station {
     executed: bool;
     cancelled: bool;
     cancelled_by: Uint8Array | null;
+    approved_at: u64;
 
     constructor(
       id: u32 = 0,
@@ -2229,7 +2239,8 @@ export namespace station {
       ready_at: u64 = 0,
       executed: bool = false,
       cancelled: bool = false,
-      cancelled_by: Uint8Array | null = null
+      cancelled_by: Uint8Array | null = null,
+      approved_at: u64 = 0
     ) {
       this.id = id;
       this.action = action;
@@ -2240,6 +2251,230 @@ export namespace station {
       this.executed = executed;
       this.cancelled = cancelled;
       this.cancelled_by = cancelled_by;
+      this.approved_at = approved_at;
+    }
+  }
+
+  export class veto_entry {
+    static encode(message: veto_entry, writer: Writer): void {
+      const unique_name_vetoer = message.vetoer;
+      if (unique_name_vetoer !== null) {
+        writer.uint32(10);
+        writer.bytes(unique_name_vetoer);
+      }
+
+      const unique_name_proposer = message.proposer;
+      if (unique_name_proposer !== null) {
+        writer.uint32(18);
+        writer.bytes(unique_name_proposer);
+      }
+
+      if (message.at != 0) {
+        writer.uint32(24);
+        writer.uint64(message.at);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): veto_entry {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new veto_entry();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.vetoer = reader.bytes();
+            break;
+
+          case 2:
+            message.proposer = reader.bytes();
+            break;
+
+          case 3:
+            message.at = reader.uint64();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    vetoer: Uint8Array | null;
+    proposer: Uint8Array | null;
+    at: u64;
+
+    constructor(
+      vetoer: Uint8Array | null = null,
+      proposer: Uint8Array | null = null,
+      at: u64 = 0
+    ) {
+      this.vetoer = vetoer;
+      this.proposer = proposer;
+      this.at = at;
+    }
+  }
+
+  export class veto_list {
+    static encode(message: veto_list, writer: Writer): void {
+      const unique_name_entries = message.entries;
+      for (let i = 0; i < unique_name_entries.length; ++i) {
+        writer.uint32(10);
+        writer.fork();
+        veto_entry.encode(unique_name_entries[i], writer);
+        writer.ldelim();
+      }
+    }
+
+    static decode(reader: Reader, length: i32): veto_list {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new veto_list();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.entries.push(veto_entry.decode(reader, reader.uint32()));
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    entries: Array<veto_entry>;
+
+    constructor(entries: Array<veto_entry> = []) {
+      this.entries = entries;
+    }
+  }
+
+  @unmanaged
+  export class term_limits {
+    static encode(message: term_limits, writer: Writer): void {
+      if (message.hard_max != 0) {
+        writer.uint32(8);
+        writer.uint64(message.hard_max);
+      }
+
+      if (message.max_ops != 0) {
+        writer.uint32(16);
+        writer.uint32(message.max_ops);
+      }
+
+      if (message.per_min != 0) {
+        writer.uint32(24);
+        writer.uint32(message.per_min);
+      }
+
+      if (message.cooldown_ms != 0) {
+        writer.uint32(32);
+        writer.uint64(message.cooldown_ms);
+      }
+
+      if (message.day_actions != 0) {
+        writer.uint32(40);
+        writer.uint32(message.day_actions);
+      }
+
+      if (message.new_actions != 0) {
+        writer.uint32(48);
+        writer.uint32(message.new_actions);
+      }
+
+      if (message.day_mana != 0) {
+        writer.uint32(56);
+        writer.uint64(message.day_mana);
+      }
+
+      if (message.new_mana != 0) {
+        writer.uint32(64);
+        writer.uint64(message.new_mana);
+      }
+    }
+
+    static decode(reader: Reader, length: i32): term_limits {
+      const end: usize = length < 0 ? reader.end : reader.ptr + length;
+      const message = new term_limits();
+
+      while (reader.ptr < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1:
+            message.hard_max = reader.uint64();
+            break;
+
+          case 2:
+            message.max_ops = reader.uint32();
+            break;
+
+          case 3:
+            message.per_min = reader.uint32();
+            break;
+
+          case 4:
+            message.cooldown_ms = reader.uint64();
+            break;
+
+          case 5:
+            message.day_actions = reader.uint32();
+            break;
+
+          case 6:
+            message.new_actions = reader.uint32();
+            break;
+
+          case 7:
+            message.day_mana = reader.uint64();
+            break;
+
+          case 8:
+            message.new_mana = reader.uint64();
+            break;
+
+          default:
+            reader.skipType(tag & 7);
+            break;
+        }
+      }
+
+      return message;
+    }
+
+    hard_max: u64;
+    max_ops: u32;
+    per_min: u32;
+    cooldown_ms: u64;
+    day_actions: u32;
+    new_actions: u32;
+    day_mana: u64;
+    new_mana: u64;
+
+    constructor(
+      hard_max: u64 = 0,
+      max_ops: u32 = 0,
+      per_min: u32 = 0,
+      cooldown_ms: u64 = 0,
+      day_actions: u32 = 0,
+      new_actions: u32 = 0,
+      day_mana: u64 = 0,
+      new_mana: u64 = 0
+    ) {
+      this.hard_max = hard_max;
+      this.max_ops = max_ops;
+      this.per_min = per_min;
+      this.cooldown_ms = cooldown_ms;
+      this.day_actions = day_actions;
+      this.new_actions = new_actions;
+      this.day_mana = day_mana;
+      this.new_mana = new_mana;
     }
   }
 
@@ -2648,6 +2883,14 @@ export namespace station {
         writer.uint32(144);
         writer.uint64(message.slot_fee_per_day);
       }
+
+      const unique_name_limits = message.limits;
+      if (unique_name_limits !== null) {
+        writer.uint32(154);
+        writer.fork();
+        term_limits.encode(unique_name_limits, writer);
+        writer.ldelim();
+      }
     }
 
     static decode(reader: Reader, length: i32): escrow_object {
@@ -2729,6 +2972,10 @@ export namespace station {
             message.slot_fee_per_day = reader.uint64();
             break;
 
+          case 19:
+            message.limits = term_limits.decode(reader, reader.uint32());
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -2756,6 +3003,7 @@ export namespace station {
     min_keep: u64;
     day_price: u64;
     slot_fee_per_day: u64;
+    limits: term_limits | null;
 
     constructor(
       id: u32 = 0,
@@ -2775,7 +3023,8 @@ export namespace station {
       closed: bool = false,
       min_keep: u64 = 0,
       day_price: u64 = 0,
-      slot_fee_per_day: u64 = 0
+      slot_fee_per_day: u64 = 0,
+      limits: term_limits | null = null
     ) {
       this.id = id;
       this.kind = kind;
@@ -2795,6 +3044,7 @@ export namespace station {
       this.min_keep = min_keep;
       this.day_price = day_price;
       this.slot_fee_per_day = slot_fee_per_day;
+      this.limits = limits;
     }
   }
 
@@ -3664,6 +3914,14 @@ export namespace station {
         writer.uint32(72);
         writer.uint64(message.slot_fee);
       }
+
+      const unique_name_limits = message.limits;
+      if (unique_name_limits !== null) {
+        writer.uint32(82);
+        writer.fork();
+        term_limits.encode(unique_name_limits, writer);
+        writer.ldelim();
+      }
     }
 
     static decode(reader: Reader, length: i32): quote_allowance_result {
@@ -3709,6 +3967,10 @@ export namespace station {
             message.slot_fee = reader.uint64();
             break;
 
+          case 10:
+            message.limits = term_limits.decode(reader, reader.uint32());
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -3727,6 +3989,7 @@ export namespace station {
     unit_price: u64;
     min_charge: u64;
     slot_fee: u64;
+    limits: term_limits | null;
 
     constructor(
       refundable: bool = false,
@@ -3737,7 +4000,8 @@ export namespace station {
       reason: string | null = null,
       unit_price: u64 = 0,
       min_charge: u64 = 0,
-      slot_fee: u64 = 0
+      slot_fee: u64 = 0,
+      limits: term_limits | null = null
     ) {
       this.refundable = refundable;
       this.auto_renew = auto_renew;
@@ -3748,6 +4012,7 @@ export namespace station {
       this.unit_price = unit_price;
       this.min_charge = min_charge;
       this.slot_fee = slot_fee;
+      this.limits = limits;
     }
   }
 

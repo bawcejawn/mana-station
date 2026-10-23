@@ -532,7 +532,7 @@ describe("AB-006 / AB-011", () => {
     const a = act(2); a.to = OTHER; a.amount = M;
     const id = propose(s, C1, a); signedBy([C3]); s.cancel_proposal(new station.cancel_proposal_arguments(C3, id)); signedBy([]);
     const T1 = NOW;
-    at(T1 + 14 * DAYMS - 1); refusedPropose(s, C1, a, "1 ms early", "an action of this kind for this target was vetoed less than 14 days ago");
+    at(T1 + 14 * DAYMS - 1); refusedPropose(s, C1, a, "1 ms early", "an action of this kind was vetoed less than 14 days ago");
     at(T1 + 14 * DAYMS); expect(propose(s, C1, a)).toBeGreaterThan(id);
   });
 });

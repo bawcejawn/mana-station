@@ -168,7 +168,7 @@ describe("red team INSIDER: two colluding council members override the third mem
     const a3 = act(1); a3.hash = h; gA3 = a3;
     signedBy([C1]); MockVM.commitTransaction();
     clearRevert(); expect(() => { gS!.propose(new station.propose_arguments(C1, gA3)); })
-      .toThrow("BROKEN: the vetoed upgrade was proposed again right after the vetoing member was removed"); revertedWith("an action of this kind for this target was vetoed less than 14 days ago");
+      .toThrow("BROKEN: the vetoed upgrade was proposed again right after the vetoing member was removed"); revertedWith("an action of this kind was vetoed less than 14 days ago");
     signedBy([]);
     at(NOW + 2 * DAYMS);
     expect(upAuthAll(s, evil)).toBe(false,

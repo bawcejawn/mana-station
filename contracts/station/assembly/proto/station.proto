@@ -258,6 +258,33 @@ message proposal_object {
   bool executed = 7;
   bool cancelled = 8;
   bytes cancelled_by = 9 [(koinos.btype) = ADDRESS];
+  // AB-033: when the proposal last reached its threshold (0 = not yet). A veto cast after this doesn't hold it up.
+  uint64 approved_at = 10 [jstype = JS_STRING];
+}
+
+// AB-033 / AB-034: one veto that set a 14-day block on its kind. Kept 30 days (each member sets at most one block per
+// kind per 30 days); a council change (kind 4) that removes the vetoer or the vetoed proposal's proposer isn't blocked.
+message veto_entry {
+  bytes vetoer = 1 [(koinos.btype) = ADDRESS];
+  bytes proposer = 2 [(koinos.btype) = ADDRESS];
+  uint64 at = 3 [jstype = JS_STRING];
+}
+
+message veto_list {
+  repeated veto_entry entries = 1;
+}
+
+// AB-032: the limits a paid term (Mana pass or app plan) is sold with. While the term runs, each limit is the more
+// generous of this and the current setting: owner changes can loosen a running paid term, never tighten it.
+message term_limits {
+  uint64 hard_max = 1 [jstype = JS_STRING];          // largest Mana limit per transaction
+  uint32 max_ops = 2;                                // operations per transaction
+  uint32 per_min = 3;                                // a user's actions per minute before the cooldown
+  uint64 cooldown_ms = 4 [jstype = JS_STRING];       // the cooldown after per_min actions
+  uint32 day_actions = 5;                            // a known user's actions per rolling 24 h
+  uint32 new_actions = 6;                            // a new user's (first 24 h) actions per rolling 24 h
+  uint64 day_mana = 7 [jstype = JS_STRING];          // a known user's Mana limits per rolling 24 h
+  uint64 new_mana = 8 [jstype = JS_STRING];          // a new user's Mana limits per rolling 24 h
 }
 
 // Payload of station.proposal_* events.
@@ -316,6 +343,8 @@ message escrow_object {
   // Slot fee per day included in `amount` (amount = Mana price + slot_fee_per_day × days). A buyer cancel keeps it for
   // the days held and refunds it for unused days. 0 = no slot fee (purchases before it existed).
   uint64 slot_fee_per_day = 18 [jstype = JS_STRING];
+  // AB-032: the limits this term was sold with (allowance terms). Absent = bought before AB-032: current settings apply.
+  term_limits limits = 19;
 }
 
 // Per token: held = Σ (amount − refunded − released) over all purchases; must equal the station's token balance.
@@ -423,6 +452,7 @@ message quote_allowance_result {
   uint64 unit_price = 4 [jstype = JS_STRING]; // tier price per 1,000 Mana(/day) used
   uint64 min_charge = 8 [jstype = JS_STRING];  // AB-002: the minimum charge that applies (kept on a buyer cancel)
   uint64 slot_fee = 9 [jstype = JS_STRING];    // slot fee for the whole term (slot_fee_per_day × days), included in price
+  term_limits limits = 10;                     // AB-032: the limits this purchase keeps until its term ends
 }
 
 // @description Price of a big upload and whether the reserve can take it now.
