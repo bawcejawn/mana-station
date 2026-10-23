@@ -210,6 +210,7 @@ if (cmd === "mint") {
 }
 
 // status (always)
+if (!(await provider.invokeGetContractMetadata(ST).catch(() => null))?.value?.hash) { log(`station ${ST} is not deployed yet (run deploy)`); process.exit(0); }
 const st = await read("get_status"); const L = await read("list_connected"); const P = (await read("list_proposals")).proposals || [];
 const info = {
   network: RPC, chain_id: TESTNET_ID, station: ST, demo_app: DEMO, open_app: OPEN, test_stablecoin: TOK, koin: KOIN,
