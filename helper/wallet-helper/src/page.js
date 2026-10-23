@@ -16,14 +16,31 @@
  * Audit Bot AB-026 (2026-10-22): questions and answers no longer go through window.postMessage, where the page's own
  * scripts saw them (and the secret). They are DOM events on the document whose type includes the per-load secret, sent
  * with built-ins saved before any site script runs; a site can't listen for an event type it doesn't know.
+ * Audit Bot AB-038 (2026-10-22): nothing the page can change runs while the helper handles its own data. No Promises (a
+ * Promise resolved with an object looks up `then`, and a site getter there ran during the answer event and read the
+ * secret from window.event); the request is copied into objects and arrays with no prototype; answers are read from own
+ * data properties only and handed on as plain values in a later task; no RegExp or string / number methods are called.
  */
 (function () {
   "use strict";
   const CFG = __CONFIG__;
   // Built-ins saved now, before any site script can replace them.
   const W = window, nativePost = W.postMessage, call = Function.prototype.call.bind(Function.prototype.call), rApply = Reflect.apply, Px = Proxy, rGet = Reflect.get;
-  const parse = JSON.parse, stringify = JSON.stringify, now = Date.now.bind(Date), rand = Math.random.bind(Math);
+  const parse = JSON.parse, stringify = JSON.stringify, now = Date.now.bind(Date), rand = Math.random.bind(Math), floor = Math.floor;
   const setT = W.setTimeout.bind(W), clearT = W.clearTimeout.bind(W), addListener = W.addEventListener.bind(W);
+  const isArr = Array.isArray, keys = Object.keys, create = Object.create, setProto = Object.setPrototypeOf, hasOwn = Object.prototype.hasOwnProperty;
+  const Str = String, Big = BigInt;
+  // AB-038: own data property `k` of a parsed object, never an inherited (possibly site-defined) one.
+  const own = (o, k) => (call(hasOwn, o, k) ? o[k] : undefined);
+  // AB-038: a deep copy of parsed JSON in objects and arrays with no prototype (nothing to inherit, nothing to look up).
+  function bare(x, depth) {
+    if (depth > 32) throw new Error("too deep");
+    if (x === null || typeof x !== "object") return x;
+    if (isArr(x)) { const a = setProto([], null); for (let i = 0; i < x.length; i++) a[i] = bare(x[i], depth + 1); return a; }
+    const o = create(null), ks = keys(x);
+    for (let i = 0; i < ks.length; i++) o[ks[i]] = bare(x[ks[i]], depth + 1);
+    return o;
+  }
   const origin = W.location.origin, target = origin === "null" ? "*" : origin;
   const post = (msg) => call(nativePost, W, msg, target);
   const doc = W.document, CE = W.CustomEvent, ET = W.EventTarget;
@@ -52,9 +69,9 @@
     try { Object.defineProperty(W, "__manaStationHelper", { value: true }); } catch (e) { /* already defined */ }
   }
 
-  // One private copy; returns null when the helper must leave the request alone.
+  // One private copy (AB-038: with no prototypes); returns null when the helper must leave the request alone.
   function candidate(d) {
-    let c; try { c = parse(stringify(d)); } catch (e) { return null; }
+    let c; try { c = bare(parse(stringify(d)), 0); } catch (e) { return null; }
     const a = c && c.args, tx = a && a.transaction, h = tx && tx.header, me = a && a.signerAddress;
     if (!enabled || !h || typeof me !== "string" || h.chain_id !== CFG.chainId) return null;
     if (h.payer && h.payer !== me) return null;                         // someone else already pays
@@ -63,7 +80,7 @@
     const o = a.optsSend || a.options;
     if (o && (o.payer || o.payee || o.rcLimit)) return null;           // the site chose a payer / limit itself
     const ops = tx.operations;
-    if (!Array.isArray(ops) || ops.length < 1 || ops.length > 10) return null;
+    if (!isArr(ops) || ops.length < 1 || ops.length > 10) return null;
     for (let i = 0; i < ops.length; i++) if (!ops[i] || !ops[i].call_contract) return null;   // calls only (uploads use tickets on the site)
     if ((standAside[me] || 0) > now()) return null;
     if (!channel) return null;                                          // no private channel to the extension
@@ -74,43 +91,55 @@
   // none, 0 (a wallet with no Mana) or more than the station's maximum (usually a whole wallet balance). Kondor's
   // "optimize mana" then sets the final limit to about 1.1x what the transaction really uses, up or down.
   function rcFor(h) {
-    const v = typeof h.rc_limit === "string" || typeof h.rc_limit === "number" ? String(h.rc_limit) : "";
-    if (/^[0-9]{1,20}$/.test(v)) { const n = BigInt(v); if (n >= BigInt(CFG.minRc) && n <= BigInt(CFG.maxRc)) return v; }
+    const v = typeof h.rc_limit === "string" || typeof h.rc_limit === "number" ? Str(h.rc_limit) : "";
+    let digits = v.length >= 1 && v.length <= 20;                       // AB-038: no RegExp (its methods are the page's)
+    for (let i = 0; digits && i < v.length; i++) digits = v[i] >= "0" && v[i] <= "9";
+    if (digits) { const n = Big(v); if (n >= Big(CFG.minRc) && n <= Big(CFG.maxRc)) return v; }
     return CFG.defaultRc;
   }
-  function ask(payee, operations, rcLimit) {
-    return new Promise((resolve) => {
-      const id = "ms-" + rand().toString(36).slice(2) + now().toString(36);
-      const t = setT(() => { delete asks[id]; resolve(null); }, 3000);
-      asks[id] = (a) => { clearT(t); resolve(a); };
-      try { call(dispatch, doc, new CE(ASK, { detail: stringify({ id, payee, operations, rcLimit }) })); }
-      catch (e) { clearT(t); delete asks[id]; resolve(null); }
-    });
+  let seq = 0;
+  // AB-038: `done(pay, rcLimit)` gets plain values, in a task of its own (never during the answer event).
+  function ask(payee, operations, rcLimit, done) {
+    seq += 1;
+    const id = "ms-" + seq + "-" + floor(rand() * 1e9) + "-" + now();
+    let over = false;
+    const finish = (pay, rc) => { if (over) return; over = true; delete asks[id]; setT(() => done(pay, rc), 0); };
+    const t = setT(() => finish(false, undefined), 3000);
+    asks[id] = (pay, rc) => { clearT(t); finish(pay, rc); };
+    const q = create(null); q.id = id; q.payee = payee; q.operations = operations; q.rcLimit = rcLimit;
+    const init = create(null); init.detail = stringify(q);
+    try { call(dispatch, doc, new CE(ASK, init)); } catch (e) { clearT(t); finish(false, undefined); }
   }
-  async function rewrite(c) {
+  function rewrite(c, done) {
     const tx = c.args.transaction, h = tx.header, me = c.args.signerAddress, asked = rcFor(h);
-    const a = await ask(me, tx.operations, asked);
-    if (!a || a.pay !== true || a.rcLimit !== asked) return null;       // AB-022: exactly the limit asked about
-    h.payer = CFG.station; h.payee = me; h.rc_limit = a.rcLimit;
-    delete tx.id;                                                       // the wallet recomputes it
-    ours[c.id] = me;
-    return c;
+    ask(me, tx.operations, asked, (pay, rc) => {
+      if (pay !== true || rc !== asked) return done(null);              // AB-022: exactly the limit asked about
+      h.payer = CFG.station; h.payee = me; h.rc_limit = rc;
+      delete tx.id;                                                     // the wallet recomputes it
+      ours[c.id] = me;
+      done(c);
+    });
   }
   function wrapper(data) {
     const args = arguments;
     if ((this !== W && this !== undefined && this !== null) || !isWalletRequest(data)) return rApply(nativePost, this, args);
     const c = candidate(data);
     if (!c) return rApply(nativePost, W, args);                        // unchanged, synchronously
-    const rest = []; for (let i = 1; i < args.length; i++) rest[rest.length] = args[i];
-    const send = (msg) => { try { rApply(nativePost, W, [msg].concat(rest)); } catch (e) { post({ id: data.id, error: String(e && e.message || e) }); } };
-    rewrite(c).then((r) => send(r || data), () => send(data));
+    const n = args.length;                                              // array literals only (AB-038: no concat / setters)
+    const send = (msg) => { try { rApply(nativePost, W, n >= 3 ? [msg, args[1], args[2]] : n === 2 ? [msg, args[1]] : [msg]); } catch (e) { post({ id: data.id, error: Str(e && e.message || e) }); } };
+    try { rewrite(c, (r) => send(r || data)); } catch (e) { send(data); }
   }
   // AB-014: installed as a Proxy of the native function, so it reads as native code with the native name and length.
   W.postMessage = new Px(nativePost, { apply: (t, self, args) => rApply(wrapper, self, args), get: (t, k) => (k === "name" ? "postMessage" : rGet(t, k)) });
-  // AB-026: answers arrive only on the private channel (an answer posted to the window is ignored).
+  // AB-026: answers arrive only on the private channel (an answer posted to the window is ignored). AB-038: during this
+  // event only saved built-ins run, the answer's own data properties are read, and plain values are passed on.
   if (channel) call(listenOn, doc, ANSWER, (ev) => {
     let d; try { const x = call(detailOf, ev); d = typeof x === "string" ? parse(x) : null; } catch (e) { return; }
-    if (d && typeof d === "object" && typeof d.id === "string" && asks[d.id]) { const f = asks[d.id]; delete asks[d.id]; f(d); }
+    if (d === null || typeof d !== "object" || isArr(d)) return;
+    const id = own(d, "id"); if (typeof id !== "string") return;
+    const f = asks[id]; if (!f) return;
+    const pay = own(d, "pay"), rc = own(d, "rcLimit");
+    f(pay === true, typeof rc === "string" ? rc : undefined);
   });
   addListener("message", (ev) => {
     if (ev.source !== W) return;

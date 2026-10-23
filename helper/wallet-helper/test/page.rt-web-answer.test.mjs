@@ -18,7 +18,8 @@ const APP = "1MKjQ9zfcLetsQZD9g4JgdxoEpW6Z3kiQX";
 const CFG = { network: "mainnet", chainId: CHAIN, station: STATION, version: "0.3.1", targets: ["popup"],
   defaultRc: "50000000", minRc: "1000000", maxRc: "300000000", siteOrigins: ["https://bawcejawn.github.io"] };
 const ORIGIN = "https://dapp.example";
-const flush = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise((r) => setImmediate(r)); };
+// (AB-038: page.js passes answers on in a task of its own, so flush also lets short timers run.)
+const flush = async (n = 30) => { for (let i = 0; i < n; i++) { await new Promise((r) => setImmediate(r)); if (i % 10 === 9) await new Promise((r) => setTimeout(r, 5)); } };
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
 // audit-fixes-1 harness fix: inside a vm context `window` is the context's global, not the outer sandbox object, so

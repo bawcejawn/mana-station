@@ -49,8 +49,10 @@ Set the Mana Station as the fee payer of Koinos transactions it will pay for, be
 - Not sold, not used for unrelated purposes, not used for creditworthiness. Complies with the Limited Use requirements.
 - The helper doesn't announce itself to websites: the on/off state goes only to the Mana Station site's own pages, and it
   answers only questions its own page script asks. That question and its answer travel on a private channel named with a
-  per-page-load secret, not through the page's messages, so a site that asks the wallet to sign a Koinos transaction
-  doesn't see them either.
+  per-page-load secret, handled only with built-in functions saved before the site's scripts run (no Promises, no
+  objects the page can hook). Tested (node and Chromium, test/chromium_secret_check.py): a site that asks the wallet to
+  sign, and replaces built-ins or adds prototype getters such as Object.prototype.then, can't read the question, the
+  answer or the secret. It can still notice that something read its own signing request.
 
 ## Privacy policy URL
 `<site>/privacy.html`

@@ -16,7 +16,8 @@ const CFG = { network: "mainnet", chainId: CHAIN, station: "1JnSnBNHrKxWGwWeriuh
   defaultRc: "50000000", minRc: "1000000", maxRc: "300000000", siteOrigins: ["https://bawcejawn.github.io"] };
 const ORIGIN = "https://unrelated-dapp.example";
 const ME = "1G85uRcAKiMPQjXv7jYc7VQWMe37NtNT2q", APP = "1MKjQ9zfcLetsQZD9g4JgdxoEpW6Z3kiQX";
-const flush = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise((r) => setImmediate(r)); };
+// (AB-038: page.js passes answers on in a task of its own, so flush also lets short timers run.)
+const flush = async (n = 30) => { for (let i = 0; i < n; i++) { await new Promise((r) => setImmediate(r)); if (i % 10 === 9) await new Promise((r) => setTimeout(r, 5)); } };
 
 test("an unrelated site never sees a Mana Station message or the bridge secret when its visitor signs a transaction", async () => {
   const listeners = [], win = {}; let self = win; const attrs = {};

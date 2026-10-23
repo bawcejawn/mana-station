@@ -17,7 +17,8 @@ const CFG = {
   defaultRc: "50000000", minRc: "1000000", maxRc: "300000000", siteOrigins: ["https://bawcejawn.github.io"],
 };
 const EVIL = "https://evil.example";
-const flush = async (n = 20) => { for (let i = 0; i < n; i++) await new Promise((r) => setImmediate(r)); };
+// (AB-038: page.js passes answers on in a task of its own, so flush also lets short timers run.)
+const flush = async (n = 20) => { for (let i = 0; i < n; i++) { await new Promise((r) => setImmediate(r)); if (i % 10 === 9) await new Promise((r) => setTimeout(r, 5)); } };
 
 function fakeWindow(origin) {
   const listeners = [], log = [], win = {};
