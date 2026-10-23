@@ -67,6 +67,7 @@ jobs:
           retry npm run build:testnet
           retry npm run build
           npm run check:mainnet
+          sh scripts/check-mainnet.audit-testingbuild.test.sh   # AB-007: a testing build must be refused (audit-2026-10 O1-07)
       - name: Build testapp and mock token
         run: |
           retry() { for i in 1 2 3; do "$@" && return 0; echo "::warning::'$*' failed (attempt $i), retrying"; sleep 2; done; return 1; }

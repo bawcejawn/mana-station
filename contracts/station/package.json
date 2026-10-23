@@ -24,5 +24,8 @@
   },
   "dependencies": {
     "koilib": "9.4.1"
+  },
+  "config": {
+    "protocVersion": "36.2"
   }
 }

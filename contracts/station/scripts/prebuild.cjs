@@ -11,3 +11,5 @@ for (const [name, lib] of [["koinos-abi-proto-gen", "@koinos/abi-proto-gen/lib/i
   let cur = ""; try { cur = fs.readFileSync(bin, "utf8"); } catch {}
   if (cur !== body) { try { fs.unlinkSync(bin); } catch {} fs.writeFileSync(bin, body, { mode: 0o755 }); }
 }
+// audit-2026-10 O1-06: install the pinned, checksum-verified protoc before the builder asks for it.
+require("child_process").execFileSync(process.execPath, [path.resolve("scripts/protoc-pin.cjs")], { stdio: "inherit" });
