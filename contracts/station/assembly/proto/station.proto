@@ -108,8 +108,11 @@ message user_object {
   uint64 last_block = 2 [jstype = JS_STRING];
   uint64 minute = 3 [jstype = JS_STRING];
   uint32 n_min = 4;
-  uint64 cooldown_until = 5 [jstype = JS_STRING];
+  uint64 cooldown_until = 5 [jstype = JS_STRING];   // IGNORED since AB-024 (it fixed a cooldown at the old setting)
   window_object day = 6;
+  // AB-024: when the user's current cooldown started (the tx that reached per_min). The cooldown in force is always
+  // cooldown_from + the CURRENT config.cooldown_ms, so lowering or reverting the setting applies at once. 0 = none.
+  uint64 cooldown_from = 7 [jstype = JS_STRING];
 }
 
 // Price per accepted stablecoin (owner-set; Monetization prices it). Token address/decimals: see stablecoins.md.

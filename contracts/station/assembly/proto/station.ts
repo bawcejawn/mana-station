@@ -775,6 +775,11 @@ export namespace station {
         window_object.encode(unique_name_day, writer);
         writer.ldelim();
       }
+
+      if (message.cooldown_from != 0) {
+        writer.uint32(56);
+        writer.uint64(message.cooldown_from);
+      }
     }
 
     static decode(reader: Reader, length: i32): user_object {
@@ -808,6 +813,10 @@ export namespace station {
             message.day = window_object.decode(reader, reader.uint32());
             break;
 
+          case 7:
+            message.cooldown_from = reader.uint64();
+            break;
+
           default:
             reader.skipType(tag & 7);
             break;
@@ -823,6 +832,7 @@ export namespace station {
     n_min: u32;
     cooldown_until: u64;
     day: window_object | null;
+    cooldown_from: u64;
 
     constructor(
       first_seen: u64 = 0,
@@ -830,7 +840,8 @@ export namespace station {
       minute: u64 = 0,
       n_min: u32 = 0,
       cooldown_until: u64 = 0,
-      day: window_object | null = null
+      day: window_object | null = null,
+      cooldown_from: u64 = 0
     ) {
       this.first_seen = first_seen;
       this.last_block = last_block;
@@ -838,6 +849,7 @@ export namespace station {
       this.n_min = n_min;
       this.cooldown_until = cooldown_until;
       this.day = day;
+      this.cooldown_from = cooldown_from;
     }
   }
 

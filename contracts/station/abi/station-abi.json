@@ -630,6 +630,13 @@
                             "day": {
                                 "type": "window_object",
                                 "id": 6
+                            },
+                            "cooldownFrom": {
+                                "type": "uint64",
+                                "id": 7,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
                             }
                         }
                     },

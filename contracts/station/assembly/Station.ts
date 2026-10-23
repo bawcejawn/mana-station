@@ -47,7 +47,10 @@ const MAX_SLOT_FEE: u64 = 100_000_000;              // at most $1 a day
 const DEFAULT_APP_RESERVED: u32 = 10;              // app_reserved 0 reads as 10
 // AB-001: the owner can set the ticket lifetime only within these bounds (0 = the 24 h default).
 const MIN_TICKET_MS: u64 = 3_600_000, MAX_TICKET_MS: u64 = 7 * 86_400_000;
-// AB-011: a vetoed action can't be proposed again for this long (also after a council change).
+// AB-024: the longest per-user cooldown the owner can set (a longer one would stop running paid plans without a pause).
+const MAX_COOLDOWN_MS: u64 = 3_600_000;
+// AB-011 / AB-025: after a veto, no action of that kind (and target) can be proposed or carried out for this long (also
+// after a council change).
 const VETO_BLOCK_MS: u64 = 14 * 86_400_000;
 const TEST_KOIN = "19GYjDBVXU7keLbYvMLazsGQn3GTWHjHkK"; // test build only: stands in for the KOIN contract
 export { VUSDT, VUSDC };
@@ -506,7 +509,8 @@ export class Station {
     let u = this.users.get(payee);
     if (u == null) { u = new station.user_object(); u.first_seen = now; u.last_block = u64.MAX_VALUE; }
     if (u.day == null) u.day = new station.window_object();
-    if (u.cooldown_until > now || u.last_block == h) return null;
+    // AB-024: the cooldown is read from the current config (at most 1 hour), never a stored end time.
+    if ((u.cooldown_from > 0 && now < u.cooldown_from + c.cooldown_ms) || u.last_block == h) return null;
     const minute = now / 60_000;
     if (u.minute != minute) { u.minute = minute; u.n_min = 0; }
     if (u.n_min >= c.per_min) return null;
@@ -515,7 +519,7 @@ export class Station {
     if (sumN(u.day!) + 1 > (isNew ? c.new_actions : c.day_actions)) return null;
     if (sumMana(u.day!) + rc > (isNew ? c.new_mana : c.day_mana)) return null;
     u.n_min += 1;
-    if (u.n_min >= c.per_min) u.cooldown_until = now + c.cooldown_ms; // stored by an ACCEPTED tx, so it survives
+    if (u.n_min >= c.per_min) u.cooldown_from = now;                  // stored by an ACCEPTED tx, so it survives
     u.last_block = h;
     add(u.day!, now / USER_SLOT, USER_N, rc, false);
     this.lastNew = isNew;
@@ -984,6 +988,9 @@ export class Station {
     System.require(c.hard_max >= MANA, "hard_max below 1 Mana would stop paid service");
     System.require(c.admin_min <= c.koin_amount / 10, "admin_min above 10% of koin_amount would stop paid service");
     System.require(c.max_ops >= 2 && c.per_min >= 1 && c.day_actions >= 1 && c.new_actions >= 1, "per-user limits would stop paid service");
+    // AB-024: a user gets per_min actions, then waits cooldown_ms. At most 1 hour, and never fewer than 1 action an hour.
+    System.require(c.cooldown_ms <= MAX_COOLDOWN_MS, "cooldown above 1 hour would stop paid service");
+    System.require(u64(c.per_min) * MAX_COOLDOWN_MS >= c.cooldown_ms, "per_min and cooldown_ms allow fewer than 1 action an hour");
     System.require(c.open_cap >= 1 && c.open_cap <= u32(MAX_OPEN_ALLOWANCES), "open_cap: 1 to 256 open allowances");
     System.require(this.appReserved(c) < c.open_cap, "app_reserved (0 = 10) must be below open_cap");
     System.require(c.slot_fee_per_day <= MAX_SLOT_FEE, "slot fee above $1 a day");

@@ -2,6 +2,7 @@
 import { Base58, MockVM, authority, chain, System, protocol, Protobuf, Crypto } from "@koinos/sdk-as";
 import { Station, testSetMana, testSetBalance, testSetToken, testGetToken, VUSDT, VUSDC, ALLOWANCE_TERMS, BIG_TERMS, mulDiv } from "../Station";
 import { station } from "../proto/station";
+import { clearRevert, revertedWith } from "./lib/revert";   // AB-031 (audit-fixes-1)
 
 const STATION = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqe");
 const OWNER = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqG");
@@ -142,9 +143,11 @@ describe("v1 rules still hold", () => {
     expect(play(s, U1)).toBe(true); expect(play(s, U1)).toBe(false);
     for (let i = 0; i < 4; i++) { at(NOW + 3000); expect(play(s, U1)).toBe(true); }
     const u = s.get_user(new station.get_user_arguments(U1)).user!;
-    expect(u.cooldown_until).toBe(NOW + 600_000);
+    expect(u.cooldown_from).toBe(NOW);                                      // AB-024: the start; the length is the config's
+    expect(u.cooldown_until).toBe(0);                                       // no longer written
     at(NOW + 120_000); expect(play(s, U1)).toBe(false);
-    at(u.cooldown_until + 1); expect(play(s, U1)).toBe(true);
+    at(u.cooldown_from + 600_000 - 1); expect(play(s, U1)).toBe(false);
+    at(u.cooldown_from + 600_000); expect(play(s, U1)).toBe(true);
   });
   it("allowance spending never goes below admin_min", () => {
     const s = setup();

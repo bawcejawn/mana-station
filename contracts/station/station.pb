@@ -1,5 +1,5 @@
 
-àj
+‰k
 assembly/proto/station.protostationkoinos/options.proto"Á
 config_object
 owner (B€µRowner
@@ -66,7 +66,7 @@ contractId,
 base (B0Rbase
 n (Rn
 mana (B0Rmana
-new_mana (B0RnewMana"Ù
+new_mana (B0RnewMana"‚
 user_object!
 
 first_seen (B0R	firstSeen!
@@ -75,7 +75,8 @@ last_block (B0R	lastBlock
 minute (B0Rminute
 n_min (RnMin)
 cooldown_until (B0RcooldownUntil(
-day (2.station.window_objectRday"è
+day (2.station.window_objectRday'
+cooldown_from (B0RcooldownFrom"è
 price_object
 active (Ractive,
 max_per_purchase (B0RmaxPerPurchase
