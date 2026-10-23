@@ -98,6 +98,10 @@ async function admin(fn, args, rcLimit = 2n * M) {
   return r;
 }
 const tbal = async (a) => BigInt((await read(C(TOK, abiT), "balance_of", { owner: a })).value || 0);
+// audit-2026-10 M-5: refunds and releases are owed first and paid by claim. got(a) = what a wallet holds plus what the
+// station owes it, so the refund / release checks below compare what each wallet RECEIVES, claimed or not.
+const owedTo = async (a) => BigInt((await read(sta(), "get_owed", { token: TOK, who: a })).amount || 0);
+const got = async (a) => (await tbal(a)) + (await owedTo(a));
 
 // ---------------------------------------------------------------- 0. preflight
 console.log(`chain ${chainId}  rpc ${RPC.replace(/apikey=[^&]+/, "apikey=***")}  KOIN ${KOIN}`); // never print the API key
@@ -137,7 +141,7 @@ const koinAmt = 60n * M;                 // configured capacity → daily budget
 const base = { owner: OWN, paused: false, koin_amount: String(koinAmt), refill_bp: 2000, admin_min: String(M / 2n), hard_max: String(2n * M),
   per_min: 10, cooldown_ms: "60000", day_actions: 50, day_mana: String(40n * M), new_actions: 50, new_mana: String(40n * M), new_pct: 100, max_ops: 2,
   big_max: String(5n * M), big_cooldown_ms: "86400000", big_week_cap: String(15n * M), big_max_debt: String(10n * M), big_ticket_ms: "0",
-  max_allowances: 4, open_cap: 50, app_reserved: 10, slot_fee_per_day: "100000", max_days: "30", buffer_bp: 0, alert_mana: "0", ticket_fee_bp: 0,
+  max_allowances: 4, open_cap: 50, app_reserved: 10, slot_fee_per_day: "100000", max_days: "30", buffer_bp: 0, alert_mana: "0", ticket_fee_bp: 0, checkout_bp: 2000,
   council: [A("council1"), A("council2"), A("council3")], threshold: 2, guard_delay_ms: "70000" }; // audit #1: 2 of 3, 70 s (testnet floor 60 s)
 // ---------------------------------------------------------------- 1. deploys (paid by the funder, before it sends KOIN out)
 // Upload rc limit sized from the chain's real resource prices (bytes × (disk + network) cost, + 1 Mana for compute), × 1.5.
@@ -325,9 +329,9 @@ const tokT = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spe
 check("designated", "allowance targeting a token contract refused", !tokT.ok, tokT.error || "");
 const tr = await send(tok("user1"), "transfer", { from: U1, to: U2, value: "1" }, sponsored(U1, L));
 check("designated", "token transfer by a paying app's user still refused", !tr.ok, tr.error || "");
-const bs0 = await tbal(BUY);                          // AB-001: reason 1 refunds the unused share at once
+const bs0 = await got(BUY);                          // AB-001: reason 1 refunds the unused share at once
 const su = await admin("suspend_allowance", { buyer: BUY, reason: 1 });
-const susRef = (await tbal(BUY)) - bs0;
+const susRef = (await got(BUY)) - bs0;
 check("suspend", "owner suspends buyer (reason 1 abuse), buyer_suspended event", su.ok && su.events.includes("station.buyer_suspended"), su.error || su.events);
 const b2 = await xfer(); check("suspend", "suspended buyer's allowance no longer sponsors", !b2.ok, b2.error || "");
 const mix = await sendOps("user1", [[C(PAYAPP, abiA, "user1"), "play", { user: U1 }], [app("user1"), "play", { user: U1 }]], sponsored(U1, L));
@@ -357,12 +361,12 @@ function cancelRefund(e, now) {
   const held = amount - BigInt(e.refunded || 0) - BigInt(e.released || 0); return r > held ? held : r;
 }
 const esc = (await read(sta(), "get_escrow", { purchase_id: 1 })).purchase || {};
-const bb0 = await tbal(BUY);
+const bb0 = await got(BUY);
 const expA = cancelRefund(esc, BigInt(Date.now()));   // wall clock vs block time: minutes into a 24 h day, no boundary
 const ca = await send(sta("buyer"), "cancel_allowance", { buyer: BUY, id: aid }, { rcLimit: M / 2n });
-const refundA = (await tbal(BUY)) - bb0, expSus = BigInt(esc.amount || 0) * 6n / 7n;   // pro rata of what was paid
-check("escrow", "cancel after the suspension refund: AB-001 refunded 6/7 of the whole price; the cancel adds what AB-010 + slot fee allow (0: the term was cut to the day in progress)",
-  su.ok && susRef === expSus && ca.ok && refundA === expA && expA === 0n && !ca.events.includes("station.escrow_refunded") && ca.events.includes("station.allowance_cancelled"),
+const refundA = (await got(BUY)) - bb0, expSus = BigInt(esc.amount || 0) * 6n / 7n;   // pro rata of what was paid
+check("escrow", "cancel after the suspension refund: AB-001 refunded 6/7 of the whole price; the term was cut to the day in progress, so the cancel changes nothing and is refused (audit-2026-10 C-1)",
+  su.ok && susRef === expSus && !ca.ok && /nothing left to cancel/.test(ca.error || "") && refundA === 0n && expA === 0n,
   `paid ${price} (slot fee ${q.slot_fee || 0}) suspension refund ${susRef} expected ${expSus}; cancel refund ${refundA} expected ${expA}; term days ${esc.days} slot/day ${esc.slot_fee_per_day || 0} day_price ${esc.day_price || 0} ${ca.error || ""}`);
 const b4 = await xfer(); note(`after cancel, same day: allowance ${b4.ok ? "still sponsors (current day was paid)" : "no longer sponsors"}`);
 
@@ -383,9 +387,9 @@ try { const c = new Contract({ id: U2, abi: abiA, provider, signer: S("user2"), 
 check("ticket", `big tx (${code.length} B contract upload) sponsored via ticket with the helper's tight limit`, up.ok, up.error || `rc ${up.rc} of limit ${upLimit} (${(Number(up.rc) / Number(upLimit) * 100).toFixed(1)}% used)`); if (up.ok) cost(`ticket upload of ${code.length} B contract`, up.rc);
 const tk = await read(sta(), "get_ticket", { payee: U2 }); const used = BigInt(tk.ticket?.mana || 0) - BigInt(tk.ticket?.remaining || 0);
 note(`ticket after upload: mana ${tk.ticket?.mana} remaining ${tk.ticket?.remaining} (charged = rc_used)`);
-const ob0 = await tbal(OWN), bb1 = await tbal(BUY);
+const ob0 = await got(OWN), bb1 = await got(BUY);
 const ct = await send(sta("buyer"), "cancel_big_upload", { buyer: BUY, payee: U2 }, { rcLimit: M / 2n });
-const ref1 = (await tbal(BUY)) - bb1, rel1 = (await tbal(OWN)) - ob0;
+const ref1 = (await got(BUY)) - bb1, rel1 = (await got(OWN)) - ob0;
 // Refund (Carl, 8:43 PM) = floor(floor(paid × time left / lock) × unused / ticket Mana), keeping >= 5%. The exact
 // "time left" depends on block times, so accept the formula for anywhere from 0 to 10 minutes elapsed of the 24 h lock.
 const LOCK = 86_400_000n, fee95 = tprice * 9500n / 10000n;
@@ -398,9 +402,9 @@ const t2 = await buyT("buyer", "spam1");
 check("ticket", "anti-spam: one ticket per buyer per 24 h (counted from the purchase)", !t2.ok, t2.error || "");
 const t3 = await buyT("user1", "spam1");
 check("ticket", "audit #2: another buyer can buy at once (the wait is per buyer, never station-wide)", t3.ok, t3.error || "");
-const ub0 = await tbal(U1);
+const ub0 = await got(U1);
 const ct3 = await send(sta("user1"), "cancel_big_upload", { buyer: U1, payee: SP1 }, { rcLimit: M / 2n });
-const ref3 = (await tbal(U1)) - ub0;
+const ref3 = (await got(U1)) - ub0;
 check("ticket", "0 used, cancelled at once: the 5% fee floor applies (refund exactly 95%)", ct3.ok && ref3 === tprice * 9500n / 10000n, `refund ${ref3} of ${tprice}`);
 const fee = await admin("set_config", { config: { ...cfg2, new_pct: 100, ticket_fee_bp: 2001 } });
 check("ticket", "raising the ticket fee via set_config refused (council only, max 20%)", !fee.ok, errOf(fee));
@@ -420,10 +424,10 @@ const APP3 = A("app3");
 { const x = await admin("disconnect_app", { contract_id: APP3 }); check("connect", "disconnect_app in one step", x.ok, errOf(x)); }
 { const x = await send(C(APP3, abiA, "player3"), "play", { user: A("player3") }, sponsored(A("player3"), L)); check("connect", "after disconnect its users are no longer sponsored", refusedNot104(x), x.error || "ACCEPTED"); }
 // ---------------------------------------------------------------- 8b2. wallet Mana pass (kind 2, Carl Oct 20: any app, no token moves)
-{ const qp = await read(sta(), "quote_allowance", { token: TOK, mana_per_day: String(AU), days: "1" });
+{ const qp = await read(sta(), "quote_allowance", { token: TOK, mana_per_day: String(AU), days: "7" });
   if (!qp.available) note(`pass quote unavailable: ${qp.reason || ""}`);
   const pp = BigInt(qp.price || 0);
-  const bp = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(pp) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 2, target: U1, mana_per_day: String(AU), days: "1", token: TOK, max_price: String(pp) }]], { rcLimit: M / 2n, cosigner: "user1" });
+  const bp = await sendOps("buyer", [[tok("buyer"), "approve", { owner: BUY, spender: ST, value: String(pp) }], [sta("buyer"), "buy_allowance", { buyer: BUY, kind: 2, target: U1, mana_per_day: String(AU), days: "7", token: TOK, max_price: String(pp) }]], { rcLimit: M / 2n, cosigner: "user1" });
   check("pass", "buy a 1 Mana/day pass for user1 (user1 co-signs)", bp.ok && bp.events.includes("station.allowance_bought"), bp.error || bp.events);
   { const w = await wp(U1, [await opInfo(C(APP3, abiA), "play", { user: U1 })], L);
     check("would_pay", "for a pass holder calling an app nobody pays for: yes, by the pass", w.pay === true && w.route === "pass", JSON.stringify(w));
@@ -450,12 +454,12 @@ const APP3 = A("app3");
   let x = await send(tok("token"), "mint", { to: P3, value: String(10n * M) }, { payer: FUN, payee: TOK, cosigner: "funder" });
   check("checkout", "mint 10 tUSDT to player3 (a wallet with no KOIN and no Mana)", x.ok, x.error || "");
   note(`player3 own Mana: ${await rc(P3)}`);
-  const qp = await read(sta(), "quote_allowance", { token: TOK, mana_per_day: String(AU), days: "1" }); const pp = BigInt(qp.price || 0);
-  const buy = await sendOps("player3", [[tok("player3"), "approve", { owner: P3, spender: ST, value: String(pp) }], [sta("player3"), "buy_allowance", { buyer: P3, kind: 2, target: P3, mana_per_day: String(AU), days: "1", token: TOK, max_price: String(pp) }]], { payer: ST, payee: P3, rcLimit: M / 2n });
+  const qp = await read(sta(), "quote_allowance", { token: TOK, mana_per_day: String(AU), days: "7" }); const pp = BigInt(qp.price || 0);
+  const buy = await sendOps("player3", [[tok("player3"), "approve", { owner: P3, spender: ST, value: String(pp) }], [sta("player3"), "buy_allowance", { buyer: P3, kind: 2, target: P3, mana_per_day: String(AU), days: "7", token: TOK, max_price: String(pp) }]], { payer: ST, payee: P3, rcLimit: M / 2n });
   check("checkout", "player3 buys a pass with the station paying the Mana (approve + buy)", buy.ok && buy.events.includes("station.allowance_bought"), buy.error || buy.events);
   const use = await send(C(APP3, abiA, "player3"), "play", { user: P3 }, sponsored(P3, L));
   check("checkout", "player3's new pass pays its call to an unconnected app", use.ok, use.error || "");
-  const sneaky = await sendOps("player3", [[tok("player3"), "approve", { owner: P3, spender: BUY, value: "1" }], [sta("player3"), "buy_allowance", { buyer: P3, kind: 2, target: P3, mana_per_day: String(AU), days: "1", token: TOK, max_price: String(pp) }]], { payer: ST, payee: P3, rcLimit: M / 2n });
+  const sneaky = await sendOps("player3", [[tok("player3"), "approve", { owner: P3, spender: BUY, value: "1" }], [sta("player3"), "buy_allowance", { buyer: P3, kind: 2, target: P3, mana_per_day: String(AU), days: "7", token: TOK, max_price: String(pp) }]], { payer: ST, payee: P3, rcLimit: M / 2n });
   check("checkout", "an approve to anyone but the station is never paid", !sneaky.ok, sneaky.error || "ACCEPTED");
   const Lc = await read(sta(), "list_connected"); const mine = (Lc.paid || []).find((p) => p.target === P3);
   if (mine) { const c = await send(sta("player3"), "cancel_allowance", { buyer: P3, id: mine.id }, { payer: ST, payee: P3, rcLimit: M / 2n }); check("checkout", "player3 cancels with the station paying the Mana", c.ok, c.error || ""); }
@@ -501,7 +505,10 @@ await sleep(75_000);
 // ---------------------------------------------------------------- 9. invariants, KOIN untouched, events summary
 const tot = (await read(sta(), "get_escrow_totals", { token: TOK })).totals || {};
 const held = BigInt(tot.held || 0), stTok = await tbal(ST);
-check("money", "escrow held == station tUSDT balance; collected == held + refunded + released", held === stTok && BigInt(tot.collected || 0) === held + BigInt(tot.refunded || 0) + BigInt(tot.released || 0), JSON.stringify(tot) + ` station balance ${stTok}`);
+const owedAll = BigInt(tot.owed || 0);
+check("money", "escrow held + owed == station tUSDT balance; collected == held + refunded + released", held + owedAll === stTok && BigInt(tot.collected || 0) === held + BigInt(tot.refunded || 0) + BigInt(tot.released || 0), JSON.stringify(tot) + ` station balance ${stTok}`);
+{ const c = await send(sta("buyer"), "claim", { token: TOK, to: BUY }, { rcLimit: M / 2n });          // M-5: a wallet collects what it is owed
+  check("money", "claim pays out what the station owes a wallet, once", c.ok && (await owedTo(BUY)) === 0n, c.error || ""); }
 check("money", "station KOIN moved only by the council withdrawal (escrow and refunds never touch KOIN)", stBal === koinSt0, `before withdrawal ${koinSt0} → ${stBal}`);
 cost("station Mana at end", await rc(ST));
 // Sweep the fresh accounts' leftover tKOIN back to the funder (best effort; each keeps a little Mana for the fee).

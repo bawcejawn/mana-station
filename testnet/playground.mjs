@@ -26,7 +26,7 @@ const derive = (label) => { const s = new Signer({ privateKey: crypto.createHash
   return s; };
 // Station generation: a new label = a brand-new station address (v2: wallet Mana passes; v3: free checkout, Oct 20). The owner and council
 // labels stay the same, so the same handover command works on every generation.
-const GEN = "-v3";
+const GEN = "-v4";                     // v4 (audit-2026-10): the fixed contract, under keys rotated after O1-01
 const KEY = { funder: Signer.fromWif(K.funder.wif), station: derive("station" + GEN), owner: derive("owner"), c1: derive("council1"), c2: derive("council2"), c3: derive("council3"), demo: derive("demoapp"), open: derive("openapp") };
 KEY.funder.provider = provider;
 const A = (r) => KEY[r].getAddress();
@@ -58,7 +58,7 @@ const CONFIG = {
   owner: A("owner"), paused: false, koin_amount: String(100n * M), refill_bp: 2000, admin_min: String(M), hard_max: String(2n * M),
   per_min: 10, cooldown_ms: "60000", day_actions: 200, day_mana: String(20n * M), new_actions: 100, new_mana: String(10n * M), new_pct: 100, max_ops: 2,
   big_max: String(10n * M), big_cooldown_ms: "3600000", big_week_cap: String(30n * M), big_max_debt: String(10n * M), big_ticket_ms: "0",
-  max_allowances: 10, open_cap: 50, app_reserved: 10, slot_fee_per_day: "100000", max_days: "30", buffer_bp: 2000, alert_mana: String(20n * M), ticket_fee_bp: 0, max_per_buyer: 5,
+  max_allowances: 10, open_cap: 50, app_reserved: 10, slot_fee_per_day: "100000", max_days: "30", checkout_bp: 2000, buffer_bp: 2000, alert_mana: String(20n * M), ticket_fee_bp: 0, max_per_buyer: 5,
   council: [A("c1"), A("c2"), A("c3")], threshold: 2, guard_delay_ms: "120000",               // 2 of 3, 2-minute wait (testnet)
 };
 
