@@ -33,7 +33,7 @@
   <meta name="twitter:title" content="Privacy notice: Mana Station">
   <meta name="twitter:description" content="What the Mana Station website, contract and browser helper collect: no accounts, no tracking, public blockchain data, and one read-only question to a Koinos node.">
   <meta name="twitter:image" content="https://bawcejawn.github.io/mana-station/og-image.png">
-  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://bawcejawn.github.io/mana-station/privacy.html#page","url":"https://bawcejawn.github.io/mana-station/privacy.html","name":"Privacy notice: Mana Station","description":"What the Mana Station website, contract and browser helper collect: no accounts, no tracking, public blockchain data, and one read-only question to a Koinos node.","inLanguage":"en","isPartOf":{"@id":"https://bawcejawn.github.io/mana-station/#site"},"dateModified":"2026-10-22","breadcrumb":{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://bawcejawn.github.io/mana-station/"},{"@type":"ListItem","position":2,"name":"Privacy","item":"https://bawcejawn.github.io/mana-station/privacy.html"}]}}]}</script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://bawcejawn.github.io/mana-station/privacy.html#page","url":"https://bawcejawn.github.io/mana-station/privacy.html","name":"Privacy notice: Mana Station","description":"What the Mana Station website, contract and browser helper collect: no accounts, no tracking, public blockchain data, and one read-only question to a Koinos node.","inLanguage":"en","isPartOf":{"@id":"https://bawcejawn.github.io/mana-station/#site"},"dateModified":"2026-10-23","breadcrumb":{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://bawcejawn.github.io/mana-station/"},{"@type":"ListItem","position":2,"name":"Privacy","item":"https://bawcejawn.github.io/mana-station/privacy.html"}]}}]}</script>
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
@@ -85,7 +85,7 @@
     <section class="panel" aria-labelledby="p3"><h2 id="p3">The browser helper</h2>
       <ul class="ticks">
         <li>When a site asks your wallet to sign a transaction, before you approve it, the helper sends one read-only question to a public Koinos node (on mainnet, api.koinos.io): your wallet address and that transaction's operations (which contracts and functions it calls, with their arguments). The node, like any website, also sees your IP address. It answers whether the station would pay. Nothing is sent to us.</li>
-        <li>It runs only on web pages (https), not on other kinds of pages, and it doesn't tell the sites you visit that it is installed (except this website, so its check page can show it's on).</li>
+        <li>It runs only on web pages (https), not on other kinds of pages. It doesn't announce itself to the sites you visit (only this website's check page is told whether it's on), and it ignores questions from any script but its own, so a site can't simply probe for it. Its question to the station and the answer travel on a private channel inside your browser, not through the page's messages, so a site that asks your wallet to sign a Koinos transaction doesn't see them either.</li>
         <li>It stores only its on/off setting and a count of transactions offered to the station today, in your browser.</li>
         <li>It never reads your keys, passwords, page contents or browsing history, and never sends anything anywhere else.</li>
         <li>It needs permission to run on all websites so it can act on any Koinos app you use. Its code is open source.</li>
@@ -117,6 +117,6 @@
   <script src="abis.js"></script>
   <script src="playground.js"></script>
   <script src="wallets.js"></script>
-  <script src="ms.js"></script>
+  <script src="ms.js"></script>
 </body>
 </html>

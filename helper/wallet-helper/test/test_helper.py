@@ -9,9 +9,11 @@ CHAIN = "EiAIKVvm6-V2qmsmUvPJy09vCCLbtn9lHFpwrJbcTIEWRQ=="
 OP = {"call_contract": {"contract_id": "1MKjQ9zfcLetsQZD9g4JgdxoEpW6Z3kiQX", "entry_point": 1, "args": "ChkA"}}
 MOCK = """
 window.__seen = []; window.__asks = []; window.__answer = true; window.__noBridge = false; window.__failNext = false;
+// The stand-in bridge (AB-026): like bridge.js, it takes the per-load secret from the DOM and answers on the events it names.
+(() => { const t = document.documentElement.getAttribute('data-ms-helper'); document.documentElement.removeAttribute('data-ms-helper');
+  document.addEventListener('ms-ask-' + t, (e) => { if (window.__noBridge) return; const d = JSON.parse(e.detail); window.__asks.push(d);
+    setTimeout(() => document.dispatchEvent(new CustomEvent('ms-answer-' + t, { detail: JSON.stringify({ id: d.id, pay: window.__answer, rcLimit: d.rcLimit }) })), 0); }); })();
 window.addEventListener('message', (e) => { const d = e.data;
-  if (d && d.__manaStation === 'ask') { if (window.__noBridge) return; window.__asks.push(d);
-    window.postMessage({ __manaStation: 'answer', id: d.id, pay: window.__answer, rcLimit: d.rcLimit }, '*'); return; }
   if (!d || d.to !== 'popup' || !d.command) return;
   window.__seen.push(JSON.parse(JSON.stringify(d)));
   const fail = window.__failNext; window.__failNext = false;
@@ -24,8 +26,12 @@ window.msg = (header, extra, args) => ({ id: 'r' + Math.random(), command: 'sign
 results = []
 with sync_playwright() as p:
     b = p.chromium.launch(); pg = b.new_page()
-    pg.route("https://example.test/", lambda r: r.fulfill(body="<!doctype html><title>t</title>", content_type="text/html"))
-    pg.add_init_script(PAGE); pg.add_init_script(MOCK); pg.goto("https://example.test/")
+    # audit-fixes-1 (AB-026): page.js and the stand-in bridge share the per-load secret through document.documentElement,
+    # which a Playwright init script runs too early to have. Chrome's document_start content scripts do have it, so the two
+    # run here as the page's first scripts instead (still before any other script, as at document_start).
+    body = "<!doctype html><html><head><script>" + PAGE + "</script><script>" + MOCK + "</script><title>t</title></head></html>"
+    pg.route("https://example.test/", lambda r: r.fulfill(body=body, content_type="text/html"))
+    pg.goto("https://example.test/")
     H = lambda **k: {"chain_id": CHAIN, "rc_limit": "19000000", "payer": ME, **k}
     def run(name, header, expect_station, extra=None, args=None, rc=None):
         t = pg.evaluate("([h, x, a]) => req(msg(h, x, a))", [header, extra or {}, args or {}])["args"]["transaction"]["header"]
@@ -48,7 +54,7 @@ with sync_playwright() as p:
     pg.evaluate("window.postMessage({ __manaStation: 'state', enabled: false }, '*')"); pg.wait_for_timeout(100)
     a0 = asked(); run("switched off in the popup: left alone", {"chain_id": CHAIN, "rc_limit": "19000000", "payer": OTHER[:-1] + "z"}, False); ok = asked() == a0; results.append(ok); print(("PASS " if ok else "FAIL ") + "  ...and the station isn't asked")
     pg.evaluate("window.postMessage({ __manaStation: 'state', enabled: true }, '*')"); pg.wait_for_timeout(100)
-    # A site answers the helper's question itself with a junk limit: ignored.
+    # A site answers the helper's question itself with a junk limit: ignored. (AB-026: it no longer even sees the question.)
     me2 = "1PWeFG4pPtjZZoYvcmGb6mYhMYJjnkHrmz"
     pg.evaluate("window.__noBridge = true")
     t = pg.evaluate("""() => { const m = msg({ chain_id: '%s', rc_limit: '19000000', payer: '%s' }); m.args.signerAddress = '%s';

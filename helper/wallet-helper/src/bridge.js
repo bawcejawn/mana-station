@@ -3,7 +3,9 @@
  * same window are accepted; answers carry only yes/no and the Mana limit to use.
  * Audit Bot AB-014 (2026-10-22): other sites learn nothing. The on/off state is posted only on the Mana Station site's
  * own origins (filled in by build.mjs), and only questions carrying this page load's secret, which page.js and this
- * script share before any site script runs, are answered. */
+ * script share before any site script runs, are answered.
+ * Audit Bot AB-026 (2026-10-22): questions and answers travel as DOM events on the document whose type includes that
+ * secret, not as window messages (the page's own scripts saw those, secret included). */
 (function () {
   "use strict";
   const SITES = [] /*SITE_ORIGINS*/;
@@ -22,12 +24,14 @@
     chrome.storage.local.get({ enabled: true }).then((s) => tell(s.enabled), () => {});
     chrome.storage.onChanged.addListener((ch) => { if (ch.enabled) tell(ch.enabled.newValue !== false); });
   }
-  window.addEventListener("message", (ev) => {
-    if (ev.source !== window) return;
-    const d = ev.data; if (!d || typeof d !== "object" || d.__manaStation !== "ask" || typeof d.id !== "string" || d.id.length > 64) return;
-    if (!token || d.token !== token) return;               // not asked by this extension's page part
+  if (!token) return;                                    // no secret: no channel, answer nothing
+  // Only page.js knows the secret, so only it can send a question on this event type (no window message is answered).
+  const answer = (o) => document.dispatchEvent(new CustomEvent("ms-answer-" + token, { detail: JSON.stringify(o) }));
+  document.addEventListener("ms-ask-" + token, (ev) => {
+    let d; try { d = typeof ev.detail === "string" ? JSON.parse(ev.detail) : null; } catch (e) { return; }
+    if (!d || typeof d !== "object" || typeof d.id !== "string" || d.id.length > 64) return;
     chrome.runtime.sendMessage({ type: "would_pay", payee: d.payee, operations: d.operations, rcLimit: d.rcLimit })
-      .then((a) => window.postMessage({ __manaStation: "answer", id: d.id, pay: !!(a && a.pay), rcLimit: a && a.rcLimit }, target))
-      .catch(() => window.postMessage({ __manaStation: "answer", id: d.id, pay: false }, target));
+      .then((a) => answer({ id: d.id, pay: !!(a && a.pay), rcLimit: a && a.rcLimit }))
+      .catch(() => answer({ id: d.id, pay: false }));
   });
 })();

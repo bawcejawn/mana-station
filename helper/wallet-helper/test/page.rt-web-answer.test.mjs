@@ -25,8 +25,15 @@ const plain = (x) => JSON.parse(JSON.stringify(x));
 // page.js saw every call (this) and every event (ev.source) as coming from another window and never rewrote anything
 // (why the controls below failed in the audit run). The fake now uses the context's own global for both, as a browser
 // does. No assertion changed.
+// audit-fixes-1 (AB-026) harness change: questions and answers now travel as DOM events named with the per-load secret
+// (not window messages), so the fake window has a document (Node's EventTarget / CustomEvent) and bridge() plays
+// bridge.js: it takes the secret from the DOM attribute and answers on that channel. asks() lists the questions it got.
+// The forged answers below are delivered on that channel (a site can no longer see or answer a question at all), so
+// they still test page.js's own check of the answer (AB-022). No assertion changed.
 function load() {
-  const listeners = [], log = [], win = {}; let self = win;
+  const listeners = [], log = [], win = {}; let self = win; const attrs = {}, channel = [];
+  const doc = new EventTarget();
+  doc.documentElement = { getAttribute: (k) => attrs[k] || null, setAttribute: (k, v) => { attrs[k] = v; }, removeAttribute: (k) => { delete attrs[k]; } };
   function nativePost(msg, targetOrigin) {
     log.push({ msg, targetOrigin });
     const ev = { data: msg, source: self, origin: ORIGIN };
@@ -35,16 +42,25 @@ function load() {
   Object.assign(win, {
     postMessage: nativePost,
     addEventListener(type, fn) { if (type === "message") listeners.push(fn); },
-    setTimeout, clearTimeout, location: { origin: ORIGIN, protocol: "https:" },
+    setTimeout, clearTimeout, location: { origin: ORIGIN, protocol: "https:" }, crypto: globalThis.crypto,
+    document: doc, EventTarget, CustomEvent,
   });
   win.window = win;
   const ctx = vm.createContext(win); self = vm.runInContext("globalThis", ctx);
   vm.runInContext(PAGE.replace("__CONFIG__", JSON.stringify(CFG)), ctx, { filename: "page.js" });
+  // bridge.js's side: take the secret (and remove it), then answer each question with answer(question) (null: no answer).
+  const bridge = (answer) => {
+    const token = attrs["data-ms-helper"]; delete attrs["data-ms-helper"];
+    doc.addEventListener("ms-ask-" + token, (ev) => {
+      const d = JSON.parse(ev.detail); channel.push(d); const a = answer(d);
+      if (a) setImmediate(() => doc.dispatchEvent(new CustomEvent("ms-answer-" + token, { detail: JSON.stringify(a) })));
+    });
+  };
   const walletRequests = () => log.filter((e) => e.msg && e.msg.command && e.msg.to === "popup").map((e) => e.msg);
-  const asks = () => log.filter((e) => e.msg && e.msg.__manaStation === "ask").map((e) => e.msg);
+  const asks = () => channel.concat(log.filter((e) => e.msg && e.msg.__manaStation === "ask").map((e) => e.msg));
   // deliver a message event as if posted by `source` (default: this same window)
   const deliver = (data, source = self) => { for (const l of listeners.slice()) l({ data, source, origin: ORIGIN }); };
-  return { win: self, log, listeners, nativePost, walletRequests, asks, deliver };
+  return { win: self, log, listeners, nativePost, walletRequests, asks, deliver, bridge };
 }
 function request(over = {}) {
   const header = { chain_id: CHAIN, rc_limit: "20000000", ...(over.header || {}) };
@@ -58,11 +74,12 @@ function request(over = {}) {
 // ---- forged answers ----
 async function forged(rcLimit) {
   const p = load();
-  // The attacking script answers every ask itself, before the extension's bridge can.
+  // The attacking script answers every ask itself, before the extension's bridge can (it no longer sees any: AB-026).
   p.listeners.push((ev) => {
     const d = ev.data;
     if (d && d.__manaStation === "ask") p.nativePost({ __manaStation: "answer", id: d.id, pay: true, rcLimit }, ORIGIN);
   });
+  p.bridge((d) => ({ id: d.id, pay: true, rcLimit }));                 // the forged limit, on the private channel
   p.win.postMessage(request(), "*");
   await flush();
   const out = p.walletRequests();
@@ -86,7 +103,7 @@ test("a forged answer cannot change the Mana limit the helper asked about", asyn
 // ---- controls (expected to pass) ----
 test("control: a genuine answer sets payer=station, payee=me, keeps the asked limit and the operations", async () => {
   const p = load();
-  p.listeners.push((ev) => { const d = ev.data; if (d && d.__manaStation === "ask") p.nativePost({ __manaStation: "answer", id: d.id, pay: true, rcLimit: d.rcLimit }, ORIGIN); });
+  p.bridge((d) => ({ id: d.id, pay: true, rcLimit: d.rcLimit }));
   const req = request();
   p.win.postMessage(req, "*");
   await flush();
@@ -98,6 +115,7 @@ test("control: a genuine answer sets payer=station, payee=me, keeps the asked li
 test("control: an answer posted from another frame is ignored", async () => {
   const p = load();
   p.listeners.push((ev) => { const d = ev.data; if (d && d.__manaStation === "ask") p.deliver({ __manaStation: "answer", id: d.id, pay: true, rcLimit: d.rcLimit }, { other: "frame" }); });
+  p.bridge(() => null);                                                 // the extension doesn't answer either
   p.win.postMessage(request(), "*");
   await flush();
   assert.equal(p.walletRequests().length, 0, "still waiting for a same-window answer (falls back after 3 s)");

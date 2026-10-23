@@ -13,6 +13,9 @@
  * Audit Bot 2026-10-22: AB-014 questions carry a per-load secret shared with bridge.js, so other scripts can't probe for
  * the helper, and the postMessage wrapper looks like the native function; AB-022 an answer must keep the exact Mana limit
  * that was asked about (a forged answer can't raise it).
+ * Audit Bot AB-026 (2026-10-22): questions and answers no longer go through window.postMessage, where the page's own
+ * scripts saw them (and the secret). They are DOM events on the document whose type includes the per-load secret, sent
+ * with built-ins saved before any site script runs; a site can't listen for an event type it doesn't know.
  */
 (function () {
   "use strict";
@@ -23,14 +26,17 @@
   const setT = W.setTimeout.bind(W), clearT = W.clearTimeout.bind(W), addListener = W.addEventListener.bind(W);
   const origin = W.location.origin, target = origin === "null" ? "*" : origin;
   const post = (msg) => call(nativePost, W, msg, target);
+  const doc = W.document, CE = W.CustomEvent, ET = W.EventTarget;
+  const dispatch = ET && ET.prototype.dispatchEvent, listenOn = ET && ET.prototype.addEventListener;
+  const detailD = CE && Object.getOwnPropertyDescriptor(CE.prototype, "detail"), detailOf = detailD && detailD.get;
   const standAside = Object.create(null), ours = Object.create(null), asks = Object.create(null);
   let enabled = true;
   const isTarget = (to) => { for (let i = 0; i < CFG.targets.length; i++) if (CFG.targets[i] === to) return true; return false; };
   const isWalletRequest = (d) => !!(d && typeof d === "object" && isTarget(d.to) &&
     (d.command === "signer:sendTransaction" || d.command === "signer:signTransaction"));
   // AB-014: the per-load secret shared with bridge.js through a DOM attribute before any site script runs (whichever of
-  // the two runs first creates it, the other takes it and removes the attribute). Questions carry it; bridge.js answers
-  // nothing else.
+  // the two runs first creates it, the other takes it and removes the attribute). AB-026: it names the private events
+  // that carry questions and answers, and is never sent anywhere.
   let token = "";
   try {
     const el = document.documentElement, A = "data-ms-helper";
@@ -38,6 +44,9 @@
     token = el.getAttribute(A) || "";
     if (token) el.removeAttribute(A); else { token = mine(); el.setAttribute(A, token); }
   } catch (e) { token = ""; }
+  // AB-026: the private channel. Without a DOM, events or a secret, nothing is asked (requests go to the wallet unchanged).
+  const ASK = "ms-ask-" + token, ANSWER = "ms-answer-" + token;
+  const channel = !!(token && doc && typeof CE === "function" && typeof dispatch === "function" && typeof listenOn === "function" && typeof detailOf === "function");
   // Our own site may ask "is the helper on?" (for its check page). Other sites learn nothing.
   if (CFG.siteOrigins.indexOf(origin) >= 0 || (CFG.network !== "mainnet" && W.location.protocol === "file:")) {
     try { Object.defineProperty(W, "__manaStationHelper", { value: true }); } catch (e) { /* already defined */ }
@@ -57,6 +66,7 @@
     if (!Array.isArray(ops) || ops.length < 1 || ops.length > 10) return null;
     for (let i = 0; i < ops.length; i++) if (!ops[i] || !ops[i].call_contract) return null;   // calls only (uploads use tickets on the site)
     if ((standAside[me] || 0) > now()) return null;
+    if (!channel) return null;                                          // no private channel to the extension
     return c;
   }
   // The limit to ask about: the site's own whenever the station could accept it (up to the station's per-transaction
@@ -73,7 +83,8 @@
       const id = "ms-" + rand().toString(36).slice(2) + now().toString(36);
       const t = setT(() => { delete asks[id]; resolve(null); }, 3000);
       asks[id] = (a) => { clearT(t); resolve(a); };
-      post({ __manaStation: "ask", id, payee, operations, rcLimit, token });
+      try { call(dispatch, doc, new CE(ASK, { detail: stringify({ id, payee, operations, rcLimit }) })); }
+      catch (e) { clearT(t); delete asks[id]; resolve(null); }
     });
   }
   async function rewrite(c) {
@@ -96,10 +107,14 @@
   }
   // AB-014: installed as a Proxy of the native function, so it reads as native code with the native name and length.
   W.postMessage = new Px(nativePost, { apply: (t, self, args) => rApply(wrapper, self, args), get: (t, k) => (k === "name" ? "postMessage" : rGet(t, k)) });
+  // AB-026: answers arrive only on the private channel (an answer posted to the window is ignored).
+  if (channel) call(listenOn, doc, ANSWER, (ev) => {
+    let d; try { const x = call(detailOf, ev); d = typeof x === "string" ? parse(x) : null; } catch (e) { return; }
+    if (d && typeof d === "object" && typeof d.id === "string" && asks[d.id]) { const f = asks[d.id]; delete asks[d.id]; f(d); }
+  });
   addListener("message", (ev) => {
     if (ev.source !== W) return;
     const d = ev.data; if (!d || typeof d !== "object") return;
-    if (d.__manaStation === "answer" && typeof d.id === "string" && asks[d.id]) { const f = asks[d.id]; delete asks[d.id]; f(d); return; }
     if (d.__manaStation === "state") { enabled = d.enabled !== false; return; }
     if (d.command || typeof d.id !== "string" || !ours[d.id]) return;  // a wallet's reply to a request we changed
     const me = ours[d.id]; delete ours[d.id];

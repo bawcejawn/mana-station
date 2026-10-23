@@ -48,8 +48,9 @@ Set the Mana Station as the fee payer of Koinos transactions it will pay for, be
 - Declare: **Financial and payment information** (the wallet address and the transaction about to be signed) and **Website content** (the transaction's operations, which the site created). Both are sent only to the public Koinos node, only to ask the station whether it will pay, before the user approves. Nothing is sent to the developer.
 - Not sold, not used for unrelated purposes, not used for creditworthiness. Complies with the Limited Use requirements.
 - The helper doesn't announce itself to websites: the on/off state goes only to the Mana Station site's own pages, and it
-  answers only questions its own page script asks (a per-page-load secret). A site that asks the wallet to sign a Koinos
-  transaction can notice that the helper checked with the station first (that question passes through the page).
+  answers only questions its own page script asks. That question and its answer travel on a private channel named with a
+  per-page-load secret, not through the page's messages, so a site that asks the wallet to sign a Koinos transaction
+  doesn't see them either.
 
 ## Privacy policy URL
 `<site>/privacy.html`
