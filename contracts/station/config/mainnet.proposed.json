@@ -10,6 +10,7 @@
     "cooldown_ms": "600000",
     "_cooldown_ms": "AB-024 (Oct 22): at most 3,600,000 (1 hour), and per_min x 1 hour must be at least cooldown_ms (at least 1 action an hour). Per-user limits apply at once to every user: the cooldown in force is always this setting (a user's record keeps only when their cooldown started), so a lower value or a revert takes effect immediately",
     "day_actions": 25,
+    "_day_actions": "Oct 22, same reason as AB-024: at least 24 (1 an hour). A lower value stored by an older config reads as 24",
     "day_mana": "6000000000",
     "new_actions": 10,
     "new_mana": "2500000000",

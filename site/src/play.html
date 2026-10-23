@@ -127,7 +127,7 @@
         $("myKoin").innerHTML = '<span class="zero">' + fmt((koin.result || {}).value) + "</span>";
         $("myMana").innerHTML = '<span class="zero">' + fmt(rc) + "</span>";
         const u = (mine.result || {}).user || {}; const isNew = !u.first_seen || Date.now() - Number(u.first_seen) < 86_400_000;
-        $("myToday").textContent = String((mine.result || {}).actions_24h || 0) + " of " + ((isNew ? cfg.new_actions : cfg.day_actions) || "…") + (isNew ? " (new player)" : "");
+        $("myToday").textContent = String((mine.result || {}).actions_24h || 0) + " of " + ((isNew ? cfg.new_actions : cfg.day_actions && Math.max(24, cfg.day_actions)) || "…") + (isNew ? " (new player)" : "");
         $("stMana").textContent = fmt(st.result?.mana, 1);
         const free = ((L.result || {}).free_apps || []).find((a) => a.contract_id === APP);
         const paid = ((L.result || {}).paid || []).filter((p) => p.target === APP && Number(p.expiry) > Date.now() && !p.suspended);
