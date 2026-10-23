@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-eval' 'sha256-O6DFT7zLh0bneMsswX9Bf/JmekX4ii+OqtyWxfFRuOw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://testnet.koinosfoundation.org https://harbinger-api.koinos.io https://api.koinos.io; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-eval' 'sha256-cGJl3LAQcaNR8nQb2pOYZgti6uxAXE0zoAMhyxzKELI='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://testnet.koinosfoundation.org https://harbinger-api.koinos.io https://api.koinos.io; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#17114a">
   <meta name="color-scheme" content="light dark">
@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Figtree:wght@400;600;700&display=swap">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css">
   <title>Try a free Koinos transaction, no KOIN needed | Mana Station</title>
   <meta name="description" content="Tap a button and send a real Koinos testnet transaction from a wallet with no KOIN and no Mana. See gasless Koinos transactions in action.">
   <link rel="canonical" href="https://bawcejawn.github.io/mana-station/play.html">
@@ -33,7 +33,7 @@
   <meta name="twitter:title" content="Try a free Koinos transaction, no KOIN needed | Mana Station">
   <meta name="twitter:description" content="Tap a button and send a real Koinos testnet transaction from a wallet with no KOIN and no Mana. See gasless Koinos transactions in action.">
   <meta name="twitter:image" content="https://bawcejawn.github.io/mana-station/og-image.png">
-  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://bawcejawn.github.io/mana-station/play.html#page","url":"https://bawcejawn.github.io/mana-station/play.html","name":"Try a free Koinos transaction, no KOIN needed | Mana Station","description":"Tap a button and send a real Koinos testnet transaction from a wallet with no KOIN and no Mana. See gasless Koinos transactions in action.","inLanguage":"en","isPartOf":{"@id":"https://bawcejawn.github.io/mana-station/#site"},"dateModified":"2026-10-22","breadcrumb":{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://bawcejawn.github.io/mana-station/"},{"@type":"ListItem","position":2,"name":"Try it free","item":"https://bawcejawn.github.io/mana-station/play.html"}]}}]}</script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://bawcejawn.github.io/mana-station/play.html#page","url":"https://bawcejawn.github.io/mana-station/play.html","name":"Try a free Koinos transaction, no KOIN needed | Mana Station","description":"Tap a button and send a real Koinos testnet transaction from a wallet with no KOIN and no Mana. See gasless Koinos transactions in action.","inLanguage":"en","isPartOf":{"@id":"https://bawcejawn.github.io/mana-station/#site"},"dateModified":"2026-10-23","breadcrumb":{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://bawcejawn.github.io/mana-station/"},{"@type":"ListItem","position":2,"name":"Try it free","item":"https://bawcejawn.github.io/mana-station/play.html"}]}}]}</script>
   <style>
     .play { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: clamp(24px, 4vw, 48px); align-items: start; padding-block: 8px 80px; }
     .stage { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-big); padding: clamp(24px, 4vw, 40px); display: grid; gap: 22px; justify-items: center; text-align: center; }
@@ -91,7 +91,7 @@
     <a href="get.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3.6 4.4 6 7.6 6 11a6 6 0 0 1-12 0c0-3.4 2.4-6.6 6-11Z"/></svg>Get Mana</a>
     <a href="play.html" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="m10 8.5 5.5 3.5-5.5 3.5z"/></svg>Try it</a>
     <a href="help.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M9.6 9.6a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.6M12 16.6v.4"/></svg>Help</a>
-  </nav>
+  </nav>
 
   <main id="main">
     <section class="hero" aria-labelledby="t">
@@ -200,7 +200,7 @@
         $("myKoin").innerHTML = '<span class="zero">' + fmt((koin.result || {}).value) + "</span>";
         $("myMana").innerHTML = '<span class="zero">' + fmt(rc) + "</span>";
         const u = (mine.result || {}).user || {}; const isNew = !u.first_seen || Date.now() - Number(u.first_seen) < 86_400_000;
-        $("myToday").textContent = String((mine.result || {}).actions_24h || 0) + " of " + ((isNew ? cfg.new_actions : cfg.day_actions) || "…") + (isNew ? " (new player)" : "");
+        $("myToday").textContent = String((mine.result || {}).actions_24h || 0) + " of " + ((isNew ? cfg.new_actions : cfg.day_actions && Math.max(24, cfg.day_actions)) || "…") + (isNew ? " (new player)" : "");
         $("stMana").textContent = fmt(st.result?.mana, 1);
         const free = ((L.result || {}).free_apps || []).find((a) => a.contract_id === APP);
         const paid = ((L.result || {}).paid || []).filter((p) => p.target === APP && Number(p.expiry) > Date.now() && !p.suspended);
