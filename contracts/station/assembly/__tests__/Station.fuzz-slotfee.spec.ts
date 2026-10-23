@@ -1,6 +1,7 @@
 /**
  * RED TEAM (THIEF, round 2), mana-station branch audit-fixes-1 commit dd5148d. Model-based escrow fuzz WITH the slot fee
- * (2,000,000 a day) and the pass minimum (25,000,000) on. Seed 20261022, 120 steps. Only actions the model predicts to
+ * (2,000,000 a day) and the pass minimum (25,000,000) on. Seeds 7, 1234, 99001 (200 steps) and 20261022 (120 steps): one file
+ * since audit-2026-10 (it was four copies differing only in the seed). Only actions the model predicts to
  * be valid are sent (same guards as the contract), mixing: buy pass / app plan (4 buyers), renew by a RANDOM payer
  * (usually not the allowance buyer), buyer cancel, owner_refund, suspend (reasons 1-4, incl. 2 -> 4 reclassification),
  * unsuspend, pause / unpause (pause credit), release, sponsored use (authorize) and time jumps.
@@ -110,7 +111,7 @@ function buyAccount(s: Station, target: Uint8Array, manaPerDay: u64, days: u64):
 }
 function inv(s: Station, token: Uint8Array): void {     // escrow invariants
   const t = s.get_escrow_totals(new station.get_escrow_totals_arguments(token)).totals!;
-  expect(testGetToken(token, STATION)).toBe(t.held);
+  expect(testGetToken(token, STATION)).toBe(t.held + t.owed);   // audit-2026-10 M-5: balance = held + owed
   expect(t.collected).toBe(t.held + t.refunded + t.released);
 }
 function cancelBy(s: Station, who: Uint8Array, id: u32): station.cancel_allowance_result {
@@ -185,9 +186,9 @@ function refusedPropose(s: Station, who: Uint8Array, a: station.guarded_action, 
 
 
 // ───── RED TEAM THIEF round 2: model-based escrow fuzz with slot fee, other payers, suspensions, pause ─────
-const SEED: u32 = 99001;
-const STEPS: i32 = 200;
-let rs: u32 = SEED;
+let SEED: u32 = 0;
+let STEPS: i32 = 0;
+let rs: u32 = 0;
 function rnd(): u32 { let x = rs; x ^= x << 13; x ^= x >> 17; x ^= x << 5; rs = x; return x; }
 function pick(n: u32): u32 { return rnd() % n; }
 const NB: i32 = 4;
@@ -199,6 +200,11 @@ let fPaused = false; let fPausedAt: u64 = 0;
 let susp: u32[] = [0, 0, 0, 0];
 let paidBy: u64[] = [0, 0, 0, 0];
 let nextPlayerF: i32 = 600;
+let frozenOut: u64[] = [];                          // audit-2026-10 M-3: what each frozen purchase had paid out when frozen
+function resetModel(seed: u32, steps: i32): void {
+  SEED = seed; STEPS = steps; rs = seed; fB = []; fApp = []; slotId = [0, 0, 0, 0, 0, 0, 0, 0]; nPurch = 0;
+  fPaused = false; fPausedAt = 0; susp = [0, 0, 0, 0]; paidBy = [0, 0, 0, 0]; nextPlayerF = 600; frozenOut = [];
+}
 function clockF(): u64 { return fPaused ? fPausedAt : NOW; }
 function same(a: Uint8Array | null, b: Uint8Array | null): bool {
   if (a == null || b == null) return false;
@@ -220,7 +226,7 @@ function openTerms(s: Station, a: station.allowance_object): i32 {
 function check(s: Station, step: i32, what: string): void {
   const where = "seed " + SEED.toString() + " step " + step.toString() + " (" + what + ")";
   const t = s.get_escrow_totals(new station.get_escrow_totals_arguments(USDT)).totals!;
-  expect(testGetToken(USDT, STATION)).toBe(t.held, "THIEF2-FZ: station balance != held at " + where);
+  expect(testGetToken(USDT, STATION)).toBe(t.held + t.owed, "THIEF2-FZ: station balance != held + owed at " + where);
   expect(t.collected).toBe(t.held + t.refunded + t.released, "THIEF2-FZ: collected != held + refunded + released at " + where);
   const amt: u64[] = [0, 0, 0, 0]; const ref: u64[] = [0, 0, 0, 0];
   let sAmt: u64 = 0, sRef: u64 = 0, sRel: u64 = 0;
@@ -231,6 +237,11 @@ function check(s: Station, step: i32, what: string): void {
     const pid = "purchase " + id.toString();
     expect(e.refunded + e.released <= e.amount).toBe(true, "THIEF2-FZ: " + pid + " paid out more than it took at " + where);
     if (e.closed) expect(e.refunded + e.released).toBe(e.amount, "THIEF2-FZ: closed " + pid + " not fully settled at " + where);
+    // audit-2026-10 M-3: once frozen, a purchase pays out nothing more (no refund to its sanctioned payer, no release to
+    // the treasury), whatever happens to the suspension; only a council decision (kind 9) could, and the fuzz has none.
+    while (frozenOut.length <= i32(id)) frozenOut.push(u64.MAX_VALUE);
+    if (e.frozen) { if (frozenOut[id] == u64.MAX_VALUE) frozenOut[id] = e.refunded + e.released; expect(e.refunded + e.released).toBe(frozenOut[id], "THIEF2-FZ: frozen " + pid + " paid out at " + where); }
+    if (frozenOut[id] != u64.MAX_VALUE) expect(e.frozen).toBe(true, "THIEF2-FZ: " + pid + " unfrozen without the council at " + where);
     if (e.kind == 1) expect(e.refunded + e.slot_fee_per_day * e.days <= e.amount).toBe(true, "THIEF2-FZ: " + pid + " refunded " + e.refunded.toString() + " incl. slot fee for days held (" + e.days.toString() + " d) at " + where);
     const b = idxOf(e.buyer);
     expect(b >= 0).toBe(true, "THIEF2-FZ: " + pid + " has an unknown payer at " + where);
@@ -247,7 +258,14 @@ function check(s: Station, step: i32, what: string): void {
   }
 }
 describe("THIEF2 fuzz: escrow with slot fee, other payers, suspensions and pause always adds up", () => {
-  it("seed 99001, 120 steps", () => {
+  it("seed 7, 200 steps", () => { run(7, 200); });
+  it("seed 1234, 200 steps", () => { run(1234, 200); });
+  it("seed 99001, 200 steps", () => { run(99001, 200); });
+  it("seed 20261022, 120 steps", () => { run(20261022, 120); });
+});
+function run(seed: u32, steps: i32): void {
+  {
+    resetModel(seed, steps);
     const s = setupWide();
     const c = cfg(); c.slot_fee_per_day = 2_000_000; setConfig(s, c);
     const p = PRICE(); p.pass_min_purchase = 25_000_000; signedBy([OWNER]); s.set_price(new station.set_price_arguments(USDT, p)); signedBy([]);
@@ -280,7 +298,7 @@ describe("THIEF2 fuzz: escrow with slot fee, other payers, suspensions and pause
         }
       } else if (k <= 6) {                                                           // buyer cancel
         const j = i32(pick(8)); const a = allow(s, j); const owner = j / 2;
-        if (a != null && susp[owner] == 0 && a.expiry > clockF()) { cancelBy(s, fB[owner], a.id); what = "cancel"; }
+        if (a != null && susp[owner] == 0 && a.expiry > clockF() && s.hasUnused(a, clockF())) { cancelBy(s, fB[owner], a.id); what = "cancel"; } // C-1
       } else if (k == 7) {                                                           // owner refund
         const j = i32(pick(8)); const a = allow(s, j); const owner = j / 2;
         if (a != null && susp[owner] != 2) { signedBy([OWNER]); s.owner_refund(new station.owner_refund_arguments(a.id, null)); signedBy([]); what = "owner_refund"; }
@@ -300,7 +318,7 @@ describe("THIEF2 fuzz: escrow with slot fee, other payers, suspensions and pause
           const pb = idxOf(g.purchase!.buyer);
           const al = s.get_allowance(new station.get_allowance_arguments(g.purchase!.allowance_id)).allowance;
           const ab = al != null ? idxOf(al.buyer) : -1;
-          if ((pb < 0 || susp[pb] != 2) && (ab < 0 || susp[ab] != 2)) { s.release(new station.release_arguments(id)); what = "release"; }
+          if (!g.purchase!.frozen && (pb < 0 || susp[pb] != 2) && ab >= -1) { s.release(new station.release_arguments(id)); what = "release"; } // M-3: frozen by payer
         }
       } else if (k == 12) {                                                          // sponsored use (bool, never throws)
         const rc = u64(1 + pick(3)) * M;
@@ -313,5 +331,5 @@ describe("THIEF2 fuzz: escrow with slot fee, other payers, suspensions and pause
       check(s, step, what);
     }
     log<string>("seed " + SEED.toString() + ": " + done.toString() + " actions, " + nPurch.toString() + " purchases");
-  });
-});
+  }
+}

@@ -1,6 +1,6 @@
 
-Æo
-assembly/proto/station.protostationkoinos/options.proto"¡
+Ìt
+assembly/proto/station.protostationkoinos/options.proto"‚
 config_object
 owner (BÄµRowner
 paused (Rpaused#
@@ -41,7 +41,9 @@ alert_mana (B0R	alertMana"
 guard_delay_ms (B0RguardDelayMs
 open_cap  (RopenCap+
 slot_fee_per_day! (B0RslotFeePerDay!
-app_reserved" (RappReservedJJ"ï
+app_reserved" (RappReserved
+checkout_bp# (R
+checkoutBpJJ"ï
 
 app_object'
 reserved_mana (B0RreservedMana
@@ -112,7 +114,7 @@ total_paid (B0R	totalPaid!
 purchase_ids (RpurchaseIds!
 
 used_total (B0R	usedTotal
-	cap_total (B0RcapTotal"Ω
+	cap_total (B0RcapTotal"‘
 ticket_object
 buyer (BÄµRbuyer
 mana (B0Rmana 
@@ -125,7 +127,8 @@ used_total (B0R	usedTotal
 purchaseId
 bought	 (B0Rbought&
 prev_last_buy
- (B0RprevLastBuy"±
+ (B0RprevLastBuy
+fee_bp (RfeeBp"±
 
 big_object
 debt (B0Rdebt
@@ -178,7 +181,7 @@ exempt_ids (BÄµR	exemptIds%
 kcs_approve_args
 owner (BÄµRowner
 spender (BÄµRspender
-value (B0Rvalue"Ä
+value (B0Rvalue"°
 guarded_action
 kind (Rkind
 hash (BÄµRhash
@@ -188,7 +191,10 @@ exempt_ids (BÄµR	exemptIds%
 council (BÄµRcouncil
 	threshold (R	threshold
 delay_ms (B0RdelayMs
-fee_bp	 (RfeeBp"›
+fee_bp	 (RfeeBp
+purchase_id
+ (R
+purchaseId"›
 proposal_object
 id (Rid/
 action (2.station.guarded_actionRaction 
@@ -247,7 +253,7 @@ manaPerDay
 expiry (B0Rexpiry
 used_24h (B0Rused24h
 	suspended (R	suspended
-kind (Rkind"∂
+kind (Rkind"Œ
 escrow_object
 id (Rid
 kind (Rkind
@@ -268,12 +274,19 @@ manaPerDay
 min_keep (B0RminKeep
 	day_price (B0RdayPrice+
 slot_fee_per_day (B0RslotFeePerDay,
-limits (2.station.term_limitsRlimits"ê
+limits (2.station.term_limitsRlimits
+frozen (Rfrozen"∆
 escrow_totals_object
 held (B0Rheld 
 	collected (B0R	collected
 refunded (B0Rrefunded
-released (B0Rreleased"å
+released (B0Rreleased
+owed (B0Rowed
+claimed (B0Rclaimed"[
+claim_event
+token (BÄµRtoken
+to (BÄµRto
+amount (B0Ramount"å
 escrow_event2
 purchase (2.station.escrow_objectRpurchase
 amount (B0Ramount
@@ -281,7 +294,7 @@ manaPerDay
 action (	Raction"*
 revenue_object
 total (B0Rtotal"
-get_status_arguments"Â
+get_status_arguments"›
 get_status_result.
 config (2.station.config_objectRconfig
 mana (B0Rmana%
@@ -300,7 +313,11 @@ alertLevel
 open_allowances (RopenAllowances
 open_cap (RopenCap!
 app_reserved (RappReserved+
-slot_fee_per_day (B0RslotFeePerDay".
+slot_fee_per_day (B0RslotFeePerDay.
+checkout_used_24h (B0RcheckoutUsed24h%
+checkout_cap (B0RcheckoutCap
+reserve_low (R
+reserveLow".
 get_user_arguments
 user (BÄµRuser"{
 get_user_result(
@@ -430,6 +447,16 @@ unit_price (B0R	unitPrice"ˆ
 purchase_id (R
 purchaseId",
 release_result
+amount (B0Ramount"C
+claim_arguments
+token (BÄµRtoken
+to (BÄµRto"*
+claim_result
+amount (B0Ramount"H
+get_owed_arguments
+token (BÄµRtoken
+who (BÄµRwho"-
+get_owed_result
 amount (B0Ramount"d
 owner_refund_arguments!
 allowance_id (RallowanceId'
@@ -554,7 +581,11 @@ contractId"
 signer (BÄµRsigner
 id (Rid"/
 approve_result
-ready_at (B0RreadyAt"I
+ready_at (B0RreadyAt"C
+unapprove_arguments
+signer (BÄµRsigner
+id (Rid"
+unapprove_result"I
 cancel_proposal_arguments
 signer (BÄµRsigner
 id (Rid"

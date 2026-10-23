@@ -94,23 +94,37 @@
         "cancel_allowance": {
             "input": "station.cancel_allowance_arguments",
             "output": "station.cancel_allowance_result",
-            "description": "Buyer cancels an allowance: unused WHOLE days of every term are refunded from escrow (the current day",
+            "description": "Buyer cancels an allowance: unused WHOLE days of every term are refunded from escrow as owed (claim it;",
             "entryPoint": 3345235150,
             "readOnly": false
         },
         "cancel_big_upload": {
             "input": "station.cancel_big_upload_arguments",
             "output": "station.cancel_big_upload_result",
-            "description": "Buyer cancels a big-upload ticket: unused Mana refunded pro rata, minimum charge 20% of the ticket.",
+            "description": "Buyer cancels a big-upload ticket: the value of the unused Mana, reduced by the time passed, is owed back",
             "entryPoint": 3264763717,
             "readOnly": false
         },
         "release": {
             "input": "station.release_arguments",
             "output": "station.release_result",
-            "description": "After a term ends (anyone may call): send the earned, unrefunded amount to Carl (treasury). Once.",
+            "description": "After a term ends (anyone may call): record the earned, unrefunded amount as owed to the treasury (claim",
             "entryPoint": 2765378028,
             "readOnly": false
+        },
+        "claim": {
+            "input": "station.claim_arguments",
+            "output": "station.claim_result",
+            "description": "Pay out everything the station owes `to` in `token` (refunds and releases are recorded as owed first, so a",
+            "entryPoint": 3709549617,
+            "readOnly": false
+        },
+        "get_owed": {
+            "input": "station.get_owed_arguments",
+            "output": "station.get_owed_result",
+            "description": "What the station owes `who` in `token`, ready to claim.",
+            "entryPoint": 4252130612,
+            "readOnly": true
         },
         "owner_refund": {
             "input": "station.owner_refund_arguments",
@@ -250,6 +264,13 @@
             "output": "station.approve_result",
             "description": "Approve a proposal (council member `signer`).",
             "entryPoint": 1960973952,
+            "readOnly": false
+        },
+        "unapprove": {
+            "input": "station.unapprove_arguments",
+            "output": "station.unapprove_result",
+            "description": "Withdraw your own approval from an open proposal (council member `signer`; audit-2026-10 G-04). Not a veto:",
+            "entryPoint": 1611180070,
             "readOnly": false
         },
         "cancel_proposal": {
@@ -469,6 +490,10 @@
                             "appReserved": {
                                 "type": "uint32",
                                 "id": 34
+                            },
+                            "checkoutBp": {
+                                "type": "uint32",
+                                "id": 35
                             }
                         },
                         "reserved": [
@@ -888,6 +913,10 @@
                                 "options": {
                                     "jstype": "JS_STRING"
                                 }
+                            },
+                            "feeBp": {
+                                "type": "uint32",
+                                "id": 11
                             }
                         }
                     },
@@ -1176,6 +1205,10 @@
                             "feeBp": {
                                 "type": "uint32",
                                 "id": 9
+                            },
+                            "purchaseId": {
+                                "type": "uint32",
+                                "id": 10
                             }
                         }
                     },
@@ -1564,6 +1597,10 @@
                             "limits": {
                                 "type": "term_limits",
                                 "id": 19
+                            },
+                            "frozen": {
+                                "type": "bool",
+                                "id": 20
                             }
                         }
                     },
@@ -1593,6 +1630,45 @@
                             "released": {
                                 "type": "uint64",
                                 "id": 4,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "owed": {
+                                "type": "uint64",
+                                "id": 5,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "claimed": {
+                                "type": "uint64",
+                                "id": 6,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "claim_event": {
+                        "fields": {
+                            "token": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "CONTRACT_ID"
+                                }
+                            },
+                            "to": {
+                                "type": "bytes",
+                                "id": 2,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "amount": {
+                                "type": "uint64",
+                                "id": 3,
                                 "options": {
                                     "jstype": "JS_STRING"
                                 }
@@ -1740,6 +1816,24 @@
                                 "options": {
                                     "jstype": "JS_STRING"
                                 }
+                            },
+                            "checkoutUsed_24h": {
+                                "type": "uint64",
+                                "id": 17,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "checkoutCap": {
+                                "type": "uint64",
+                                "id": 18,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            },
+                            "reserveLow": {
+                                "type": "bool",
+                                "id": 19
                             }
                         }
                     },
@@ -2348,6 +2442,64 @@
                             }
                         }
                     },
+                    "claim_arguments": {
+                        "fields": {
+                            "token": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "CONTRACT_ID"
+                                }
+                            },
+                            "to": {
+                                "type": "bytes",
+                                "id": 2,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            }
+                        }
+                    },
+                    "claim_result": {
+                        "fields": {
+                            "amount": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
+                    "get_owed_arguments": {
+                        "fields": {
+                            "token": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "CONTRACT_ID"
+                                }
+                            },
+                            "who": {
+                                "type": "bytes",
+                                "id": 2,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            }
+                        }
+                    },
+                    "get_owed_result": {
+                        "fields": {
+                            "amount": {
+                                "type": "uint64",
+                                "id": 1,
+                                "options": {
+                                    "jstype": "JS_STRING"
+                                }
+                            }
+                        }
+                    },
                     "owner_refund_arguments": {
                         "fields": {
                             "allowanceId": {
@@ -2858,6 +3010,24 @@
                                 }
                             }
                         }
+                    },
+                    "unapprove_arguments": {
+                        "fields": {
+                            "signer": {
+                                "type": "bytes",
+                                "id": 1,
+                                "options": {
+                                    "(koinos.btype)": "ADDRESS"
+                                }
+                            },
+                            "id": {
+                                "type": "uint32",
+                                "id": 2
+                            }
+                        }
+                    },
+                    "unapprove_result": {
+                        "fields": {}
                     },
                     "cancel_proposal_arguments": {
                         "fields": {

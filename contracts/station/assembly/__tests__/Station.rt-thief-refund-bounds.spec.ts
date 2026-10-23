@@ -105,7 +105,7 @@ function buyAccount(s: Station, target: Uint8Array, manaPerDay: u64, days: u64):
 }
 function inv(s: Station, token: Uint8Array): void {     // escrow invariants
   const t = s.get_escrow_totals(new station.get_escrow_totals_arguments(token)).totals!;
-  expect(testGetToken(token, STATION)).toBe(t.held);
+  expect(testGetToken(token, STATION)).toBe(t.held + t.owed);   // audit-2026-10 M-5: balance = held + owed
   expect(t.collected).toBe(t.held + t.refunded + t.released);
 }
 function cancelBy(s: Station, who: Uint8Array, id: u32): station.cancel_allowance_result {
@@ -151,8 +151,9 @@ describe("THIEF: refunds never exceed payment, never go to the wrong wallet, nev
     at(T + HOUR); cancelBy(s, U1, r.id);
     signedBy([U1]); s.renew(new station.renew_arguments(U1, r.id, 30, USDT, 1000 * USD)); signedBy([]); // future term from end of day 1
     at(T + 2 * HOUR); cancelBy(s, U1, r.id);
-    const again = cancelBy(s, U1, r.id).refund;
-    expect(again).toBe(0, "SAFE: third cancel refunds nothing");
+    gS = s; signedBy([U1]); MockVM.commitTransaction(); clearRevert();               // audit-2026-10 C-1: a third cancel changes
+    expect(() => { gS!.cancel_allowance(new station.cancel_allowance_arguments(U1, 1)); }).toThrow("SAFE: third cancel refused");
+    revertedWith("nothing left to cancel: every paid day has started or was refunded"); signedBy([]);                 // nothing: refused
     const paid: u64 = 750_000 * 2;
     const refunded = testGetToken(USDT, U1) + paid - b0;
     expect(refunded).toBeLessThanOrEqual(paid, "SAFE: refunds <= payments");
@@ -187,8 +188,10 @@ describe("THIEF: refunds never exceed payment, never go to the wrong wallet, nev
     const r1 = cancelBy(s, U1, r.id).refund;
     signedBy([OWNER]); s.set_paused(new station.set_paused_arguments(false)); signedBy([]);
     at(NOW + HOUR);
-    const r2 = cancelBy(s, U1, r.id).refund;
-    expect(r1 + r2).toBeLessThanOrEqual(171_428, "SAFE: at most 6 of 7 days back once");
+    gS = s; signedBy([U1]); MockVM.commitTransaction(); clearRevert();               // audit-2026-10 C-1: the second cancel
+    expect(() => { gS!.cancel_allowance(new station.cancel_allowance_arguments(U1, 1)); }).toThrow("SAFE: second cancel refused");
+    revertedWith("nothing left to cancel: every paid day has started or was refunded"); signedBy([]);                 // changes nothing
+    expect(r1).toBeLessThanOrEqual(171_428, "SAFE: at most 6 of 7 days back once"); expect(r.id).toBe(1);
     inv(s, USDT);
   });
   it("5. a stranger's buy sweeps an expired ticket: buyer gets 0, treasury gets the price, stranger gets nothing", () => {

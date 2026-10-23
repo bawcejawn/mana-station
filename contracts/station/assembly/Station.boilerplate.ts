@@ -34,6 +34,9 @@ export class Station {
     // res.open_cap = ;
     // res.app_reserved = ;
     // res.slot_fee_per_day = ;
+    // res.checkout_used_24h = ;
+    // res.checkout_cap = ;
+    // res.reserve_low = ;
 
     return res;
   }
@@ -257,6 +260,30 @@ export class Station {
     // YOUR CODE HERE
 
     const res = new station.release_result();
+    // res.amount = ;
+
+    return res;
+  }
+
+  claim(args: station.claim_arguments): station.claim_result {
+    // const token = args.token;
+    // const to = args.to;
+
+    // YOUR CODE HERE
+
+    const res = new station.claim_result();
+    // res.amount = ;
+
+    return res;
+  }
+
+  get_owed(args: station.get_owed_arguments): station.get_owed_result {
+    // const token = args.token;
+    // const who = args.who;
+
+    // YOUR CODE HERE
+
+    const res = new station.get_owed_result();
     // res.amount = ;
 
     return res;
@@ -505,6 +532,17 @@ export class Station {
 
     const res = new station.approve_result();
     // res.ready_at = ;
+
+    return res;
+  }
+
+  unapprove(args: station.unapprove_arguments): station.unapprove_result {
+    // const signer = args.signer;
+    // const id = args.id;
+
+    // YOUR CODE HERE
+
+    const res = new station.unapprove_result();
 
     return res;
   }

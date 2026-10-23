@@ -96,7 +96,7 @@ function buyAccount(s: Station, target: Uint8Array, manaPerDay: u64, days: u64):
 }
 function inv(s: Station, token: Uint8Array): void {     // escrow invariants
   const t = s.get_escrow_totals(new station.get_escrow_totals_arguments(token)).totals!;
-  expect(testGetToken(token, STATION)).toBe(t.held);
+  expect(testGetToken(token, STATION)).toBe(t.held + t.owed);   // audit-2026-10 M-5: balance = held + owed
   expect(t.collected).toBe(t.held + t.refunded + t.released);
 }
 function cancelBy(s: Station, who: Uint8Array, id: u32): station.cancel_allowance_result {
@@ -434,7 +434,11 @@ describe("AB-001 owner powers", () => {
     expect(bal(BUYER)).toBe(b0); expect(s.get_ticket(new station.get_ticket_arguments(U2)).ticket).not.toBeNull();
     at(NOW + 3 * DAYMS + 1); gS1 = s; signedBy([OWNER]); MockVM.commitTransaction();
     clearRevert(); expect(() => { gS1!.close_ticket(new station.close_ticket_arguments(U2)); }).toThrow("frozen"); revertedWith("sanctions: funds frozen in escrow pending legal review");
-    s.suspend_allowance(new station.suspend_allowance_arguments(BUYER, 4)); signedBy([]);   // ticket over: nothing unused is left
+    s.suspend_allowance(new station.suspend_allowance_arguments(BUYER, 4)); signedBy([]);   // reclassified: still frozen (audit-2026-10 M-3)
+    s.close_ticket(new station.close_ticket_arguments(U2));                                  // frees the ticket's Mana; the funds stay held
+    expect(bal(BUYER)).toBe(b0); expect(bal(OWNER)).toBe(0, "frozen: nothing released without the council");
+    expect(s.get_ticket(new station.get_ticket_arguments(U2)).ticket).toBeNull();
+    const k9 = act(9); k9.purchase_id = 1; k9.amount = 0; councilDo(s, k9);                // the council: a full lock was served
     expect(bal(BUYER)).toBe(b0); expect(bal(OWNER)).toBe(t.paid, "a full lock was served");
     inv(s, USDT);
   });
@@ -445,6 +449,7 @@ describe("AB-003 the tickets' locked Mana and owner boosts", () => {
     const s = setup();
     signedBy([BUYER, U2]); s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U2, 100 * M, USDT, 1000 * USD, true)); signedBy([]);
     buyPass(s, U1, U1, 10 * M, 7);
+    testSetToken(USDT, user(4), 1000 * USD);                                     // audit-2026-10 C-1: a checkout buyer holds what it approves
     testSetMana(106 * M);                                                        // a 2-Mana tx would leave 104 < 5 + 100
     at(NOW + 3000); expect(play(s, user(3), 2 * M)).toBe(false, "free app");
     at(NOW + 3000); tx(U1, 2 * M, [op(OTHER, EP_PLAY)]); expect(ok(s)).toBe(false, "pass");

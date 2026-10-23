@@ -112,7 +112,7 @@ function buyAccount(s: Station, target: Uint8Array, manaPerDay: u64, days: u64):
 }
 function inv(s: Station, token: Uint8Array): void {     // escrow invariants
   const t = s.get_escrow_totals(new station.get_escrow_totals_arguments(token)).totals!;
-  expect(testGetToken(token, STATION)).toBe(t.held);
+  expect(testGetToken(token, STATION)).toBe(t.held + t.owed);   // audit-2026-10 M-5: balance = held + owed
   expect(t.collected).toBe(t.held + t.refunded + t.released);
 }
 function cancelBy(s: Station, who: Uint8Array, id: u32): station.cancel_allowance_result {

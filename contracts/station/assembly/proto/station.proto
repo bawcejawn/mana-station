@@ -65,6 +65,9 @@ message config_object {
   // Slots kept for real apps (owner decision, Oct 22): once open allowances reach open_cap - app_reserved, only app plans
   // whose target is a deployed contract are sold. 0 (configs from before the field) reads as 10. Must be below open_cap.
   uint32 app_reserved = 34;
+  // audit-2026-10 C-1: free checkout (the station paying for a wallet's own buy, renew, cancel or claim) draws from its own
+  // station-wide rolling 24 h window, capped at this share of the daily budget. 0 reads as 500 (5%); 100 to 2000 allowed.
+  uint32 checkout_bp = 35;
 }
 
 // Carl's reserved app: a fixed RESERVATION of Mana per rolling 24 h (absolute, so adding KOIN never changes it;
@@ -169,6 +172,7 @@ message ticket_object {
   uint32 purchase_id = 8;                            // escrow purchase
   uint64 bought = 9 [jstype = JS_STRING];            // purchase time (weekly-cap slot, station wait)
   uint64 prev_last_buy = 10 [jstype = JS_STRING];    // UNUSED since audit #2 (the station-wide wait was removed)
+  uint32 fee_bp = 11;                                // audit-2026-10 E1 L-1: the fee in force at purchase (0 = before it was kept)
 }
 
 // Station-wide big-upload state. Debt is an estimate repaid at the sold slice's daily rate. Since audit #2 it only gates
@@ -228,7 +232,8 @@ message registry_object {
 // A council-guarded action (audit #1). kind: 1 upgrade the station's code (hash = multihash sha2-256 of the new
 // bytecode, "0x1220…" as shown in contract metadata), 2 withdraw KOIN (to, amount), 3 rescue a token sent by mistake
 // (token, to, amount; never escrowed funds), 4 replace the council (council, threshold), 5 set the delay (delay_ms),
-// 6 set the treasury (to), 7 set the ticket fee (fee_bp), 8 set the owner (to).
+// 6 set the treasury (to), 7 set the ticket fee (fee_bp), 8 set the owner (to), 9 settle a purchase frozen by sanctions
+// (purchase_id; amount = what goes back to the wallet that paid it, 0 or more; the rest is released to the treasury).
 // KCS-4 approve arguments, read by the free-checkout rule (the station pays a buyer's approve + buy).
 message kcs_approve_args {
   bytes owner = 1 [(koinos.btype) = ADDRESS];
@@ -246,6 +251,7 @@ message guarded_action {
   uint32 threshold = 7;
   uint64 delay_ms = 8 [jstype = JS_STRING];
   uint32 fee_bp = 9;
+  uint32 purchase_id = 10;                            // kind 9: the frozen purchase to settle
 }
 
 message proposal_object {
@@ -345,14 +351,27 @@ message escrow_object {
   uint64 slot_fee_per_day = 18 [jstype = JS_STRING];
   // AB-032: the limits this term was sold with (allowance terms). Absent = bought before AB-032: current settings apply.
   term_limits limits = 19;
+  // audit-2026-10 M-3: sanctions on the wallet that PAID this purchase freeze its funds: neither refunded nor released (by
+  // anyone) until a council decision (kind 9); lifting or reclassifying the suspension never clears it.
+  bool frozen = 20;
 }
 
-// Per token: held = Σ (amount − refunded − released) over all purchases; must equal the station's token balance.
+// Per token: held = Σ (amount − refunded − released) over all purchases. audit-2026-10 M-5: refunds and releases are
+// recorded as owed and paid out by claim, so the station's token balance = held + owed (plus anything sent by mistake).
 message escrow_totals_object {
   uint64 held = 1 [jstype = JS_STRING];
   uint64 collected = 2 [jstype = JS_STRING];
   uint64 refunded = 3 [jstype = JS_STRING];
   uint64 released = 4 [jstype = JS_STRING];
+  uint64 owed = 5 [jstype = JS_STRING];              // refunded + released, not yet claimed
+  uint64 claimed = 6 [jstype = JS_STRING];           // paid out by claim
+}
+
+// station.claimed
+message claim_event {
+  bytes token = 1 [(koinos.btype) = CONTRACT_ID];
+  bytes to = 2 [(koinos.btype) = ADDRESS];
+  uint64 amount = 3 [jstype = JS_STRING];
 }
 
 // station.escrow_refunded / station.escrow_released
@@ -391,6 +410,9 @@ message get_status_result {
   uint32 open_cap = 14;                               // effective (a stored 0 reads as 50)
   uint32 app_reserved = 15;                           // effective (a stored 0 reads as 10)
   uint64 slot_fee_per_day = 16 [jstype = JS_STRING];  // effective
+  uint64 checkout_used_24h = 17 [jstype = JS_STRING]; // audit-2026-10 C-1: free checkout's own rolling 24 h window
+  uint64 checkout_cap = 18 [jstype = JS_STRING];
+  bool reserve_low = 19;                              // audit-2026-10 M-7: Mana below alert_level right now (read this to monitor)
 }
 
 // @description One user's counters.
@@ -563,8 +585,9 @@ message close_ticket_result {
   uint64 released = 2 [jstype = JS_STRING];
 }
 
-// @description Buyer cancels an allowance: unused WHOLE days of every term are refunded from escrow (the current day
-// counts as used: 1 day minimum). Service continues to the end of the paid current day.
+// @description Buyer cancels an allowance: unused WHOLE days of every term are refunded from escrow as owed (claim it;
+// the current day counts as used: 1 day minimum). Service continues to the end of the paid current day. Refused when no
+// term has an unused day left (audit-2026-10 C-1: a cancel that changes nothing is never accepted, so never sponsored).
 // @read-only false
 message cancel_allowance_arguments {
   bytes buyer = 1 [(koinos.btype) = ADDRESS];
@@ -576,7 +599,8 @@ message cancel_allowance_result {
   uint64 expiry = 2 [jstype = JS_STRING];
 }
 
-// @description Buyer cancels a big-upload ticket: unused Mana refunded pro rata, minimum charge 20% of the ticket.
+// @description Buyer cancels a big-upload ticket: the value of the unused Mana, reduced by the time passed, is owed back
+// (claim it), always keeping the ticket fee in force at purchase (default 5%). Refused when there is nothing left to end.
 // @read-only false
 message cancel_big_upload_arguments {
   bytes buyer = 1 [(koinos.btype) = ADDRESS];
@@ -587,7 +611,8 @@ message cancel_big_upload_result {
   uint64 refund = 1 [jstype = JS_STRING];
 }
 
-// @description After a term ends (anyone may call): send the earned, unrefunded amount to Carl (treasury). Once.
+// @description After a term ends (anyone may call): record the earned, unrefunded amount as owed to the treasury (claim
+// pays it out). Once. Refused for a purchase frozen by sanctions.
 // @read-only false
 message release_arguments {
   uint32 purchase_id = 1;
@@ -597,9 +622,33 @@ message release_result {
   uint64 amount = 1 [jstype = JS_STRING];
 }
 
+// @description Pay out everything the station owes `to` in `token` (refunds and releases are recorded as owed first, so a
+// token that refuses one transfer can never block purchases: audit-2026-10 M-5). Anyone may call; the tokens only ever go
+// to `to`. Pays nothing when nothing is owed. Refused while `to` is suspended for sanctions.
+// @read-only false
+message claim_arguments {
+  bytes token = 1 [(koinos.btype) = CONTRACT_ID];
+  bytes to = 2 [(koinos.btype) = ADDRESS];
+}
+
+message claim_result {
+  uint64 amount = 1 [jstype = JS_STRING];
+}
+
+// @description What the station owes `who` in `token`, ready to claim.
+// @read-only true
+message get_owed_arguments {
+  bytes token = 1 [(koinos.btype) = CONTRACT_ID];
+  bytes who = 2 [(koinos.btype) = ADDRESS];
+}
+
+message get_owed_result {
+  uint64 amount = 1 [jstype = JS_STRING];
+}
+
 // @description Owner refunds unused value: an allowance (unused whole days, current day used) or a big-upload ticket
-// (unused Mana, no minimum charge). For buyers suspended without fault, or by owner choice. Refused while the buyer is
-// suspended for sanctions (reason 2): reclassify a false match as reason 4 first.
+// (unused Mana, no minimum charge). For buyers suspended without fault, or by owner choice. Refused for purchases frozen by
+// sanctions: only the council settles those (kind 9). Refused for purchases by the owner or a council member.
 // @read-only false
 message owner_refund_arguments {
   uint32 allowance_id = 1;
@@ -838,6 +887,16 @@ message approve_arguments {
 message approve_result {
   uint64 ready_at = 1 [jstype = JS_STRING];
 }
+
+// @description Withdraw your own approval from an open proposal (council member `signer`; audit-2026-10 G-04). Not a veto:
+// it sets no block. A proposal that drops below the threshold waits again from zero.
+// @read-only false
+message unapprove_arguments {
+  bytes signer = 1 [(koinos.btype) = ADDRESS];
+  uint32 id = 2;
+}
+
+message unapprove_result {}
 
 // @description Veto a pending proposal (any ONE council member).
 // @read-only false

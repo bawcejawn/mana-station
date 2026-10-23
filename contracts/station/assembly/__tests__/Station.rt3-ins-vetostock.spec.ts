@@ -96,7 +96,7 @@ function buyAccount(s: Station, target: Uint8Array, manaPerDay: u64, days: u64):
 }
 function inv(s: Station, token: Uint8Array): void {     // escrow invariants
   const t = s.get_escrow_totals(new station.get_escrow_totals_arguments(token)).totals!;
-  expect(testGetToken(token, STATION)).toBe(t.held);
+  expect(testGetToken(token, STATION)).toBe(t.held + t.owed);   // audit-2026-10 M-5: balance = held + owed
   expect(t.collected).toBe(t.held + t.refunded + t.released);
 }
 function cancelBy(s: Station, who: Uint8Array, id: u32): station.cancel_allowance_result {
@@ -274,7 +274,10 @@ describe("red team INSIDER rt3: two of five members keep kind 4 vetoed with a st
     at(v1 + 60 * DAYMS);
     expect(s.vetoBlocked(removeRogues(), NOW)).toBe(false,
       "AB-025: 60 days after the first veto, the 3-of-5 majority still can't carry out the removal of the two rogues (one more stocked dummy left)");
-    s.execute(new station.execute_arguments(rem));
+    // audit-2026-10 G-04: the first removal's approval (ready ~58 days ago) has expired; the majority proposes it again.
+    const rem2 = propose(s, C1, removeRogues()); voteFor(s, C2, rem2); voteFor(s, C3, rem2);
+    at(NOW + 2 * DAYMS); s.execute(new station.execute_arguments(rem2));
     expect(s.config.get()!.council.length).toBe(3);
+    expect(rem < rem2).toBe(true);
   });
 });

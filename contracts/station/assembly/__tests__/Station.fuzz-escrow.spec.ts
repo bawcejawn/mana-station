@@ -1,4 +1,4 @@
-// Audit Bot stateful fuzz (escrow), mana-station commit 4343f83, seed 22, 120 steps. Random valid sequences of buys, renewals,
+// Audit Bot stateful fuzz (escrow), seeds 11, 22, 33 and 44, 120 steps each (one file since audit-2026-10; it was four copies). Random valid sequences of buys, renewals,
 // cancels, owner refunds, releases, big-upload tickets (buy/use/cancel/close), pause/unpause and time jumps; after EVERY
 // step the escrow money must add up. Helpers below are copied unchanged from assembly/__tests__/Station.spec.ts (lines 1-117).
 /** Mana Station v2 on a simulated chain (MockVM). Mana, KOIN balance and stablecoins are test values. Run: npm test */
@@ -95,7 +95,7 @@ function buyAccount(s: Station, target: Uint8Array, manaPerDay: u64, days: u64):
 }
 function inv(s: Station, token: Uint8Array): void {     // escrow invariants
   const t = s.get_escrow_totals(new station.get_escrow_totals_arguments(token)).totals!;
-  expect(testGetToken(token, STATION)).toBe(t.held);
+  expect(testGetToken(token, STATION)).toBe(t.held + t.owed);   // audit-2026-10 M-5: balance = held + owed
   expect(t.collected).toBe(t.held + t.refunded + t.released);
 }
 function cancelBy(s: Station, who: Uint8Array, id: u32): station.cancel_allowance_result {
@@ -119,9 +119,9 @@ function setupA(): Station {
   s.set_app(new station.set_app_arguments(2, new station.app_object(100 * M, true)));
   signedBy([]); return s;
 }
-const SEED: u32 = 22;
+let SEED: u32 = 0;
 const STEPS: i32 = 120;
-let rs: u32 = SEED;
+let rs: u32 = 0;
 function rnd(): u32 { let x = rs; x ^= x << 13; x ^= x >> 17; x ^= x << 5; rs = x; return x; }
 function pick(n: u32): u32 { return rnd() % n; }
 const NB: i32 = 4;
@@ -132,13 +132,18 @@ let lastTicketBuy: u64[] = [0, 0, 0, 0];
 let nPurch: u32 = 0; let nextTarget: i32 = 0; let nextPayee: i32 = 0;
 let paused = false; let pausedAt: u64 = 0;
 let total0: u64 = 0;
+function resetModel(seed: u32): void {
+  SEED = seed; rs = seed; buyers = []; allowIds = []; allowBuyer = []; tPayees = []; tBuyer = []; lastTicketBuy = [0, 0, 0, 0];
+  nPurch = 0; nextTarget = 0; nextPayee = 0; paused = false; pausedAt = 0; total0 = 0;
+}
 function clock(): u64 { return paused ? pausedAt : NOW; }
 function holders(): Uint8Array[] { const h = new Array<Uint8Array>(); for (let i = 0; i < NB; i++) h.push(buyers[i]); h.push(STATION); h.push(OWNER); h.push(BUYER); h.push(U1); return h; }
 function totalTokens(): u64 { const h = holders(); let s: u64 = 0; for (let i = 0; i < h.length; i++) s += testGetToken(USDT, h[i]); return s; }
 function check(s: Station, step: i32, what: string): void {
   const where = "seed " + SEED.toString() + " step " + step.toString() + " (" + what + ")";
   const t = s.get_escrow_totals(new station.get_escrow_totals_arguments(USDT)).totals!;
-  expect(testGetToken(USDT, STATION)).toBe(t.held, "balance != held at " + where);
+  expect(testGetToken(USDT, STATION)).toBe(t.held + t.owed, "balance != held + owed at " + where);
+  expect(testGetToken(USDT, OWNER)).toBe(t.released, "treasury (owner) balance != released at " + where);   // per recipient
   expect(t.collected).toBe(t.held + t.refunded + t.released, "collected != held+refunded+released at " + where);
   expect(totalTokens()).toBe(total0, "tokens created or lost at " + where);
   for (let id: u32 = 1; id <= nPurch; id++) {
@@ -156,7 +161,14 @@ function openFor(s: Station, b: i32): i32 {
 }
 function daysOf(k: u32): u64 { return k == 0 ? 1 : (k == 1 ? 7 : 30); }
 describe("AUDIT fuzz: escrow money always adds up", () => {
-  it("seed 22", () => {
+  it("seed 11", () => { run(11); });
+  it("seed 22", () => { run(22); });
+  it("seed 33", () => { run(33); });
+  it("seed 44", () => { run(44); });
+});
+function run(seed: u32): void {
+  {
+    resetModel(seed);
     const s = setup();
     for (let i = 0; i < NB; i++) { buyers.push(user(700 + i)); testSetToken(USDT, buyers[i], 50 * USD); }
     total0 = totalTokens();
@@ -182,7 +194,7 @@ describe("AUDIT fuzz: escrow money always adds up", () => {
         }
       } else if (k == 3 && allowIds.length > 0) {
         const i = i32(pick(u32(allowIds.length))); const a = s.get_allowance(new station.get_allowance_arguments(allowIds[i])).allowance;
-        if (a != null && a.expiry > clock()) { cancelBy(s, buyers[allowBuyer[i]], a.id); what = "cancel"; }
+        if (a != null && a.expiry > clock() && s.hasUnused(a, clock())) { cancelBy(s, buyers[allowBuyer[i]], a.id); what = "cancel"; } // C-1: no no-op cancels
       } else if (k == 4 && allowIds.length > 0) {
         const i = i32(pick(u32(allowIds.length))); const a = s.get_allowance(new station.get_allowance_arguments(allowIds[i])).allowance;
         if (a != null) { signedBy([OWNER]); s.owner_refund(new station.owner_refund_arguments(a.id, null)); signedBy([]); what = "owner_refund"; }
@@ -218,5 +230,5 @@ describe("AUDIT fuzz: escrow money always adds up", () => {
       check(s, step, what);
     }
     log<string>("seed " + SEED.toString() + ": " + done.toString() + " actions, " + nPurch.toString() + " purchases");
-  });
-});
+  }
+}

@@ -184,6 +184,26 @@ export function main(): i32 {
       break;
     }
 
+    case 0xdd1b3c31: {
+      const args = Protobuf.decode<ProtoNamespace.claim_arguments>(
+        contractArgs.args,
+        ProtoNamespace.claim_arguments.decode
+      );
+      const res = c.claim(args);
+      retbuf = Protobuf.encode(res, ProtoNamespace.claim_result.encode);
+      break;
+    }
+
+    case 0xfd725d34: {
+      const args = Protobuf.decode<ProtoNamespace.get_owed_arguments>(
+        contractArgs.args,
+        ProtoNamespace.get_owed_arguments.decode
+      );
+      const res = c.get_owed(args);
+      retbuf = Protobuf.encode(res, ProtoNamespace.get_owed_result.encode);
+      break;
+    }
+
     case 0x15c837ec: {
       const args = Protobuf.decode<ProtoNamespace.owner_refund_arguments>(
         contractArgs.args,
@@ -400,6 +420,16 @@ export function main(): i32 {
       );
       const res = c.approve(args);
       retbuf = Protobuf.encode(res, ProtoNamespace.approve_result.encode);
+      break;
+    }
+
+    case 0x6008a826: {
+      const args = Protobuf.decode<ProtoNamespace.unapprove_arguments>(
+        contractArgs.args,
+        ProtoNamespace.unapprove_arguments.decode
+      );
+      const res = c.unapprove(args);
+      retbuf = Protobuf.encode(res, ProtoNamespace.unapprove_result.encode);
       break;
     }
 
