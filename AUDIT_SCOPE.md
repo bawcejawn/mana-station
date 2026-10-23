@@ -114,12 +114,13 @@ transactions.
 
 ## Deployments
 
-- **Testnet** (Koinos testnet, `testnet/playground.json`): Station `1JnSnBNHrKxWGwWeriuhK1DrG5rv3KRFqc` (playground v3,
-  an earlier build of this code, before the audit-2026-10 fixes; a v4 redeploy is pending), demo app `1JF71KYwaRa4XTfuL8fi4fkH8j4qUrN3Kn`, open app
-  `1MKjQ9zfcLetsQZD9g4JgdxoEpW6Z3kiQX`, mock stablecoin `1G85uRcAKiMPQjXv7jYc7VQWMe37NtNT2q`, testnet KOIN
-  `1FaSvLjQJsCJKq5ybmGsMMQs8RQYyVv8ju`, owner `1GcusCGwkbQWoRm4Vbwc8eLxNj8dCdKujf`, council
-  `1C5WCih2qyccDKzqMRAGbDP9x9LHL7Sqwb`, `1F7FqZ8jLhpwSAaYsmjbpL2DwvutGPDCx9`, `1nKNbSUmGQacouNmm4crc9aR1Td8jALyU`,
-  funder `1N6yd5SzAQaHe484vkV7pFhmYiGfQh2Cuy`.
+- **Testnet** (Koinos testnet, `testnet/playground.json`): Station `17cDBCCPLNtgAULweeiLeViBRKnaZFDGps` (playground v4,
+  the audit-2026-10 fixes), demo app `1Ehbp3bP8qv43bbwuSgHoLmW7NrdS6V6wU`, open app `1Vi2rdbDVQsog192TqzcVTunJkHbPGmNw`,
+  mock stablecoin `1YWtATASNeTD7hoimcfxg13W1TCvhfESa`, testnet KOIN `1FaSvLjQJsCJKq5ybmGsMMQs8RQYyVv8ju`, owner
+  `1GcusCGwkbQWoRm4Vbwc8eLxNj8dCdKujf`, council `1C5WCih2qyccDKzqMRAGbDP9x9LHL7Sqwb`,
+  `1F7FqZ8jLhpwSAaYsmjbpL2DwvutGPDCx9`, `1nKNbSUmGQacouNmm4crc9aR1Td8jALyU`, funder
+  `1B2fSvQjBMJWcekYsd8chTCf21dc58k64B` (testnet keys rotated on 2026-10-23 after O1-01; the audited tag used playground
+  v3 `1JnSnBNHrKxWGwWeriuhK1DrG5rv3KRFqc` and funder `1N6yd5SzAQaHe484vkV7pFhmYiGfQh2Cuy`, both retired).
 - **Mainnet:** not deployed. `1Mpmf2ERhjYpX7CCiM11WERuM4j17uT1sr` in the docs is Knode (Kpred), an existing mainnet
   game the Station would sponsor as a free app, not part of this repo.
 - **`contracts/station/config/mainnet.proposed.json`** is a proposal, not a deployed configuration. Placeholders: the

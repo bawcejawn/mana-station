@@ -8,9 +8,9 @@ Status on 2026-10-23 (branch `audit-2026-10-fixes`):
 - **Unit tests:** 265 of 265 pass (`contracts/station/assembly/__tests__/`; the audit's proofs are in
   `Station.audit-2026-10.spec.ts`; the escrow and slot-fee fuzzers check `balance = held + owed` after every step).
 - **Testnet:** `testnet/run_tests.mjs` (passes, free checkout, refunds owed and claimed).
-- **Playground:** station v3 (`1JnSnBNHrKxWGwWeriuhK1DrG5rv3KRFqc`) is live on the Koinos testnet and handed over to
-  Carl's wallets (owner + council 1–3). It runs the code from **before** the audit fixes; the site on this branch
-  calls `claim` and `get_owed`, so **redeploy the playground (v4) before publishing the site**.
+- **Playground:** station v4 (`17cDBCCPLNtgAULweeiLeViBRKnaZFDGps`, the audit-2026-10 fixed code, under testnet keys
+  rotated after O1-01) is live on the Koinos testnet and handed over to Carl's wallets (owner + council 1–3). The old
+  v3 station `1JnSnBNHrKxWGwWeriuhK1DrG5rv3KRFqc` still holds 110 tKOIN, which Carl's council can withdraw from it.
 - **Three ways in (Oct 20):** a **Mana pass** for a wallet, an **app plan** for a contract, and **free Mana** the owner gives their own apps. A wallet with no KOIN and no Mana can buy, renew and cancel (free checkout).
 - **Not done yet:** mainnet deployment, a legal review of the terms, and a domain.
 - **Audit Bot audit (2026-10-22, commit 4343f83):** fixes on branch `audit-fixes-1` (AB-001 … AB-022). Unit tests: 78
