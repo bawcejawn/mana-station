@@ -205,7 +205,7 @@ Once the station is serving Knode, switch off Knode's own sponsor: `set_sponsor_
   `0c37a13f80f5f852659c8518d21cf3152d32d5d7e973dbf83734e0183dc9ca61` (108,104 bytes); it replaces `7e000287…f855`
   (the audited build), which replaced `c67e1e52…`, `6d391134…` and `f2263538…`. Rebuild and update this line after
   any further contract change.
-- [ ] **Preflight (read-only, no key):** `NETWORK=mainnet node admin/preflight-mainnet.mjs > docs/preflight-mainnet.md`.
+- [x] **Preflight (read-only, no key)** — run 2026-10-23, all clear (`docs/preflight-mainnet.md`); repeat right before launch: `NETWORK=mainnet node admin/preflight-mainnet.mjs > docs/preflight-mainnet.md`.
   It checks that `get_contract_metadata` (system call 112) answers on mainnet (the reserved app slots need it: K1-04 /
   A1-10), vUSDT and vUSDC decimals = 8 (O1-09) and which pause, blocklist or owner powers their ABIs show (M-5), and
   prints the chain's resource prices. Exit code 2 means something to check. Confirm the stablecoins' powers with the
