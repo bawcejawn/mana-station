@@ -239,6 +239,29 @@ describe("AB-024 per-user cooldown", () => {
   });
 });
 
+describe("Daily action floor (same reason as AB-024)", () => {
+  it("day_actions may be exactly 24 (1 an hour), not 23", () => {
+    const s = setup();
+    const c = cfg(); c.day_actions = 24; setConfig(s, c);
+    const c2 = cfg(); c2.day_actions = 23;
+    configRefused(s, c2, "day_actions below 24 (1 an hour) would stop paid service");
+    const c3 = cfg(); c3.day_actions = 0;
+    configRefused(s, c3, "day_actions below 24 (1 an hour) would stop paid service");
+  });
+  it("an old stored config below 24 reads as 24: a user still gets 24 actions a day", () => {
+    const s = setup();
+    expect(play(s, U2, M)).toBe(true, "control: U2 is served");                   // U2 stops being a new user after 24 h
+    at(NOW + 2 * DAYMS);
+    const old = cfg(); old.day_actions = 1; s.config.put(old);                     // stored before the floor existed
+    expect(s.dayActions(s.config.get()!)).toBe(24, "1 reads as 24");
+    for (let i = 0; i < 24; i++) { at(NOW + 60_000); expect(play(s, U2, M)).toBe(true, "action " + (i + 1).toString() + " of 24"); }
+    at(NOW + 60_000); expect(play(s, U2, M)).toBe(false, "the 25th in 24 h is refused");
+  });
+  it("a stored day_actions above 24 is kept", () => {
+    const s = setup(); expect(s.dayActions(s.config.get()!)).toBe(25);
+  });
+});
+
 describe("AB-025 veto block by kind and target", () => {
   it("after a vetoed upgrade, no upgrade at all can be proposed for 14 days; then a new one is proposed, approved and uploaded", () => {
     const s = setup(); const start = NOW;
