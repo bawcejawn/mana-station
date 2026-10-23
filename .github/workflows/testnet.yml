@@ -2,6 +2,9 @@ name: testnet
 # Manual only. Free standard runner, 20-minute cap. Harbinger TESTNET only, throwaway keys from the TESTNET_KEYS secret.
 # AB-018 (Audit Bot, 2026-10-22): actions pinned to commit SHAs (tag in the comment); the keys file exists only inside
 # the steps that need it and is deleted when each one exits; every WIF, including keys derived at run time, is masked.
+# audit-2026-10 O1-01: masking applies to the live log only, never to files. The scripts print '::add-mask::<key>' so the
+# runner can mask; those lines are kept OUT of run.log, run.log is no longer uploaded, and a final check refuses to
+# upload anything that looks like a key. O1-08: npm ci --ignore-scripts (no dependency runs code at install time).
 on:
   workflow_dispatch:
     inputs:
@@ -22,6 +25,9 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -32,7 +38,7 @@ jobs:
           node-version: 20
       - name: Install
         working-directory: contracts/station
-        run: npm ci --no-audit --no-fund
+        run: npm ci --no-audit --no-fund --ignore-scripts
       - name: Unit tests (MockVM)
         working-directory: contracts/station
         # npm test first builds with the ABI generator, which sometimes fails to read its pipe (EAGAIN): retry up to 3 times.
@@ -76,10 +82,12 @@ jobs:
         run: |
           set -o pipefail
           umask 077; trap 'rm -f testnet/keys.testnet.json' EXIT
+          # Every line goes to the live (masked) log; mask commands never reach run.log (O1-01).
+          keeplog() { : > testnet/run.log; while IFS= read -r l; do printf '%s\n' "$l"; case "$l" in *::add-mask::*) ;; *) printf '%s\n' "$l" >> testnet/run.log;; esac; done; }
           printf '%s' "$TESTNET_KEYS" > testnet/keys.testnet.json
           case "$CMD" in deploy|status|handover|traffic|mint|fund|reclaim|sweep|recover) ;; *) echo "unknown playground command"; exit 1;; esac
           echo "$ARGS" | grep -Eq '^[1-9A-HJ-NP-Za-km-z0-9 .]*$' || { echo "args may only contain addresses and numbers"; exit 1; }
-          node testnet/playground.mjs "$CMD" $ARGS 2>&1 | tee testnet/run.log
+          node testnet/playground.mjs "$CMD" $ARGS 2>&1 | keeplog
       - name: Harbinger scenarios
         if: ${{ inputs.run_testnet == 'true' && inputs.playground == '' }}
         env:
@@ -90,8 +98,10 @@ jobs:
         run: |
           set -o pipefail
           umask 077; trap 'rm -f testnet/keys.testnet.json' EXIT
+          # Every line goes to the live (masked) log; mask commands never reach run.log (O1-01).
+          keeplog() { : > testnet/run.log; while IFS= read -r l; do printf '%s\n' "$l"; case "$l" in *::add-mask::*) ;; *) printf '%s\n' "$l" >> testnet/run.log;; esac; done; }
           printf '%s' "$TESTNET_KEYS" > testnet/keys.testnet.json
-          node testnet/run_tests.mjs 2>&1 | tee testnet/run.log
+          node testnet/run_tests.mjs 2>&1 | keeplog
       # Surface the outcome as annotations too (readable via the API when raw logs aren't reachable).
       # The scripts never print keys; stored WIFs are masked above and derived ones by the scripts (::add-mask::).
       - name: Report results as annotations
@@ -106,12 +116,22 @@ jobs:
       - name: Remove keys (safety net; each step already deletes its copy)
         if: always()
         run: rm -f testnet/keys.testnet.json
+      - name: Refuse to upload anything that looks like a key (O1-01)
+        if: always()
+        # A Koinos WIF is base58 starting with 5 (uncompressed) or K/L (compressed). Any hit stops the upload.
+        run: |
+          for f in testnet/results.json testnet/results.md; do
+            [ -f "$f" ] || continue
+            if grep -Eq '::add-mask::|(^|[^1-9A-HJ-NP-Za-km-z])(5[HJK]|[KL])[1-9A-HJ-NP-Za-km-z]{49,51}([^1-9A-HJ-NP-Za-km-z]|$)' "$f"; then
+              echo "::error::$f looks like it holds a private key: not uploading"; rm -f "$f"; exit 1
+            fi
+          done
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: testnet-results
+          # run.log is never uploaded (O1-01): its last lines are posted as an annotation, which the runner masks.
           path: |
             testnet/results.json
             testnet/results.md
-            testnet/run.log
           retention-days: 7
