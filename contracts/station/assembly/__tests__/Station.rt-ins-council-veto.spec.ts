@@ -14,6 +14,7 @@
 import { Base58, MockVM, authority, chain, System, protocol, Protobuf, Crypto } from "@koinos/sdk-as";
 import { Station, testSetMana, testSetBalance, testSetToken, testGetToken, VUSDT, VUSDC, ALLOWANCE_TERMS, BIG_TERMS, mulDiv } from "../Station";
 import { station } from "../proto/station";
+import { clearRevert, lastRevert, revertedWith } from "./lib/revert";   // AB-031 (audit-fixes-1)
 
 const STATION = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqe");
 const OWNER = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqG");
@@ -157,7 +158,7 @@ describe("red team INSIDER: two colluding council members override the third mem
     const nc = act(4); nc.council = [C1, C2, cm(4)]; nc.threshold = 2;
     signedBy([C1]); const id2 = s.propose(new station.propose_arguments(C1, nc)).id; gId = id2;
     signedBy([C3]); MockVM.commitTransaction();
-    expect(() => { gS!.cancel_proposal(new station.cancel_proposal_arguments(C3, gId)); }).toThrow("setup (by design, H1): C3 can't veto its own removal");
+    clearRevert(); expect(() => { gS!.cancel_proposal(new station.cancel_proposal_arguments(C3, gId)); }).toThrow("setup (by design, H1): C3 can't veto its own removal"); revertedWith("a member can't veto their own removal");
     signedBy([C2]); s.approve(new station.approve_arguments(C2, id2)); signedBy([]);
     at(NOW + 2 * DAYMS); s.execute(new station.execute_arguments(id2));
     MockVM.clearEvents();
@@ -166,8 +167,8 @@ describe("red team INSIDER: two colluding council members override the third mem
     // asserted with toThrow instead of being run bare (a bare refused call aborts the test). Every original SAFE assertion is kept.
     const a3 = act(1); a3.hash = h; gA3 = a3;
     signedBy([C1]); MockVM.commitTransaction();
-    expect(() => { gS!.propose(new station.propose_arguments(C1, gA3)); })
-      .toThrow("BROKEN: the vetoed upgrade was proposed again right after the vetoing member was removed");
+    clearRevert(); expect(() => { gS!.propose(new station.propose_arguments(C1, gA3)); })
+      .toThrow("BROKEN: the vetoed upgrade was proposed again right after the vetoing member was removed"); revertedWith("an action of this kind for this target was vetoed less than 14 days ago");
     signedBy([]);
     at(NOW + 2 * DAYMS);
     expect(upAuthAll(s, evil)).toBe(false,

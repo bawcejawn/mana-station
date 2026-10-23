@@ -13,6 +13,7 @@
 import { Base58, MockVM, authority, chain, System, protocol, Protobuf, Crypto } from "@koinos/sdk-as";
 import { Station, testSetMana, testSetBalance, testSetToken, testGetToken, VUSDT, VUSDC, ALLOWANCE_TERMS, BIG_TERMS, mulDiv } from "../Station";
 import { station } from "../proto/station";
+import { clearRevert, lastRevert, revertedWith } from "./lib/revert";   // AB-031 (audit-fixes-1)
 
 const STATION = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqe");
 const OWNER = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqG");
@@ -139,16 +140,16 @@ describe("RT impersonator: the station never buys, renews or pays from its own e
     expect(testGetToken(USDT, STATION)).toBe(400_000);
     expect(s.quote_allowance(new station.quote_allowance_arguments(USDT, 5 * M, 1)).available).toBe(true, "control: capacity left");
     signedBy([STATION, U1]); MockVM.commitTransaction();                 // U1 = the pass wallet, signs as target
-    expect(() => { xS!.buy_allowance(new station.buy_allowance_arguments(STATION, 2, U1, 5 * M, 1, USDT, 1000 * USD)); })
-      .toThrow("the station must not be accepted as a buyer (escrow would count money that never arrived)");
+    clearRevert(); expect(() => { xS!.buy_allowance(new station.buy_allowance_arguments(STATION, 2, U1, 5 * M, 1, USDT, 1000 * USD)); })
+      .toThrow("the station must not be accepted as a buyer (escrow would count money that never arrived)"); revertedWith("buyer must sign");
     signedBy([]); inv(s, USDT);
   });
   it("renew with payer = the station is refused", () => {
     const s = setup(); xS = s;
     xId = buyAccount(s, U2, 20 * M, 7).id;
     signedBy([STATION]); MockVM.commitTransaction();
-    expect(() => { xS!.renew(new station.renew_arguments(STATION, xId, 1, USDT, 1000 * USD)); })
-      .toThrow("the station must not be accepted as a renewal payer");
+    clearRevert(); expect(() => { xS!.renew(new station.renew_arguments(STATION, xId, 1, USDT, 1000 * USD)); })
+      .toThrow("the station must not be accepted as a renewal payer"); revertedWith("payer must sign");
     signedBy([]); inv(s, USDT);
   });
   it("buy_big_upload with buyer = the station is refused", () => {
@@ -156,8 +157,8 @@ describe("RT impersonator: the station never buys, renews or pays from its own e
     buyAccount(s, U2, 20 * M, 7);
     expect(s.quote_big_upload(new station.quote_big_upload_arguments(USDT, 50 * M)).available).toBe(true, "control: ticket for sale");
     signedBy([STATION, U1]); MockVM.commitTransaction();
-    expect(() => { xS!.buy_big_upload(new station.buy_big_upload_arguments(STATION, U1, 50 * M, USDT, 1000 * USD, true)); })
-      .toThrow("the station must not be accepted as a ticket buyer");
+    clearRevert(); expect(() => { xS!.buy_big_upload(new station.buy_big_upload_arguments(STATION, U1, 50 * M, USDT, 1000 * USD, true)); })
+      .toThrow("the station must not be accepted as a ticket buyer"); revertedWith("buyer must sign");
     signedBy([]); inv(s, USDT);
   });
 });

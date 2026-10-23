@@ -12,6 +12,7 @@
 import { Base58, MockVM, authority, chain, System, protocol, Protobuf, Crypto } from "@koinos/sdk-as";
 import { Station, testSetMana, testSetBalance, testSetToken, testGetToken, VUSDT, VUSDC, ALLOWANCE_TERMS, BIG_TERMS, mulDiv } from "../Station";
 import { station } from "../proto/station";
+import { clearRevert, lastRevert, revertedWith } from "./lib/revert";   // AB-031 (audit-fixes-1)
 
 const STATION = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqe");
 const OWNER = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqG");
@@ -137,8 +138,8 @@ function buyTicket(s: Station): station.buy_big_upload_result {
 let gTS: Station | null = null; let gTC: station.config_object | null = null;
 function ownerTicketMs(s: Station, ms: u64): void {
   gTS = s; signedBy([OWNER]); const c = cfg(); c.big_ticket_ms = ms; gTC = c; MockVM.commitTransaction();
-  expect(() => { gTS!.set_config(new station.set_config_arguments(gTC)); })
-    .toThrow("BROKEN (checkConfig, Station.ts:841-850): owner set big_ticket_ms = " + ms.toString() + " (no bound)");
+  clearRevert(); expect(() => { gTS!.set_config(new station.set_config_arguments(gTC)); })
+    .toThrow("BROKEN (checkConfig, Station.ts:841-850): owner set big_ticket_ms = " + ms.toString() + " (no bound)"); revertedWith("ticket lifetime: 1 hour to 7 days (0 = 24 h)");
   signedBy([]);
 }
 

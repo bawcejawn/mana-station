@@ -16,6 +16,7 @@
 import { Base58, MockVM, authority, chain, System, protocol, Protobuf, Crypto } from "@koinos/sdk-as";
 import { Station, testSetMana, testSetBalance, testSetToken, testGetToken, VUSDT, VUSDC, ALLOWANCE_TERMS, BIG_TERMS, mulDiv } from "../Station";
 import { station } from "../proto/station";
+import { clearRevert, lastRevert, revertedWith } from "./lib/revert";   // AB-031 (audit-fixes-1)
 
 const STATION = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqe");
 const OWNER = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqG");
@@ -141,12 +142,12 @@ describe("red team INSIDER: the owner silently stops paid service without the pa
     signedBy([OWNER]);
     const c = cfg(); c.hard_max = 0; gC = c;
     MockVM.commitTransaction();
-    expect(() => { gS!.set_config(new station.set_config_arguments(gC)); }).toThrow(
-      "BROKEN (Station.ts:59 pause credit): owner set hard_max = 0, every paid plan/pass is refused (Station.ts:471) while the escrow clock runs");
+    clearRevert(); expect(() => { gS!.set_config(new station.set_config_arguments(gC)); }).toThrow(
+      "BROKEN (Station.ts:59 pause credit): owner set hard_max = 0, every paid plan/pass is refused (Station.ts:471) while the escrow clock runs"); revertedWith("hard_max below 1 Mana would stop paid service");
     const c2 = cfg(); c2.admin_min = 2000 * M; gC = c2;
     MockVM.commitTransaction();
-    expect(() => { gS!.set_config(new station.set_config_arguments(gC)); }).toThrow(
-      "BROKEN: owner set admin_min above the station's Mana, every paid plan/pass is refused (Station.ts:472)");
+    clearRevert(); expect(() => { gS!.set_config(new station.set_config_arguments(gC)); }).toThrow(
+      "BROKEN: owner set admin_min above the station's Mana, every paid plan/pass is refused (Station.ts:472)"); revertedWith("admin_min above 10% of koin_amount would stop paid service");
     signedBy([]);
   });
   it("(b) connecting a paid app as a strict free app with no entries doesn't kill its paid plan", () => {
@@ -156,8 +157,8 @@ describe("red team INSIDER: the owner silently stops paid service without the pa
     // audit-fixes-1 adjustment: the fix REFUSES the attacker's setup step (it used to be accepted), so that step is now
     // asserted with toThrow instead of being run bare (a bare refused call aborts the test). Every original SAFE assertion is kept.
     gS = s; signedBy([OWNER]); MockVM.commitTransaction();
-    expect(() => { gS!.connect_app(new station.connect_app_arguments(SOLDAPP, M, true)); })
-      .toThrow("BROKEN: connect_app accepted a target with a live paid plan"); signedBy([]);
+    clearRevert(); expect(() => { gS!.connect_app(new station.connect_app_arguments(SOLDAPP, M, true)); })
+      .toThrow("BROKEN: connect_app accepted a target with a live paid plan"); revertedWith("this contract has a live paid allowance"); signedBy([]);
     at(NOW + 70_000); tx(U2, 2 * M, [op(SOLDAPP, EP_PLAY)]);
     expect(ok(s)).toBe(true,
       "BROKEN: owner's connect_app(strict, no entries) on the paid target makes Route A refuse every call (Station.ts:482-488); plan " + r.id.toString() + " is dead, no pause credit");

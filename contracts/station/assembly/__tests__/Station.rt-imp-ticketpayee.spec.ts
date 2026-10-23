@@ -12,6 +12,7 @@
 import { Base58, MockVM, authority, chain, System, protocol, Protobuf, Crypto } from "@koinos/sdk-as";
 import { Station, testSetMana, testSetBalance, testSetToken, testGetToken, VUSDT, VUSDC, ALLOWANCE_TERMS, BIG_TERMS, mulDiv } from "../Station";
 import { station } from "../proto/station";
+import { clearRevert, lastRevert, revertedWith } from "./lib/revert";   // AB-031 (audit-fixes-1)
 
 const STATION = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqe");
 const OWNER = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqG");
@@ -138,8 +139,8 @@ describe("RT impersonator: a big-upload ticket on someone else's payee", () => {
     expect(s.quote_big_upload(new station.quote_big_upload_arguments(USDT, 50 * M)).available).toBe(true, "control: a 50-Mana ticket is for sale");
     signedBy([BUYER]);                                                    // only the stranger signs; U2 does not
     MockVM.commitTransaction();
-    expect(() => { xS!.buy_big_upload(new station.buy_big_upload_arguments(BUYER, xPayee, 50 * M, USDT, 1000 * USD, false)); })
-      .toThrow("a ticket naming a payee who did not sign must be refused (else that payee is locked out of its own ticket)");
+    clearRevert(); expect(() => { xS!.buy_big_upload(new station.buy_big_upload_arguments(BUYER, xPayee, 50 * M, USDT, 1000 * USD, false)); })
+      .toThrow("a ticket naming a payee who did not sign must be refused (else that payee is locked out of its own ticket)"); revertedWith("the payee must approve (sign) this ticket");
     signedBy([U2]);
     expect(s.buy_big_upload(new station.buy_big_upload_arguments(U2, U2, 50 * M, USDT, 1000 * USD, true)).paid).toBe(250_000, "the victim can buy its own ticket");
     signedBy([]); inv(s, USDT);
@@ -148,8 +149,8 @@ describe("RT impersonator: a big-upload ticket on someone else's payee", () => {
     const s = setup(); xS = s; xPayee = KNODE;
     signedBy([BUYER]);
     MockVM.commitTransaction();
-    expect(() => { xS!.buy_big_upload(new station.buy_big_upload_arguments(BUYER, xPayee, 50 * M, USDT, 1000 * USD, false)); })
-      .toThrow("a ticket for Knode without Knode's signature must be refused");
+    clearRevert(); expect(() => { xS!.buy_big_upload(new station.buy_big_upload_arguments(BUYER, xPayee, 50 * M, USDT, 1000 * USD, false)); })
+      .toThrow("a ticket for Knode without Knode's signature must be refused"); revertedWith("the payee must approve (sign) this ticket");
     signedBy([BUYER, KNODE]);                                             // control: with the payee's consent it works
     expect(s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, KNODE, 50 * M, USDT, 1000 * USD, true)).paid).toBe(250_000, "consented ticket still sold");
     signedBy([]); inv(s, USDT);

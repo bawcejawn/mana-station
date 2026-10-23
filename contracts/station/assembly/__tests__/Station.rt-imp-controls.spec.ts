@@ -9,6 +9,7 @@
 import { Base58, MockVM, authority, chain, System, protocol, Protobuf, Crypto } from "@koinos/sdk-as";
 import { Station, testSetMana, testSetBalance, testSetToken, testGetToken, VUSDT, VUSDC, ALLOWANCE_TERMS, BIG_TERMS, mulDiv } from "../Station";
 import { station } from "../proto/station";
+import { clearRevert, lastRevert, revertedWith } from "./lib/revert";   // AB-031 (audit-fixes-1)
 
 const STATION = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqe");
 const OWNER = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqG");
@@ -136,29 +137,29 @@ describe("RT impersonator: acting as someone else is refused", () => {
   it("buyer fields: you can't buy in another wallet's name, nor a pass for a wallet that did not sign", () => {
     const s = setup(); xS = s;
     signedBy([U1, U2]); MockVM.commitTransaction();                      // BUYER did not sign
-    expect(() => { xS!.buy_allowance(new station.buy_allowance_arguments(BUYER, 2, U2, 5 * M, 1, USDT, 1000 * USD)); }).toThrow("buyer must sign");
+    clearRevert(); expect(() => { xS!.buy_allowance(new station.buy_allowance_arguments(BUYER, 2, U2, 5 * M, 1, USDT, 1000 * USD)); }).toThrow("buyer must sign"); revertedWith("buyer must sign");
     signedBy([BUYER]); MockVM.commitTransaction();                        // the pass wallet U2 did not sign
-    expect(() => { xS!.buy_allowance(new station.buy_allowance_arguments(BUYER, 2, U2, 5 * M, 1, USDT, 1000 * USD)); }).toThrow("pass wallet must sign");
+    clearRevert(); expect(() => { xS!.buy_allowance(new station.buy_allowance_arguments(BUYER, 2, U2, 5 * M, 1, USDT, 1000 * USD)); }).toThrow("pass wallet must sign"); revertedWith("the target app must approve (sign) this purchase");
     xId = buyAccount(s, SOLDAPP, 5 * M, 1).id;                            // renewal charged to BUYER without BUYER's signature
     signedBy([U2]); MockVM.commitTransaction();
-    expect(() => { xS!.renew(new station.renew_arguments(BUYER, xId, 1, USDT, 1000 * USD)); }).toThrow("renewal payer must sign");
+    clearRevert(); expect(() => { xS!.renew(new station.renew_arguments(BUYER, xId, 1, USDT, 1000 * USD)); }).toThrow("renewal payer must sign"); revertedWith("payer must sign");
     signedBy([]); inv(s, USDT);
   });
   it("cancel / close: only the buyer cancels; not the target, not the ticket's payee, not a stranger", () => {
     const s = setup(); xS = s;
     xId = buyAccount(s, U2, 10 * M, 7).id;
     signedBy([U1]); MockVM.commitTransaction();
-    expect(() => { xS!.cancel_allowance(new station.cancel_allowance_arguments(U1, xId)); }).toThrow("not your allowance");
-    expect(() => { xS!.cancel_allowance(new station.cancel_allowance_arguments(BUYER, xId)); }).toThrow("BUYER did not sign");
+    clearRevert(); expect(() => { xS!.cancel_allowance(new station.cancel_allowance_arguments(U1, xId)); }).toThrow("not your allowance"); revertedWith("not your allowance");
+    clearRevert(); expect(() => { xS!.cancel_allowance(new station.cancel_allowance_arguments(BUYER, xId)); }).toThrow("BUYER did not sign"); revertedWith("buyer must sign");
     signedBy([U2]); MockVM.commitTransaction();
-    expect(() => { xS!.cancel_allowance(new station.cancel_allowance_arguments(U2, xId)); }).toThrow("the target app is not the buyer");
+    clearRevert(); expect(() => { xS!.cancel_allowance(new station.cancel_allowance_arguments(U2, xId)); }).toThrow("the target app is not the buyer"); revertedWith("not your allowance");
     signedBy([BUYER, U1]);                                                // a consented ticket for U1, bought by BUYER
     s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U1, 50 * M, USDT, 1000 * USD, true));
     signedBy([U1]); MockVM.commitTransaction();
-    expect(() => { xS!.cancel_big_upload(new station.cancel_big_upload_arguments(U1, U1)); }).toThrow("the payee is not the ticket's buyer");
-    expect(() => { xS!.cancel_big_upload(new station.cancel_big_upload_arguments(BUYER, U1)); }).toThrow("BUYER did not sign");
+    clearRevert(); expect(() => { xS!.cancel_big_upload(new station.cancel_big_upload_arguments(U1, U1)); }).toThrow("the payee is not the ticket's buyer"); revertedWith("not your ticket");
+    clearRevert(); expect(() => { xS!.cancel_big_upload(new station.cancel_big_upload_arguments(BUYER, U1)); }).toThrow("BUYER did not sign"); revertedWith("buyer must sign");
     signedBy([]); MockVM.commitTransaction();
-    expect(() => { xS!.close_ticket(new station.close_ticket_arguments(U1)); }).toThrow("a running ticket can't be closed by anyone");
+    clearRevert(); expect(() => { xS!.close_ticket(new station.close_ticket_arguments(U1)); }).toThrow("a running ticket can't be closed by anyone"); revertedWith("ticket still valid");
     signedBy([]); inv(s, USDT);
   });
   it("a Mana pass pays only for its own wallet as payee (not the buyer, not a stranger)", () => {
@@ -173,28 +174,28 @@ describe("RT impersonator: acting as someone else is refused", () => {
     const a = act(2); a.to = OTHER; a.amount = 300 * M; xA = a;
     signedBy([C1]); xId = s.propose(new station.propose_arguments(C1, a)).id;
     MockVM.commitTransaction();
-    expect(() => { xS!.approve(new station.approve_arguments(C2, xId)); }).toThrow("C1 signing can't vote as C2");
-    expect(() => { xS!.approve(new station.approve_arguments(C1, xId)); }).toThrow("no double vote");
+    clearRevert(); expect(() => { xS!.approve(new station.approve_arguments(C2, xId)); }).toThrow("C1 signing can't vote as C2"); revertedWith("signer must sign");
+    clearRevert(); expect(() => { xS!.approve(new station.approve_arguments(C1, xId)); }).toThrow("no double vote"); revertedWith("already approved");
     signedBy([OWNER]); MockVM.commitTransaction();
-    expect(() => { xS!.approve(new station.approve_arguments(OWNER, xId)); }).toThrow("the owner is not a member");
-    expect(() => { xS!.propose(new station.propose_arguments(OWNER, xA)); }).toThrow("the owner can't propose");
+    clearRevert(); expect(() => { xS!.approve(new station.approve_arguments(OWNER, xId)); }).toThrow("the owner is not a member"); revertedWith("council members only");
+    clearRevert(); expect(() => { xS!.propose(new station.propose_arguments(OWNER, xA)); }).toThrow("the owner can't propose"); revertedWith("council members only");
     signedBy([U1]); MockVM.commitTransaction();
-    expect(() => { xS!.cancel_proposal(new station.cancel_proposal_arguments(U1, xId)); }).toThrow("an outsider can't veto");
-    expect(() => { xS!.cancel_proposal(new station.cancel_proposal_arguments(C3, xId)); }).toThrow("U1 signing can't veto as C3");
+    clearRevert(); expect(() => { xS!.cancel_proposal(new station.cancel_proposal_arguments(U1, xId)); }).toThrow("an outsider can't veto"); revertedWith("council members only");
+    clearRevert(); expect(() => { xS!.cancel_proposal(new station.cancel_proposal_arguments(C3, xId)); }).toThrow("U1 signing can't veto as C3"); revertedWith("signer must sign");
     signedBy([C2]); s.approve(new station.approve_arguments(C2, xId)); signedBy([]);
     at(NOW + 2 * DAYMS); s.execute(new station.execute_arguments(xId));
     MockVM.commitTransaction();
-    expect(() => { xS!.execute(new station.execute_arguments(xId)); }).toThrow("executed once only");
+    clearRevert(); expect(() => { xS!.execute(new station.execute_arguments(xId)); }).toThrow("executed once only"); revertedWith("proposal already closed");
     expect(testGetToken(KOIN, OTHER)).toBe(300 * M);
   });
   it("owner-only actions refuse a council member, a buyer and the station; resume is owner-only", () => {
     const s = setup(); xS = s;
     signedBy([C1]); MockVM.commitTransaction();
-    expect(() => { xS!.set_exempt(new station.set_exempt_arguments(OTHER, new station.exempt_object(0, false), false)); }).toThrow("council is not owner");
+    clearRevert(); expect(() => { xS!.set_exempt(new station.set_exempt_arguments(OTHER, new station.exempt_object(0, false), false)); }).toThrow("council is not owner"); revertedWith("owner only");
     signedBy([STATION]); MockVM.commitTransaction();
-    expect(() => { xS!.set_exempt(new station.set_exempt_arguments(OTHER, new station.exempt_object(0, false), false)); }).toThrow("station key is not owner");
+    clearRevert(); expect(() => { xS!.set_exempt(new station.set_exempt_arguments(OTHER, new station.exempt_object(0, false), false)); }).toThrow("station key is not owner"); revertedWith("owner only");
     signedBy([C1]); s.set_paused(new station.set_paused_arguments(true)); MockVM.commitTransaction();
-    expect(() => { xS!.set_paused(new station.set_paused_arguments(false)); }).toThrow("a council member can pause but not resume");
+    clearRevert(); expect(() => { xS!.set_paused(new station.set_paused_arguments(false)); }).toThrow("a council member can pause but not resume"); revertedWith("owner only");
     signedBy([]);
   });
   it("contract_call: yes only when the station's own code calls the token", () => {

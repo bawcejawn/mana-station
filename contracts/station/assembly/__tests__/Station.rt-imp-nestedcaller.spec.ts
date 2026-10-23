@@ -14,6 +14,7 @@
 import { Base58, MockVM, authority, chain, System, protocol, Protobuf, Crypto } from "@koinos/sdk-as";
 import { Station, testSetMana, testSetBalance, testSetToken, testGetToken, VUSDT, VUSDC, ALLOWANCE_TERMS, BIG_TERMS, mulDiv } from "../Station";
 import { station } from "../proto/station";
+import { clearRevert, lastRevert, revertedWith } from "./lib/revert";   // AB-031 (audit-fixes-1)
 
 const STATION = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqe");
 const OWNER = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqG");
@@ -151,34 +152,34 @@ describe("RT impersonator: owner / council / buyer signature used by a contract 
   it("a contract a council member calls can't propose a KOIN withdrawal in that member's name", () => {
     const s = setup(); xS = s; testSetBalance(1300 * M); xA = withdrawal();
     signedBy([C1]); viaContract(); MockVM.commitTransaction();
-    expect(() => { xS!.propose(new station.propose_arguments(C1, xA)); }).toThrow("propose relayed by another contract must be refused");
+    clearRevert(); expect(() => { xS!.propose(new station.propose_arguments(C1, xA)); }).toThrow("propose relayed by another contract must be refused"); revertedWith("signer must sign");
     direct(); signedBy([]);
   });
   it("a contract a council member calls can't add that member's approval", () => {
     const s = setup(); xS = s; testSetBalance(1300 * M);
     signedBy([C1]); xId = s.propose(new station.propose_arguments(C1, withdrawal())).id;  // direct, by C1
     signedBy([C2]); viaContract(); MockVM.commitTransaction();                            // C2 only signed a tx to EVIL
-    expect(() => { xS!.approve(new station.approve_arguments(C2, xId)); }).toThrow("approve relayed by another contract must be refused");
+    clearRevert(); expect(() => { xS!.approve(new station.approve_arguments(C2, xId)); }).toThrow("approve relayed by another contract must be refused"); revertedWith("signer must sign");
     direct(); signedBy([]);
   });
   it("a contract the owner calls can't make itself a free (exempt) app", () => {
     const s = setup(); xS = s;
     signedBy([OWNER]); viaContract(); MockVM.commitTransaction();
-    expect(() => { xS!.set_exempt(new station.set_exempt_arguments(EVIL, new station.exempt_object(0, false), false)); })
-      .toThrow("owner action relayed by another contract must be refused");
+    clearRevert(); expect(() => { xS!.set_exempt(new station.set_exempt_arguments(EVIL, new station.exempt_object(0, false), false)); })
+      .toThrow("owner action relayed by another contract must be refused"); revertedWith("owner only");
     direct(); signedBy([]);
   });
   it("a contract a council member calls can't pause the station", () => {
     const s = setup(); xS = s;
     signedBy([C3]); viaContract(); MockVM.commitTransaction();
-    expect(() => { xS!.set_paused(new station.set_paused_arguments(true)); }).toThrow("pause relayed by another contract must be refused");
+    clearRevert(); expect(() => { xS!.set_paused(new station.set_paused_arguments(true)); }).toThrow("pause relayed by another contract must be refused"); revertedWith("owner or council only");
     direct(); signedBy([]);
   });
   it("a contract a buyer calls can't cancel that buyer's plan (the minimum charge and the current day are lost)", () => {
     const s = setup(); xS = s; direct();
     xId = buyAccount(s, U2, 10 * M, 7).id;
     signedBy([BUYER]); viaContract(); MockVM.commitTransaction();
-    expect(() => { xS!.cancel_allowance(new station.cancel_allowance_arguments(BUYER, xId)); }).toThrow("cancel relayed by another contract must be refused");
+    clearRevert(); expect(() => { xS!.cancel_allowance(new station.cancel_allowance_arguments(BUYER, xId)); }).toThrow("cancel relayed by another contract must be refused"); revertedWith("buyer must sign");
     direct(); signedBy([]);
   });
 });

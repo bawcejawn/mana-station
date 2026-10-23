@@ -8,6 +8,7 @@
 import { Base58, MockVM, authority, chain, System, protocol, Protobuf, Crypto } from "@koinos/sdk-as";
 import { Station, testSetMana, testSetBalance, testSetToken, testGetToken, VUSDT, VUSDC, ALLOWANCE_TERMS, BIG_TERMS, mulDiv } from "../Station";
 import { station } from "../proto/station";
+import { clearRevert, lastRevert, revertedWith } from "./lib/revert";   // AB-031 (audit-fixes-1)
 
 const STATION = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqe");
 const OWNER = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqG");
@@ -140,6 +141,6 @@ describe("VERIFY AB-002 baseline: suspension no longer lets the owner keep a who
     expect(s.get_ticket(new station.get_ticket_arguments(U2)).ticket).toBeNull("the ticket was settled at suspension");
     at(NOW + 3 * DAYMS + 1);                                           // cfg(): big_ticket_ms = 3 days
     gS = s; signedBy([OWNER]); MockVM.commitTransaction();
-    expect(() => { gS!.close_ticket(new station.close_ticket_arguments(U2)); }).toThrow("nothing left to settle or confiscate"); signedBy([]);
+    clearRevert(); expect(() => { gS!.close_ticket(new station.close_ticket_arguments(U2)); }).toThrow("nothing left to settle or confiscate"); revertedWith("no ticket"); signedBy([]);
   });
 });

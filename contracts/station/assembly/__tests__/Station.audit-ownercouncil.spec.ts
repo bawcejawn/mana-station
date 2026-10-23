@@ -6,6 +6,7 @@
 import { Base58, MockVM, authority, chain, System, protocol, Protobuf, Crypto } from "@koinos/sdk-as";
 import { Station, testSetMana, testSetBalance, testSetToken, testGetToken, VUSDT, VUSDC, ALLOWANCE_TERMS, BIG_TERMS, mulDiv } from "../Station";
 import { station } from "../proto/station";
+import { clearRevert, lastRevert, revertedWith } from "./lib/revert";   // AB-031 (audit-fixes-1)
 
 const STATION = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqe");
 const OWNER = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqG");
@@ -130,6 +131,6 @@ describe("AUDIT owner on council", () => {
     testSetMana(1000 * M); testSetBalance(1000 * M);
     gC = cfg(); gC!.council = [OWNER, C2, C3];
     signedBy([STATION]); deployTx();
-    expect(() => { new Station().init(new station.init_arguments(gC)); }).toThrow("AB owner on council: init accepted the owner as a council member");
+    clearRevert(); expect(() => { new Station().init(new station.init_arguments(gC)); }).toThrow("AB owner on council: init accepted the owner as a council member"); revertedWith("the owner can't be a council member");
   });
 });

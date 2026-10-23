@@ -5,6 +5,7 @@
 import { Base58, MockVM, authority, chain, System, protocol, Protobuf, Crypto } from "@koinos/sdk-as";
 import { Station, testSetMana, testSetBalance, testSetToken, testGetToken, VUSDT, VUSDC, ALLOWANCE_TERMS, BIG_TERMS, mulDiv } from "../Station";
 import { station } from "../proto/station";
+import { clearRevert, lastRevert, revertedWith } from "./lib/revert";   // AB-031 (audit-fixes-1)
 
 const STATION = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqe");
 const OWNER = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqG");
@@ -127,14 +128,14 @@ describe("AUDIT mutation killers", () => {
     expect(q.available).toBe(true, "setup: ticket quote available");
     gArgs = new station.buy_big_upload_arguments(BUYER, U2, 50 * M, USDT, q.price - 1, true);
     signedBy([BUYER, U2]);                                  // audit-fixes-1 (AB-005): the payee signs its ticket too
-    expect(() => { gS!.buy_big_upload(gArgs!); }).toThrow("M0003: ticket bought above max_price");
+    clearRevert(); expect(() => { gS!.buy_big_upload(gArgs!); }).toThrow("M0003: ticket bought above max_price"); revertedWith("price above the accepted quote");
   });
   it("M0022: a suspended buyer can't cancel their own ticket", () => {
     gS = setup(); signedBy([BUYER, U2]);                    // audit-fixes-1 (AB-005): the payee signs its ticket too
     gS!.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U2, 50 * M, USDT, 1000 * USD, true));
-    signedBy([OWNER]); gS!.suspend_allowance(new station.suspend_allowance_arguments(BUYER, 1));
+    signedBy([OWNER]); gS!.suspend_allowance(new station.suspend_allowance_arguments(BUYER, 2)); // audit-fixes-1 (AB-031): sanctions keep the ticket (reasons 1, 3, 4 settle it at once, so the cancel failed with "no ticket")
     signedBy([BUYER]);
-    expect(() => { gS!.cancel_big_upload(new station.cancel_big_upload_arguments(BUYER, U2)); }).toThrow("M0022: suspended buyer cancelled");
+    clearRevert(); expect(() => { gS!.cancel_big_upload(new station.cancel_big_upload_arguments(BUYER, U2)); }).toThrow("M0022: suspended buyer cancelled"); revertedWith("buyer suspended: the unused share was refunded at suspension (sanctions: frozen)");
   });
   it("M0020: a new user's daily Mana cap stops sponsorship before the action count does", () => {
     const s = setup(); const who = user(42); let n = 0;

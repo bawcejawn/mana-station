@@ -13,6 +13,7 @@
 import { Base58, MockVM, authority, chain, System, protocol, Protobuf, Crypto } from "@koinos/sdk-as";
 import { Station, testSetMana, testSetBalance, testSetToken, testGetToken, VUSDT, VUSDC, ALLOWANCE_TERMS, BIG_TERMS, mulDiv } from "../Station";
 import { station } from "../proto/station";
+import { clearRevert, lastRevert, revertedWith } from "./lib/revert";   // AB-031 (audit-fixes-1)
 
 const STATION = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqe");
 const OWNER = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqG");
@@ -154,8 +155,8 @@ describe("red team INSIDER: an owner boost spends the Mana locked for a paid big
     // The 900-Mana boost (4.5x the 200-Mana budget) is refused; the largest boost allowed (buffer_bp = 20% of the
     // budget, 40 Mana) is set instead and the owner's wallets then play as much as the station lets them.
     gS = s; MockVM.commitTransaction();
-    expect(() => { gS!.set_app(new station.set_app_arguments(1, new station.app_object(80 * M, true, 900 * M, NOW + DAYMS))); })
-      .toThrow("BROKEN: a 900-Mana boost (4.5x the daily budget) was accepted");
+    clearRevert(); expect(() => { gS!.set_app(new station.set_app_arguments(1, new station.app_object(80 * M, true, 900 * M, NOW + DAYMS))); })
+      .toThrow("BROKEN: a 900-Mana boost (4.5x the daily budget) was accepted"); revertedWith("boosts above buffer_bp of the daily budget");
     s.set_app(new station.set_app_arguments(1, new station.app_object(80 * M, true, 40 * M, NOW + DAYMS)));
     signedBy([]);
     // 3. Fresh wallets of the owner play the boosted app; each accepted tx really uses its Mana (simulated).

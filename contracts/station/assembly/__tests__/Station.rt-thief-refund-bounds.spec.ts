@@ -14,6 +14,7 @@
 import { Base58, MockVM, authority, chain, System, protocol, Protobuf, Crypto } from "@koinos/sdk-as";
 import { Station, testSetMana, testSetBalance, testSetToken, testGetToken, VUSDT, VUSDC, ALLOWANCE_TERMS, BIG_TERMS, mulDiv } from "../Station";
 import { station } from "../proto/station";
+import { clearRevert, lastRevert, revertedWith } from "./lib/revert";   // AB-031 (audit-fixes-1)
 
 const STATION = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqe");
 const OWNER = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqG");
@@ -135,8 +136,8 @@ describe("THIEF: refunds never exceed payment, never go to the wrong wallet, nev
     const s = setup(); gS = s; const T = NOW;
     const r = buyAccount(s, U2, 10 * M, 1);                                    // BUYER pays 30,000
     signedBy([U1]); s.renew(new station.renew_arguments(U1, r.id, 7, USDT, 1000 * USD)); signedBy([]); // U1 pays 200,000 (future term)
-    MockVM.commitTransaction(); expect(() => { gS!.release(new station.release_arguments(2)); }).toThrow("SAFE: future term can't be released before it ends");
-    signedBy([U1]); MockVM.commitTransaction(); expect(() => { gS!.cancel_allowance(new station.cancel_allowance_arguments(U1, 1)); }).toThrow("SAFE: renewal payer is not the allowance buyer"); signedBy([]);
+    MockVM.commitTransaction(); clearRevert(); expect(() => { gS!.release(new station.release_arguments(2)); }).toThrow("SAFE: future term can't be released before it ends"); revertedWith("term not ended: funds stay in escrow");
+    signedBy([U1]); MockVM.commitTransaction(); clearRevert(); expect(() => { gS!.cancel_allowance(new station.cancel_allowance_arguments(U1, 1)); }).toThrow("SAFE: renewal payer is not the allowance buyer"); revertedWith("not your allowance"); signedBy([]);
     at(T + 2 * HOUR);
     cancelBy(s, BUYER, r.id);
     expect(testGetToken(USDT, BUYER)).toBe(1000 * USD - 30_000, "SAFE: BUYER gets none of U1's money");
@@ -166,9 +167,9 @@ describe("THIEF: refunds never exceed payment, never go to the wrong wallet, nev
     const s = setup(); gS = s;
     signedBy([BUYER, U1]); s.buy_big_upload(new station.buy_big_upload_arguments(BUYER, U1, 100 * M, USDT, 1000 * USD, false)); // 500,000
     expect(s.cancel_big_upload(new station.cancel_big_upload_arguments(BUYER, U1)).refund).toBe(475_000, "SAFE: immediate cancel keeps the 5% fee");
-    MockVM.commitTransaction(); expect(() => { gS!.cancel_big_upload(new station.cancel_big_upload_arguments(BUYER, U1)); }).toThrow("SAFE: no second cancel");
+    MockVM.commitTransaction(); clearRevert(); expect(() => { gS!.cancel_big_upload(new station.cancel_big_upload_arguments(BUYER, U1)); }).toThrow("SAFE: no second cancel"); revertedWith("no ticket");
     signedBy([]);
-    MockVM.commitTransaction(); expect(() => { gS!.close_ticket(new station.close_ticket_arguments(U1)); }).toThrow("SAFE: no settle after cancel");
+    MockVM.commitTransaction(); clearRevert(); expect(() => { gS!.close_ticket(new station.close_ticket_arguments(U1)); }).toThrow("SAFE: no settle after cancel"); revertedWith("no ticket");
     expect(testGetToken(USDT, BUYER)).toBe(1000 * USD - 25_000, "SAFE: exactly the fee lost");
     inv(s, USDT);
     const B2 = user(77); testSetToken(USDT, B2, 10 * USD);

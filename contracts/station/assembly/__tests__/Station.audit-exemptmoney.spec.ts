@@ -6,6 +6,7 @@
 import { Base58, MockVM, authority, chain, System, protocol, Protobuf, Crypto } from "@koinos/sdk-as";
 import { Station, testSetMana, testSetBalance, testSetToken, testGetToken, VUSDT, VUSDC, ALLOWANCE_TERMS, BIG_TERMS, mulDiv } from "../Station";
 import { station } from "../proto/station";
+import { clearRevert, lastRevert, revertedWith } from "./lib/revert";   // AB-031 (audit-fixes-1)
 
 const STATION = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqe");
 const OWNER = Base58.decode("1DQzuCcTKacbs9GGScRTU1Hc8BsyARTPqG");
@@ -125,15 +126,15 @@ describe("AUDIT exempt money: set_exempt on a token contract", () => {
   it("set_exempt refuses KOIN and stablecoins like connect_app does", () => {
     gS2 = setup();
     signedBy([OWNER]);
-    expect(() => { gS2!.set_exempt(new station.set_exempt_arguments(USDT, new station.exempt_object(0, false), false)); })
-      .toThrow("AB exempt money: set_exempt accepted vUSDT as a free app");
+    clearRevert(); expect(() => { gS2!.set_exempt(new station.set_exempt_arguments(USDT, new station.exempt_object(0, false), false)); })
+      .toThrow("AB exempt money: set_exempt accepted vUSDT as a free app"); revertedWith("token contracts (KOIN, stablecoins) cannot be sponsored");
   });
   it("(impact) no stablecoin transfer is station-paid", () => {
     // audit-fixes-1 adjustment: the fix REFUSES the attacker's setup step (it used to be accepted), so that step is now
     // asserted with toThrow instead of being run bare (a bare refused call aborts the test). Every original SAFE assertion is kept.
     const s = setup(); gS2 = s; signedBy([OWNER]); MockVM.commitTransaction();
-    expect(() => { gS2!.set_exempt(new station.set_exempt_arguments(USDT, new station.exempt_object(0, false), false)); })
-      .toThrow("AB exempt money: set_exempt accepted vUSDT as a free app"); signedBy([]);
+    clearRevert(); expect(() => { gS2!.set_exempt(new station.set_exempt_arguments(USDT, new station.exempt_object(0, false), false)); })
+      .toThrow("AB exempt money: set_exempt accepted vUSDT as a free app"); revertedWith("token contracts (KOIN, stablecoins) cannot be sponsored"); signedBy([]);
     tx(U2, 1 * M, [op(USDT, EP_TRANSFER)]);
     expect(ok(s)).toBe(false, "AB exempt money: the station paid for a vUSDT transfer");
   });
