@@ -218,7 +218,7 @@ const DEFAULT_TICKET_MS: u64 = 86_400_000; // ticket lifetime when big_ticket_ms
 const DEFAULT_MAX_PER_BUYER: u32 = 5; // audit #3: open allowances per buyer when max_per_buyer = 0
 const SWEEP_MAX: i32 = 8; // audit #4: finished purchases closed per buy / renew
 const TX_BUFFER: u32 = 64 * 1024; // normal sponsored txs
-const BIG_TX_BUFFER: u32 = 1024 * 1024; // big-upload ticket txs (contract bytecode)                            // open escrow terms per allowance
+const BIG_TX_BUFFER: u32 = 1024 * 1024; // big-upload ticket txs (contract bytecode); headroom only, see authorize
 const DEFAULT_ALERT_MANA: u64 = 15_000 * MANA; // Carl: alert below 15k by default
 const MAX_WHOLE_MANA: u64 = 100_000_000; // quote bound (no u64 overflow with prices <= MAX_UNIT_PRICE)
 const MAX_UNIT_PRICE: u64 = 10_000_000_000; // 100 tokens per 1,000 Mana(/day)
@@ -1158,8 +1158,8 @@ export class Station {
     const payee = pf == null ? new Uint8Array(0) : pf.bytes_value;
     if (payee.length == 0) return false;
     // The SDK's system-call buffer is 1 KiB by default: reading the operations of a bigger tx (a contract upload, long
-    // args) would fail. Enlarge it; a big-upload ticket holder may send a whole contract (UNVERIFIED max tx size:
-    // measure on testnet).
+    // args) would fail. Enlarge it; a big-upload ticket holder may send a whole contract. The chain's own transaction
+    // limits stop a big upload at about 460 KB of bytecode (audit-2026-10 Info), well inside this buffer.
     System.setSystemBufferSize(this.tickets.has(payee) ? BIG_TX_BUFFER : TX_BUFFER);
     return this.decide(c, payee, rc, txOps());
   }

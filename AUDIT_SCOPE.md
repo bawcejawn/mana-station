@@ -1,7 +1,8 @@
 # Mana Station: scope for an independent audit
 
-Version under review: branch `audit-fixes-1`, the commit that adds this file. This is the version we intend to deploy
-to Koinos mainnet. It is not deployed there yet.
+Version under review: branch `audit-fixes-1`, the commit that adds this file (tag `audit-2026-10`). The findings of
+that audit are fixed or accepted on branch `audit-2026-10-fixes` (accepted items: `docs/LAUNCH.md` section 8); the
+facts below are updated to that branch. Nothing is deployed on Koinos mainnet yet.
 
 ## What Mana Station is
 
@@ -15,8 +16,8 @@ wallet's own transactions), **app plans** (daily Mana for every user of one app 
 Buyers pay in a stablecoin (vUSDT or vUSDC). Payments are held in escrow inside the contract and released to the
 treasury as each term ends; cancels, owner refunds and suspensions refund the unused share by fixed rules. Day-to-day
 settings belong to an **owner**. Anything that moves money out of escrow or the Station's KOIN, changes the code, the
-council, the owner, the treasury or the waiting period goes through a **council** (2 of 3, a 48-hour public wait,
-vetoes). The site, a browser extension and admin scripts sit around the contract.
+council, the owner, the treasury or the waiting period goes through a **council** (2 of 3; 3 to 7 members allowed, threshold below the
+size; a 48-hour public wait, vetoes). The site, a browser extension and admin scripts sit around the contract.
 
 ## Map of the repository
 
@@ -26,7 +27,7 @@ vetoes). The site, a browser extension and admin scripts sit around the contract
 | `contracts/testapp/`, `contracts/mocktoken/` | A demo app and a mock stablecoin, testnet only. Their `node_modules` are committed symlinks to `../station/node_modules`. |
 | `helper/wallet-helper/` | The browser extension ("helper"): sets the Station as payer on a site's Kondor signing request when the Station would pay. `src/` (page.js in the page's world, bridge.js in the extension's world, background.js), `build.mjs`, tests in `test/` (node, Chromium, a manual check). |
 | `site/` | The website: built pages (`*.html`), their sources (`src/`), wallet code (`wallets.js`, `ms.js`), generated data (`abis.js`, `playground.js`) and tools (`tools/`: page build, CSP-hash test, helper-page test, publish script). |
-| `admin/` | `station-admin.mjs`: the owner's command-line tool (signs with a key from `ADMIN_WIF` or a hidden prompt). |
+| `admin/` | Owner and council tools with no npm packages (koilib loaded from its pinned, SRI-checked bundle): `station-admin.mjs` (owner / council actions, each shown in full and confirmed before signing), `deploy-station.mjs` (deploy + init in one transaction, read back), `preflight-mainnet.mjs` (read-only mainnet checks), `measure.mjs` (costs on a node). Keys from `ADMIN_WIF` or a hidden prompt; each tool is pinned to one network. |
 | `testnet/` | Testnet playground and scenario scripts (`playground.mjs`, `run_tests.mjs`, `genkeys.mjs`), `playground.json` (public testnet addresses) and its README. Keys file `keys.testnet.json` is git-ignored. |
 | `.github/workflows/testnet.yml` | The only CI workflow: manual; unit tests, testnet and mainnet builds, `check:mainnet`, optional testnet runs with throwaway keys from a repository secret. |
 | `docs/LAUNCH.md` | Who can do what, launch checklist, release sha256, known limits. |
@@ -61,19 +62,20 @@ These have so far only been tested in MockVM, never on a real chain:
 
 ## How to build and test (from a fresh clone)
 
-Verified on 2026-10-23 from a fresh clone on Windows with Node v24.22.0 and npm 11.19.1. CI uses Node 20 on Ubuntu.
+Verified for `audit-fixes-1` on 2026-10-23 from a fresh clone on Windows with Node v24.22.0 and npm 11.19.1. CI uses Node 20 on Ubuntu.
 
 ```sh
-git clone -b audit-fixes-1 https://github.com/bawcejawn/mana-station.git && cd mana-station
+git clone -b audit-2026-10-fixes https://github.com/bawcejawn/mana-station.git && cd mana-station
 
-# Station contract: unit and attack tests (244), release build, mainnet check
+# Station contract: unit and attack tests (265), release build, mainnet check
 cd contracts/station
 npm ci
-npm test                      # builds the test build (build/sim/) and runs as-pect: 244 tests, 5 skipped
+npm test                      # builds the test build (build/sim/) and runs as-pect: 265 tests, 5 skipped
 npm run build                 # release build: build/release/contract.wasm
 npm run check:mainnet         # refuses anything that isn't a fresh release build
 sha256sum build/release/contract.wasm
-#   expected: 7e0002878967440091faed76b3e31f7a3e75d15ba9d279b19a7481c315d4f855  (101,009 bytes)
+#   expected: 0c37a13f80f5f852659c8518d21cf3152d32d5d7e973dbf83734e0183dc9ca61  (108,104 bytes)
+#   (the audited tag audit-2026-10 built 7e0002878967440091faed76b3e31f7a3e75d15ba9d279b19a7481c315d4f855, 101,009 bytes)
 sh scripts/check-mainnet.audit-testingbuild.test.sh   # AB-007: a testing build must be refused
 cd ../..
 
@@ -98,12 +100,13 @@ On Windows the shell test needs LF line endings (`tr -d '\r'` into a copy next t
 `npm test` / `npm run build` downloads a few helper packages the first time it runs, and occasionally fails to read its
 input pipe (EAGAIN); CI retries it.
 
-**Results at this commit:** contract 244 passed, 5 skipped (the proofs of accepted items below); helper node tests 40
-passed; Chromium 19/19 and 3/3; site 11 + 3 passed; AB-007 script passed. Rebuilt site pages are byte-identical to the
+**Results on `audit-2026-10-fixes`:** contract 265 passed, 5 skipped (the proofs of accepted items below); helper node
+tests 46 passed; Chromium 19/19 and 3/3; site 11 + 3 passed; AB-007 script passed. Rebuilt site pages are byte-identical to the
 committed ones. The release sha256 above is the same built on Windows and on Linux.
 
 **Toolchain (pinned in `contracts/station/package-lock.json`):** AssemblyScript 0.27.37, @koinos/sdk-as 1.5.1,
-@koinos/sdk-as-cli 1.0.2, @koinos/mock-vm 1.3.0, @as-pect/cli 8.1.0, koilib 9.4.1, protoc (from node_modules) 36.2.
+@koinos/sdk-as-cli 1.0.2, @koinos/mock-vm 1.3.0, @as-pect/cli 8.1.0, koilib 9.4.1, protoc 36.2, pinned by version and per-platform sha256 (`contracts/station/scripts/protoc-pin.cjs`, run by the
+prebuild step: a download with another checksum is refused).
 Chromium checks: Python with Playwright (verified with Playwright 1.64.1, Chromium 156).
 
 Not run for this scope: `helper/wallet-helper/test/live_test.py` and the scripts in `testnet/`, which send real testnet
@@ -112,7 +115,7 @@ transactions.
 ## Deployments
 
 - **Testnet** (Koinos testnet, `testnet/playground.json`): Station `1JnSnBNHrKxWGwWeriuhK1DrG5rv3KRFqc` (playground v3,
-  an earlier build of this code), demo app `1JF71KYwaRa4XTfuL8fi4fkH8j4qUrN3Kn`, open app
+  an earlier build of this code, before the audit-2026-10 fixes; a v4 redeploy is pending), demo app `1JF71KYwaRa4XTfuL8fi4fkH8j4qUrN3Kn`, open app
   `1MKjQ9zfcLetsQZD9g4JgdxoEpW6Z3kiQX`, mock stablecoin `1G85uRcAKiMPQjXv7jYc7VQWMe37NtNT2q`, testnet KOIN
   `1FaSvLjQJsCJKq5ybmGsMMQs8RQYyVv8ju`, owner `1GcusCGwkbQWoRm4Vbwc8eLxNj8dCdKujf`, council
   `1C5WCih2qyccDKzqMRAGbDP9x9LHL7Sqwb`, `1F7FqZ8jLhpwSAaYsmjbpL2DwvutGPDCx9`, `1nKNbSUmGQacouNmm4crc9aR1Td8jALyU`,
@@ -130,13 +133,15 @@ No key material is in the repository or its history.
 | Role | What it can do | Where its key is meant to live |
 |---|---|---|
 | Owner | Day-to-day settings within contract bounds (limits, prices, free apps), suspend buyers, owner refunds, resume after a pause. Never a council member. | An offline wallet; used through `admin/station-admin.mjs` or the owner page. |
-| Council (3 members, 2 needed) | Propose, approve and veto guarded actions: upgrade, KOIN withdrawal, token rescue, council, owner, treasury, waiting period, higher ticket fee; any one member can pause. | Three wallets on three separate devices, ideally three people. |
+| Council (3 members, 2 needed) | Propose, approve and veto guarded actions: upgrade, KOIN withdrawal, token rescue, council, owner, treasury, waiting period, higher ticket fee, settling a purchase frozen by sanctions; any one member can pause. | Three plain wallets (not contract accounts) on three separate devices, ideally three people. |
 | Treasury | Receives released escrow. No powers. | Any external wallet (default: the owner wallet). |
 | Operators | Owner and council: their transactions to the Station may be paid by it, under the same per-user limits. | As above. |
 | The Station's own contract key | Nothing on its own: it can't move the Station's tokens, replace its code, or re-run `init`. Needed once, to upload and init in one transaction. | Offline; not needed after deployment. |
 | Testnet keys | Testnet funder, mock token and derived playground keys; testnet only. | Repository secret `TESTNET_KEYS` (CI) or the git-ignored `testnet/keys.testnet.json`; derived keys are masked in CI logs. |
 
 ## Design decisions and accepted items
+
+The items accepted after the audit-2026-10 report, with reasons, are in `docs/LAUNCH.md` section 8. Earlier ones:
 
 - **Slot squat (AB-023), accepted:** holding all 50 open slots costs about 50 × the $0.02-a-day slot fee (about $1 a
   day). Renewals and existing customers are never blocked; the response is the daily 80% alert.

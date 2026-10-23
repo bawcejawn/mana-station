@@ -2,7 +2,7 @@
 //   npm run check:mainnet                       checks build/release/contract.wasm
 //   npm run check:mainnet -- path/to/file.wasm  checks the file you will actually upload
 //   npm run check:mainnet -- --release [file]   also requires a clean working tree at a release tag (audit-2026-10
-//                                               O1-07): use this for the real deploy (scripts/deploy-mainnet.mjs does)
+//                                               O1-07): use this right before admin/deploy-station.mjs
 // AB-007 (audit-fixes-1): it reads the file first, then rebuilds with `npm run build` (BUILD_FOR_TESTING=0) and compares
 // sha256. A testing build (`npm run build:sim`, now written to build/sim/), a testnet build or any stale or edited file
 // is refused. The rebuilt wasm must also embed the real vUSDT/vUSDC addresses and no mock (MOCK_STABLE), with net.ts

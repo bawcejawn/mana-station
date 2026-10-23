@@ -67,7 +67,7 @@ Kondor's 1.1× margin fits (about 90% of the limit used).
 
 **Found on testnet:**
 1. **Fixed:** a freshly uploaded station refused its own txs before init, so it could never be set up.
-2. **This node rejects a reverting sponsored call at submission,** so the station pays nothing. Docs assumed it would be included and charged.
+2. **This node rejects a sponsored call that reverts at submission,** so the station pays nothing *for that one*. That holds only at submission: a transaction that passes the node's check and then reverts in a block (state changed in between, or a different node) is included and charged to the station, like any reverted transaction is charged to its payer (audit-2026-10 Info). The station's limits count it either way.
 3. **The mempool holds each tx's full rc limit for a while,** so wallets need limits near real costs.
 4. **Open (product):** tickets deduct the tx's rc LIMIT, not the Mana actually used (5 Mana limit, 2 Mana used → ticket at 0). Charging `rc_used` isn't possible inside authorize (it runs before execution). Options: tell buyers to set tight limits (the helper can), or accept it as the cost of safety.
 5. **One sponsored tx per player per block:** consecutive actions must land in different blocks (about 3 s apart). Fine for typical play; the helper's own-Mana fallback covers bursts.

@@ -34,11 +34,13 @@
     "treasury": "empty = release destination is the owner wallet (DECIDED by Carl 5:18 PM; since 7:47 PM payments are escrowed first). Owner-changeable to another external wallet; the station's own id is refused",
     "buffer_bp": 2000,
     "alert_mana": "1500000000000",
-    "max_per_buyer": 5
+    "max_per_buyer": 5,
+    "checkout_bp": 500,
+    "_checkout_bp": "audit-2026-10 C-1 (Carl, Oct 23): free checkout (wallets with no Mana buying, renewing, cancelling, claiming) shares one Station-wide 24 h window capped at this share of the daily budget: 500 = 5% (300 Mana a day at 30,000 KOIN). 0 reads as 500; otherwise 100 to 2000"
   },
   "_derived_at_30k": {
     "daily_budget": "6,000 Mana a day (20% of 30,000 KOIN), about 37,000 simple actions a day",
-    "reserve": "80% of koin_amount; big floor = admin_min + daily budget",
+    "reserve": "80% of koin_amount; every route except big-upload tickets stops at admin_min + the Mana locked by open tickets; a ticket needs only admin_min + the other tickets' locks (audit-2026-10 M-1)",
     "split": "DECIDED by Carl (Oct 21, 5:44 PM): Knode 1,500 + Stories 1,500 free a day; 3,000 Mana a day left to sell (passes, app plans, upload tickets). Owner-adjustable on the Owner page."
   },
   "apps": {

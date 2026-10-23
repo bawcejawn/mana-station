@@ -47,12 +47,14 @@ Set the Mana Station as the fee payer of Koinos transactions it will pay for, be
 ## Data use disclosures
 - Declare: **Financial and payment information** (the wallet address and the transaction about to be signed) and **Website content** (the transaction's operations, which the site created). Both are sent only to the public Koinos node, only to ask the station whether it will pay, before the user approves. Nothing is sent to the developer.
 - Not sold, not used for unrelated purposes, not used for creditworthiness. Complies with the Limited Use requirements.
-- The helper doesn't announce itself to websites: the on/off state goes only to the Mana Station site's own pages, and it
-  answers only questions its own page script asks. That question and its answer travel on a private channel named with a
-  per-page-load secret, handled only with built-in functions saved before the site's scripts run (no Promises, no
-  objects the page can hook). Tested (node and Chromium, test/chromium_secret_check.py): a site that asks the wallet to
-  sign, and replaces built-ins or adds prototype getters such as Object.prototype.then, can't read the question, the
-  answer or the secret. It can still notice that something read its own signing request.
+- The helper doesn't announce itself to websites: only the Mana Station site's own pages are told it's on. Its own page
+  script learns the on/off setting, asks its question and gets the answer on a private channel named with a per-page-load
+  secret, handed over by its isolated script at page start (audit-2026-10 W1-01: nothing a page can pre-set), and handled
+  only with built-in functions saved before the site's scripts run (no Promises, no objects the page can hook). Tested
+  (node and Chromium, test/chromium_secret_check.py): a site that asks the wallet to sign, and replaces built-ins or adds
+  prototype getters such as Object.prototype.then, can't read the question, the answer or the secret, or answer for the
+  helper. **It is not invisible** (audit-2026-10 W1-02): a site that looks closely can tell its wrapper around the page's
+  message function apart from the browser's own, and can notice that something read its own signing request.
 
 ## Privacy policy URL
 `<site>/privacy.html`
