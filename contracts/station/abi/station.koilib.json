@@ -1232,6 +1232,95 @@
                 "options": {
                   "(koinos.btype)": "ADDRESS"
                 }
+              },
+              "approved_at": {
+                "type": "uint64",
+                "id": 10,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              }
+            }
+          },
+          "veto_entry": {
+            "fields": {
+              "vetoer": {
+                "type": "bytes",
+                "id": 1,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "proposer": {
+                "type": "bytes",
+                "id": 2,
+                "options": {
+                  "(koinos.btype)": "ADDRESS"
+                }
+              },
+              "at": {
+                "type": "uint64",
+                "id": 3,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              }
+            }
+          },
+          "veto_list": {
+            "fields": {
+              "entries": {
+                "rule": "repeated",
+                "type": "veto_entry",
+                "id": 1
+              }
+            }
+          },
+          "term_limits": {
+            "fields": {
+              "hard_max": {
+                "type": "uint64",
+                "id": 1,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "max_ops": {
+                "type": "uint32",
+                "id": 2
+              },
+              "per_min": {
+                "type": "uint32",
+                "id": 3
+              },
+              "cooldown_ms": {
+                "type": "uint64",
+                "id": 4,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "day_actions": {
+                "type": "uint32",
+                "id": 5
+              },
+              "new_actions": {
+                "type": "uint32",
+                "id": 6
+              },
+              "day_mana": {
+                "type": "uint64",
+                "id": 7,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
+              },
+              "new_mana": {
+                "type": "uint64",
+                "id": 8,
+                "options": {
+                  "jstype": "JS_STRING"
+                }
               }
             }
           },
@@ -1471,6 +1560,10 @@
                 "options": {
                   "jstype": "JS_STRING"
                 }
+              },
+              "limits": {
+                "type": "term_limits",
+                "id": 19
               }
             }
           },
@@ -1825,6 +1918,10 @@
                 "options": {
                   "jstype": "JS_STRING"
                 }
+              },
+              "limits": {
+                "type": "term_limits",
+                "id": 10
               }
             }
           },
