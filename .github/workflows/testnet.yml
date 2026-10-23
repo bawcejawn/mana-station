@@ -12,7 +12,7 @@ on:
         description: "Run the Harbinger scenarios after the unit tests"
         default: "true"
       playground:
-        description: "Instead of the scenarios, run a playground command: deploy, status, handover, traffic or mint"
+        description: "Instead of the scenarios, run a playground command: deploy, status, handover, traffic or mint; or preflight-mainnet (read-only mainnet checks, no keys)"
         default: ""
       playground_args:
         description: "Playground arguments (public addresses and numbers only)"
@@ -73,8 +73,19 @@ jobs:
           retry() { for i in 1 2 3; do "$@" && return 0; echo "::warning::'$*' failed (attempt $i), retrying"; sleep 2; done; return 1; }
           (cd contracts/testapp && retry npm run build)
           (cd contracts/mocktoken && retry npm run build)
+      - name: Mainnet preflight (read-only, no keys)
+        if: ${{ inputs.playground == 'preflight-mainnet' }}
+        # admin/preflight-mainnet.mjs (audit-2026-10 K1-04 / A1-10, M-5, O1-09, M-8): sends nothing; the report goes to the
+        # run's summary page. Exit code 2 = something to check (listed in the report), not a failed run.
+        env:
+          NETWORK: mainnet
+        run: |
+          set +e
+          node admin/preflight-mainnet.mjs > preflight.md; code=$?
+          cat preflight.md >> "$GITHUB_STEP_SUMMARY"; cat preflight.md
+          [ "$code" = 0 ] || [ "$code" = 2 ]
       - name: Playground command
-        if: ${{ inputs.playground != '' }}
+        if: ${{ inputs.playground != '' && inputs.playground != 'preflight-mainnet' }}
         env:
           RPC: https://testnet.koinosfoundation.org
           CMD: ${{ inputs.playground }}
