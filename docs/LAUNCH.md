@@ -12,6 +12,13 @@ Status on 2026-10-20 (branch `fix/squat-freeze-stall`, PR #1):
 - **Slot squat follow-up (owner decision, 2026-10-22, same branch):** every allowance pays a **slot fee** per day of its
   term (`slot_fee_per_day`, proposed $0.02), and the last **`app_reserved`** slots below `open_cap` (default 10) go only
   to app plans for deployed contracts. Unit tests: 163, all pass (the audit's slot-squat proof test included).
+- **Audit Bot fix check (2026-10-22, commit dd5148d), same branch:** AB-024 (per-user cooldown at most 1 hour, read
+  from the current config), AB-025 (a veto blocks the action's kind and target for 14 days), AB-026 (the helper's
+  question travels on a private channel), AB-027 (target and payee approve directly), AB-028 (a cancel after a burst
+  charges the Mana used), AB-029 (a renewal that hasn't started comes back whole) fixed; AB-023 (squat cost) and AB-030
+  (suspension refunds more than a cancel) accepted by the owner, docs corrected; AB-031 refusal tests check the
+  contract's reason. Unit tests: 203 pass, 5 skipped (the proofs of the two accepted findings); every real survivor of
+  the fix check's mutation run now has a killing test.
 
 ## 1. Access: who can do what
 
@@ -19,7 +26,8 @@ Status on 2026-10-20 (branch `fix/squat-freeze-stall`, PR #1):
 
 **Called directly (AB-004):** the owner, council members, buyers and payers must also call the station themselves: as a
 top-level operation of their transaction, or from their own contract. A call relayed by some other contract they happened
-to sign a transaction for is refused, even though their signature is on the transaction. The station itself is never
+to sign a transaction for is refused, even though their signature is on the transaction. The same holds for an app
+plan's target app, a pass wallet and a ticket's payee approving a purchase (AB-027). The station itself is never
 accepted as a buyer or payer (AB-020).
 
 ### Reading
@@ -36,7 +44,7 @@ accepted as a buyer or payer (AB-020).
 | `buy_allowance` kind 2: a **Mana pass** for a wallet | The buyer **and the pass wallet itself** | unit "wallet Mana pass … only the wallet itself can approve"; testnet "wallet Mana pass without the wallet's own signature refused" |
 | `renew` | The wallet paying for the renewal signs. Anyone may extend an allowance with their own money; it can never be renewed without a signed payment. | unit "no auto-renew… only the payer can renew" |
 | `buy_big_upload`: a ticket (24 hours by default, 1 hour to 7 days) | The buyer **and the payee** (AB-005: nobody can put a ticket on another wallet or app and lock it out). The buyer passes the lifetime the quote showed (`min_lifetime_ms`); a shorter one is refused (AB-001). The ticket only ever pays for the payee's *own* contract, and the payee still signs those transactions. | unit "big-upload ticket only sponsors…", audit "rt-imp-ticketpayee", "rt-ins-ticket-lifetime"; testnet ticket section |
-| `cancel_allowance` / `cancel_big_upload` | The buyer. A buyer cancel charges the days used at the 1-day price for that size (AB-010). A suspended buyer can't self-cancel (the unused share was already refunded at suspension; sanctions: frozen). | unit escrow and refund tests; audit "rt-thief-tier-arbitrage"; testnet "suspended buyer cannot self-cancel" |
+| `cancel_allowance` / `cancel_big_upload` | The buyer. A buyer cancel charges the days used at the 1-day price for that size (AB-010); if more Mana was sponsored than those days cover (a burst across a 6-hour window edge), the days that Mana covers are charged instead, from the running term, then the buyer's own later terms, never a term another wallet paid (AB-028). A renewed term that hasn't started comes back in full, minimum included, to whoever paid it (AB-029). A suspended buyer can't self-cancel (the unused share was already refunded at suspension; sanctions: frozen). | unit escrow and refund tests; audit "rt-thief-tier-arbitrage", "rt-thief2-cancel-slotedge", "rt-thief2-renew-grief", "fixes-2"; testnet "suspended buyer cannot self-cancel" |
 | `close_ticket` after expiry, `release` after a term ends | Anyone. The money only ever goes to the treasury or back to the buyer. | unit "release before the end refused even for the owner" |
 | Limit per wallet | At most 5 open allowances and tickets together, counting allowances **for** the wallet too (AB-002). Station-wide, Mana sold decides whether a new allowance fits, up to `open_cap` open allowances (owner setting, 1 to 256, proposed 50; renewals are never refused by it), with fixed safety caps of 256 open allowances and 512 open purchases. Mana passes cost at least `pass_min_purchase` ($0.25 proposed). Once open allowances reach `open_cap - app_reserved` (50 - 10 = 40), only app plans whose target is a deployed contract are sold (renewals are never refused). | unit "one wallet's open allowances…"; audit "squat", "fixes-1"; "squat at open_cap 50 (Oct 22)" |
 | Slot fee | Every pass and app plan pays `slot_fee_per_day` for each day of its term on top of the Mana price; renewals pay it for their own term; big-upload tickets don't. The quote shows it (`slot_fee`) and includes it in `price`, so `max_price` covers it. A buyer cancel keeps it for the days held (the current day counts) and refunds the unused days' slot fee with the rest; owner and suspension refunds stay pro rata of the whole price. | unit "Slot fee and slots kept for real apps" |
@@ -48,8 +56,8 @@ accepted as a buyer or payer (AB-020).
 | Connect, change or disconnect a free app (`connect_app` / `disconnect_app`, `set_exempt`); per-function caps (`set_entry`) | Owner. Refused for KOIN and stablecoins (AB-009) and for a contract with a live paid allowance (AB-001). | unit "connected apps"; audit "exemptmoney", "silent-denial"; testnet connect, list and disconnect |
 | Owner boosts (`set_app` boost) | Owner. All active boosts together at most `buffer_bp` of the daily budget (AB-003). | audit "boost-ticket", "fixes-1" |
 | Prices (`set_price`), `owner_refund` (never for the operators' own purchases) | Owner | unit suspension and L4 tests |
-| Suspend or unsuspend a buyer | Owner. Reasons 1, 3, 4 (abuse, AUP, legal) **refund the unused share automatically** when the suspension starts (whole unused days pro rata, the unexpired unused share of a ticket, no minimum or fee kept); the owner keeps only what was served. Reason 2 (sanctions) freezes refund and release. (AB-001) | unit "suspension (AB-001)"; audit "verify-suspend-confiscate", "fixes-1" |
-| `set_config`: limits only | Owner. **Refused** for the owner, treasury, council, threshold or delay, and for any higher ticket fee. Those all go through the council. Also refused (AB-001): a ticket lifetime outside 1 hour to 7 days, `hard_max` below 1 Mana, `admin_min` above 10% of `koin_amount`, `max_ops` below 2, per-user limits of 0 or a daily per-user Mana below `hard_max`. `max_allowances` is ignored. Also refused (Oct 22): `app_reserved` (0 = 10) not below `open_cap`, `slot_fee_per_day` above $1 a day, and `slot_fee_per_day` 0 on a real (mainnet or testnet) build; a stored 0 from an older config reads as $0.02 there. | unit "operators: … money settings need the council"; audit "rt-ins-ticket-lifetime", "rt-ins-silent-denial" |
+| Suspend or unsuspend a buyer | Owner. Reasons 1, 3, 4 (abuse, AUP, legal) **refund the unused share automatically** when the suspension starts (whole unused days pro rata, the unexpired unused share of a ticket, no minimum or fee kept); the owner keeps only what was served. That can be more than the buyer's own cancel would return: intended (owner decision, Oct 22, AB-030), and the terms say so. Reason 2 (sanctions) freezes refund and release. (AB-001) | unit "suspension (AB-001)"; audit "verify-suspend-confiscate", "fixes-1" |
+| `set_config`: limits only | Owner. **Refused** for the owner, treasury, council, threshold or delay, and for any higher ticket fee. Those all go through the council. Also refused (AB-001): a ticket lifetime outside 1 hour to 7 days, `hard_max` below 1 Mana, `admin_min` above 10% of `koin_amount`, `max_ops` below 2, per-user limits of 0 or a daily per-user Mana below `hard_max`, and (AB-024) a `cooldown_ms` above 1 hour or one that with `per_min` would allow fewer than 1 action an hour. Per-user limits apply at once to everyone: the cooldown in force is always the current setting (a user's record keeps only when their cooldown started), so a revert takes effect immediately. `max_allowances` is ignored. Also refused (Oct 22): `app_reserved` (0 = 10) not below `open_cap`, `slot_fee_per_day` above $1 a day, and `slot_fee_per_day` 0 on a real (mainnet or testnet) build; a stored 0 from an older config reads as $0.02 there. | unit "operators: … money settings need the council"; audit "rt-ins-ticket-lifetime", "rt-ins-silent-denial", "fc-AB001-cooldown", "v-AB024-cooldown", "fixes-2" |
 | Resume after a pause | Owner | same |
 
 ### Council (2 of 3 on the playground)
@@ -58,7 +66,7 @@ accepted as a buyer or payer (AB-020).
 |---|---|---|
 | Pause the station (emergency brake) | The owner or **any one** council member | unit "operators"; testnet operators section |
 | `propose` a guarded action, `approve` it | Council members | unit "audit #1" block; testnet council section |
-| Veto (`cancel_proposal`) during the wait | **Any one** member. Exception: a member can't veto their own removal. A vetoed action (an upgrade by its code hash, anything else by its exact contents) can't be proposed again for **14 days**, whoever sits on the council then (AB-011). So 2 of 3 can still replace the vetoing member and pass the change, but only after at least 14 days plus the wait. | unit "veto" and "H1"; audit "rt-ins-council-veto", "fixes-1" |
+| Veto (`cancel_proposal`) during the wait | **Any one** member. Exception: a member can't veto their own removal. After a veto, no action of the same **kind** for the same target can be proposed or carried out for **14 days**, whatever its exact contents, whoever sits on the council then (AB-011, AB-025): any upgrade at all after a vetoed upgrade; a withdrawal, rescue, treasury or owner change to the same wallet; any council, delay or ticket-fee change. A member withdrawing their own proposal is not a veto. So 2 of 3 can still replace the vetoing member and pass the change, but only after at least 14 days plus the wait. | unit "veto" and "H1"; audit "rt-ins-council-veto", "fc-AB011-veto", "v-AB011-bytevariant", "fixes-1", "fixes-2" |
 | `execute` once approved and the wait has passed | Anyone | unit "KOIN withdrawal: 2 of 3, then 48 h" |
 
 **Guarded actions:** upgrading the code, withdrawing KOIN, rescuing a token sent by mistake, changing the council, the waiting period, the treasury or the owner, and raising the ticket fee.
@@ -160,8 +168,9 @@ Once the station is serving Knode, switch off Knode's own sponsor: `set_sponsor_
 - [ ] **Build** with `NETWORK = mainnet`, which sets the 48-hour minimum wait. CI already builds and checks the mainnet build.
 - [ ] **Check the exact file you upload** (AB-007): `npm run check:mainnet -- <file to upload>` rebuilds the release and
   refuses anything that isn't byte-identical (a `build:sim` test build now goes to `build/sim/`). Record its sha256 here
-  and in the council's upgrade notes. audit-fixes-1 release build with the slot fee and reserved slots (2026-10-22):
-  `f2263538d67d004d9847d2841b5f83b8de461647fb220d09b6da6b25d7b0db94` (94,956 bytes). Rebuild and update this line after any further contract change.
+  and in the council's upgrade notes. audit-fixes-1 release build after the Audit Bot fix check (AB-024 … AB-031,
+  2026-10-22): `6d391134bea0496d7ef158113d2b9881e4bca09aaf10353778342af8ed29826d` (97,168 bytes); it replaces
+  `f2263538…` (the slot-fee build). Rebuild and update this line after any further contract change.
 - [ ] **Deploy and init in one transaction:** upload with all three permissions plus `init`, exactly as `testnet/playground.mjs deploy` does. Fund the station's KOIN first.
 - [ ] **`open_cap` 50 at launch.** Raise open_cap only after measuring buy_allowance and the heaviest authorize route on a node at the new value. (MockVM system calls: buy_allowance 391 at 50 open, 741 at 100, 1,826 at 255; the heaviest authorize route, an unreserved free app, 77 / 127 / 283.)
 - [ ] **Known limit: renewals can fill the open purchases.** Each allowance may hold up to 8 open terms, and the station
@@ -172,10 +181,14 @@ Once the station is serving Knode, switch off Knode's own sponsor: `set_sponsor_
   Keep `open_cap` below 64.
 - [x] **Decided (owner, Oct 22): app plans on plain wallets and the near-free squat.** Every allowance now pays the
   slot fee (`slot_fee_per_day`, $0.02 a day proposed), and the last `app_reserved` (10) slots below `open_cap` are
-  sold only to app plans whose target is a deployed contract. Filling the 40 public slots for one day costs at least
-  40 × $0.02 = $0.80, plus $0.25 for each pass (unit test: $5.80 with 20 passes and 20 plans). **Residual:** anyone
-  can upload a tiny contract to a fresh address (a few Mana each) and use it as an app-plan target, so the reserved
-  slots raise the cost of a squat but don't make one impossible; the slot fee still applies to them.
+  sold only to app plans whose target is a deployed contract. **Real cost of a squat (Audit Bot AB-023, accepted for
+  launch, pricing unchanged):** all 50 slots can be held for about **50 × the slot fee a day** (50 × 2,003,000 base
+  units ≈ **$1.00 a day**; about $30 a month on 30-day plans): 1-Mana app plans on the squatter's own wallets fill
+  the 40 public slots, and wallets with a tiny contract uploaded at their own address (a few Mana each) fill the 10
+  reserved ones. No pass is needed, so the $0.25 pass minimum doesn't raise this. A squat only refuses **new**
+  purchases ("too many open allowances"): existing customers keep their service and renewals are never refused.
+  **The response is the daily 80% check below**, which shows a squat within a day; then look at who holds the
+  slots and raise the slot fee or `open_cap`.
 - [ ] **Set** `slot_fee_per_day` 2,000,000 ($0.02) and `app_reserved` 10 (`set_config`, as in
   `config/mainnet.proposed.json`). The mainnet build refuses a slot fee of 0.
 - [ ] **Testnet check: "is the target a contract?" (MockVM can't test this).** The contract asks the chain

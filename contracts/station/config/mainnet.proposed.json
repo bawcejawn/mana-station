@@ -8,6 +8,7 @@
     "hard_max": "300000000",
     "per_min": 5,
     "cooldown_ms": "600000",
+    "_cooldown_ms": "AB-024 (Oct 22): at most 3,600,000 (1 hour), and per_min x 1 hour must be at least cooldown_ms (at least 1 action an hour). Per-user limits apply at once to every user: the cooldown in force is always this setting (a user's record keeps only when their cooldown started), so a lower value or a revert takes effect immediately",
     "day_actions": 25,
     "day_mana": "6000000000",
     "new_actions": 10,
@@ -26,7 +27,7 @@
     "slot_fee_per_day": "2000000",
     "_slot_fee_per_day": "Owner decision (Oct 22): every allowance (Mana pass or app plan) pays $0.02 (2,000,000 base units, 8-decimal stablecoins) per day of its term on top of the Mana price; shown separately in the quote and included in the total (max_price covers it). A buyer cancel keeps it for the days held and refunds the unused days'. Renewals pay it for their own term; big-upload tickets don't. Must be above 0 on a mainnet build (a stored 0 reads as $0.02), at most $1 a day",
     "app_reserved": 10,
-    "_app_reserved": "Owner decision (Oct 22): once open allowances reach open_cap - app_reserved (50 - 10 = 40), only app plans whose target is a deployed contract (chain contract metadata) are sold. 0 reads as 10; must be below open_cap. Squatting the 40 public slots for a day costs at least 40 x $0.02 slot fee, plus $0.25 for each pass. Warn when open allowances reach 80% of open_cap (40): docs/LAUNCH.md, daily check",
+    "_app_reserved": "Owner decision (Oct 22): once open allowances reach open_cap - app_reserved (50 - 10 = 40), only app plans whose target is a deployed contract (chain contract metadata) are sold. 0 reads as 10; must be below open_cap. Real squat cost (Audit Bot AB-023, accepted for launch, pricing unchanged): all 50 slots can be held for about 50 x the slot fee a day (50 x 2,003,000 = about $1.00 a day, about $30 a month on 30-day plans) with 1-Mana app plans on the squatter's own wallets; a tiny contract uploaded at a wallet's own address passes the reserved-slot check, and no pass is needed. A squat refuses only NEW purchases: existing customers keep their service and renewals are never refused. The response is the daily 80% check (admin/station-admin.mjs check exits 2 at 40 of 50, docs/LAUNCH.md): look at who holds the slots, then raise the slot fee or open_cap",
     "_max_allowances": "IGNORED since audit-fixes-1 (AB-002): open allowances are limited by Mana sold (sellable capacity), with a fixed safety cap of 256 open allowances and 512 open purchases in the contract",
     "max_days": "90",
     "treasury": "empty = release destination is the owner wallet (DECIDED by Carl 5:18 PM; since 7:47 PM payments are escrowed first). Owner-changeable to another external wallet; the station's own id is refused",
@@ -94,7 +95,7 @@
     "_rules": "durations only 1, 7, 30 days (others refused). Price changes apply to new purchases and renewals only; each allowance/ticket stores token, tier price and amount paid. Renewal is charged at the price current at renewal time. No auto-renew: renew needs the payer's own signature",
     "rejected": "Chainge USDT 19WrWze3XAoMa3Mwqys4rJMP6emZX2wfpH (set_price refuses it)",
     "_min_purchase": "0 = no minimum for app plans and tickets (Carl, Oct 19 8:43 PM). The owner can still set one per token",
-    "_pass_min_purchase": "DECIDED by Carl (Oct 22, Audit Bot AB-002): every Mana pass purchase or renewal costs at least $0.25 (25,000,000 base units); shown in the quote (min_charge) and kept on a buyer cancel. With Mana (not a count) deciding capacity, 50 one-Mana passes use 50 of 3,000 sellable Mana and block nobody, and squatting costs at least $0.25 per pass per day"
+    "_pass_min_purchase": "DECIDED by Carl (Oct 22, Audit Bot AB-002): every Mana pass purchase or renewal costs at least $0.25 (25,000,000 base units); shown in the quote (min_charge) and kept on a buyer cancel. With Mana (not a count) deciding capacity, 50 one-Mana passes use 50 of 3,000 sellable Mana and block nobody. It does NOT raise the cost of a slot squat: app plans (min_purchase 0) on the squatter's own wallets avoid it (AB-023; see _app_reserved: about 50 x the slot fee a day)"
   },
   "_big_upload_limits": {
     "status": "DECIDED by Carl (7:32 PM): approved as proposed; all owner-adjustable via set_config",
@@ -132,13 +133,13 @@
   "_escrow": {
     "status": "DECIDED by Carl (7:47 PM)",
     "payments": "pulled into the station's own escrow (per purchase: token, amount, start, end, days, per-day rate)",
-    "buyer_cancel": "cancel_allowance: unused WHOLE days refunded; the current day counts as used (1-day minimum); service runs to the end of the paid day. Future renewed terms refunded in full",
+    "buyer_cancel": "cancel_allowance: unused WHOLE days refunded; the current day counts as used (1-day minimum); service runs to the end of the paid day. Future renewed terms that haven't started are refunded in full, minimum charge included, to whoever paid them (AB-029). If more Mana was sponsored than the days used cover (a burst across a 6 h window edge), the days that Mana covers are charged instead: running term first, then the canceller's own later terms, never a term another wallet paid (AB-028)",
     "ticket_fee": "Carl, Oct 19 8:19 + 8:43 PM: a ticket locks its Mana for the full lock (24 h) at the full price, used or not. Early end refunds floor(floor(paid × time left / lock) × unused Mana / ticket Mana): the unused Mana's value, decayed by elapsed time (e.g. 50% left with 75% of the time left = 37.5%). Always keeps ticket_fee_bp (default 5%, max 20%, rounded up). Full lock or used-up Mana = no refund. owner_refund: same formula, no fee, lifts the buyer's wait",
     "tickets": "SUPERSEDED 8:10 PM by ticket_fee. Was (7:59 PM): no minimum charge. cancel_big_upload or expiry (close_ticket, anyone): unused Mana refunded in full, exactly pro rata = floor(paid × unused Mana / ticket Mana) in base units (< 1 token unit in Carl's favour); earned part released at settlement",
     "release": "release(purchase_id): anyone, only after the term ends, exactly once, to the treasury (owner wallet by default; the station itself is refused). No early release, no owner withdrawal of escrow",
     "rounding": "refund = floor(amount × unused / total): rounds down by < 1 base unit (1e-8 token) in Carl's favour; refund + release always equals the amount paid",
     "pause": "paused time is credited: the escrow clock stops while paused and every running/upcoming term, allowance and ticket is extended by the pause on unpause",
-    "suspension": "AB-001: suspension for reasons 1, 3, 4 refunds the unused share at once (no minimum charge); sanctions (reason 2): refund AND release frozen until legal review (reclassify a false match to reason 4, which refunds then)",
+    "suspension": "AB-001: suspension for reasons 1, 3, 4 refunds the unused share at once (no minimum charge, no 1-day charge: more than a buyer cancel would return, by design, owner decision Oct 22, AB-030); sanctions (reason 2): refund AND release frozen until legal review (reclassify a false match to reason 4, which refunds then)",
     "buyer_cancel_rate": "AB-010 (Carl, Oct 22): a buyer cancel charges the days used at the 1-day price for that size at purchase (refund = paid - min(paid, used x 1-day price), never more than the unused days' pro-rata share); owner and suspension refunds stay pro rata",
     "invariant": "per token: station balance == held == collected − refunded − released",
     "ticket_anti_spam": "Audit #2: one ticket per buyer per big_cooldown_ms (24 h) from purchase; no station-wide wait. Unused Mana is still released from the outstanding and weekly counters at settlement. Holding a ticket now costs its full price",
