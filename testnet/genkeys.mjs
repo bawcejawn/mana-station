@@ -11,4 +11,5 @@ for (const role of ["funder", "station", "owner", "app", "user1", "user2", "toke
   out[role] = { address: s.getAddress(), wif: s.getPrivateKey("wif") };
 }
 fs.writeFileSync(f, JSON.stringify(out, null, 2), { mode: 0o600 });
+try { fs.chmodSync(f, 0o600); } catch {}                 // audit-2026-10 (Info): also when the file already existed
 for (const r of Object.keys(out)) if (r !== "WARNING") console.log(r.padEnd(8), out[r].address);

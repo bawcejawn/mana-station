@@ -3,3 +3,4 @@ node_modules/
 testnet/keys.testnet.json
 helper/wallet-helper/dist/
 admin/vendor/
+contracts/station/assembly/net.ts.mainnet

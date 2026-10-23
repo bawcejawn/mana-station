@@ -11,9 +11,10 @@ for (;;) {
   if (n === 0) break;
   chunks.push(Buffer.from(buf.subarray(0, n)));
 }
-const tmp = path.join(os.tmpdir(), `protoc-plugin-in-${process.pid}`);
-fs.writeFileSync(tmp, Buffer.concat(chunks));
+// audit-2026-10 (Info): a fresh private directory and an exclusive create, not a predictable name in the shared tmp dir.
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), "protoc-plugin-in-")), tmp = path.join(dir, "in");
+fs.writeFileSync(tmp, Buffer.concat(chunks), { flag: "wx", mode: 0o600 });
 const fd = fs.openSync(tmp, "r");
 const r = spawnSync(process.execPath, [process.argv[2]], { stdio: [fd, "inherit", "inherit"], env: process.env });
-fs.closeSync(fd); fs.unlinkSync(tmp);
+fs.closeSync(fd); fs.rmSync(dir, { recursive: true, force: true });
 process.exit(r.status === null ? 1 : r.status);
