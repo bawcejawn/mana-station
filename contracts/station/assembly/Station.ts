@@ -261,9 +261,12 @@ export class Station {
    *  refund = min(that, amount − min(amount, used × day_price)), so a long term cancelled early never costs less than
    *  1-day terms would have. Owner and suspension refunds (buyer not at fault) stay plain pro rata.
    *  Slot fee (Oct 22): on a buyer cancel these rules apply to the Mana price only; the slot fee is kept for the days
-   *  held and refunded for unused days (so the total stays within the unused days' share of what was paid). */
-  termRefund(e: station.escrow_object, t: u64, keepMin: bool = true): u64 {
-    const u = this.unusedDays(e, t); if (u == 0) return 0;
+   *  held and refunded for unused days (so the total stays within the unused days' share of what was paid).
+   *  AB-028: `extra` more of the unused days are charged as used (Mana sponsored beyond the days used, see endTerms).
+   *  AB-029: a term that hasn't started and has nothing charged comes back whole, minimum included, to whoever paid it. */
+  termRefund(e: station.escrow_object, t: u64, keepMin: bool = true, extra: u64 = 0): u64 {
+    const u0 = this.unusedDays(e, t); const u = u0 > extra ? u0 - extra : 0; if (u == 0) return 0;
+    if (t < e.start && extra == 0) keepMin = false;
     const slot = e.slot_fee_per_day * e.days;                         // e.days is still the whole term while u > 0
     const m = keepMin && e.amount > slot ? e.amount - slot : e.amount; // buyer cancel: the Mana price alone
     let r = mulDiv(m, u, e.days);
@@ -1154,20 +1157,40 @@ export class Station {
     return new station.set_price_result();
   }
   // ═══════ escrow: cancel, settle, release, owner refund (Carl, 7:47 PM) ═══════
-  /** End an allowance's terms at time t: refund unused whole days; return the new expiry (end of the paid current day). */
+  /** AB-028: on a buyer cancel, the whole days of Mana sponsored beyond what the kept days allow (a burst across a 6 h
+   *  slot edge can use two days' Mana on the first day). These extra days are charged too (see endTerms). Whatever
+   *  can't be charged (at most about one day's Mana, only when another wallet paid the next term) isn't sponsored any
+   *  more: the cap stays below what was used, so the allowance serves nothing further. */
+  extraDays(a: station.allowance_object, t: u64): u64 {
+    if (a.cap_total == 0 || a.mana_per_day == 0) return 0;              // not tracked (bought before AB-006)
+    let cut: u64 = 0;
+    for (let i = 0; i < a.purchase_ids.length; i++) {
+      const e = this.escrow.get(u32Key(a.purchase_ids[i]));
+      if (e != null && !e.closed && t < e.end) cut += a.mana_per_day * this.unusedDays(e, t);
+    }
+    const left = a.cap_total > cut ? a.cap_total - cut : 0;
+    return a.used_total > left ? (a.used_total - left + a.mana_per_day - 1) / a.mana_per_day : 0;
+  }
+  /** End an allowance's terms at time t: refund unused whole days; return the new expiry (end of the paid current day).
+   *  Returns [total refunded, new expiry]. */
   endTerms(a: station.allowance_object, t: u64, action: string, keepMin: bool = true): u64[] {
     let refund: u64 = 0; let newExpiry: u64 = t;
+    let extra = keepMin ? this.extraDays(a, t) : 0;                     // AB-028: buyer cancels only
     for (let i = 0; i < a.purchase_ids.length; i++) {
       const e = this.escrow.get(u32Key(a.purchase_ids[i]));
       if (e == null || e.closed || t >= e.end) continue;                // finished terms: releasable as they are
-      const r = this.termRefund(e!, t, keepMin);
+      // AB-028 extra days go to the running term (the Mana was drawn during it), then only to future terms the canceller
+      // paid: a term another wallet paid comes back whole (AB-029), so a burst can't cost that wallet anything.
+      const u0 = this.unusedDays(e!, t);
+      const x = t >= e!.start || Arrays.equal(e!.buyer, a.buyer) ? (extra < u0 ? extra : u0) : 0; extra -= x;
+      const r = this.termRefund(e!, t, keepMin, x);
       // Shorten the term to what was used, so nothing can be refunded twice (later refunds compute 0 unused days).
-      const unused = this.unusedDays(e!, t); const used = e!.days - unused;
+      const unused = u0 - x; const used = e!.days - unused;
       const cut = a.mana_per_day * unused;                               // AB-006: refunded days no longer count
       if (a.cap_total > 0) a.cap_total = a.cap_total > cut ? a.cap_total - cut : 1;   // 1, not 0 (0 = untracked)
-      if (t < e!.start) e!.end = e!.start;                               // future term: nothing used
-      else e!.end = e!.start + used * DAY;                               // paid through the current day
-      e!.days = t < e!.start ? 0 : used;
+      if (t < e!.start) e!.end = e!.start;                               // future term: nothing left to serve
+      else e!.end = e!.start + used * DAY;                               // paid through the days charged
+      e!.days = used;                                                    // a future term: 0, or the days AB-028 charged
       this.escrow.put(u32Key(e!.id), e!);
       this.doRefund(e!, r, action);
       refund += r;
@@ -1183,11 +1206,6 @@ export class Station {
     a.expiry = newExpiry; this.allowances.put(u32Key(a.id), a);
     return [refund, newExpiry];
   }
-  refundSum(a: station.allowance_object, t: u64, keepMin: bool = true): u64 {
-    let r: u64 = 0;
-    for (let i = 0; i < a.purchase_ids.length; i++) { const e = this.escrow.get(u32Key(a.purchase_ids[i])); if (e != null && !e.closed && t < e.end) r += this.termRefund(e, t, keepMin); }
-    return r;
-  }
   cancel_allowance(args: station.cancel_allowance_arguments): station.cancel_allowance_result {
     const c = this.config.get()!; const t = this.clock(c, this.now());
     System.require(this.signs(args.buyer), "buyer must sign");          // AB-004
@@ -1195,10 +1213,9 @@ export class Station {
     System.require(Arrays.equal(a!.buyer!, args.buyer!), "not your allowance");
     System.require(!this.suspended.has(args.buyer!), "buyer suspended: the unused share was refunded at suspension (sanctions: frozen)");
     System.require(a!.expiry > t, "already ended");
-    const r = this.refundSum(a!, t);
     const x = this.endTerms(a!, t, "cancel");
     System.event("station.allowance_cancelled", Protobuf.encode(a!, station.allowance_object.encode), [args.buyer!]);
-    return new station.cancel_allowance_result(r, x[1]);
+    return new station.cancel_allowance_result(x[0], x[1]);
   }
   /** Settle a ticket: refund unused Mana, release the rest to Carl, free its debt. */
   settleTicket(c: station.config_object, payee: Uint8Array, t: station.ticket_object, withFee: bool, action: string, now: u64, noRefund: bool = false): u64[] {
@@ -1269,9 +1286,8 @@ export class Station {
     if (args.allowance_id > 0) {
       const a = this.allowances.get(u32Key(args.allowance_id)); System.require(a != null, "no such allowance");
       this.noSanctionedRefund(a!.buyer!);
-      const r = this.refundSum(a!, t, false);                            // buyer not at fault: no minimum kept
-      this.endTerms(a!, t, "owner_refund", false);
-      return new station.owner_refund_result(r);
+      const x = this.endTerms(a!, t, "owner_refund", false);            // buyer not at fault: no minimum kept
+      return new station.owner_refund_result(x[0]);
     }
     System.require(isAddress(args.ticket_payee), "allowance_id or ticket_payee");
     const tk = this.tickets.get(args.ticket_payee!); System.require(tk != null, "no ticket");
