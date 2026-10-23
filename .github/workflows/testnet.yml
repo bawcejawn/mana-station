@@ -83,6 +83,7 @@ jobs:
           set +e
           node admin/preflight-mainnet.mjs > preflight.md; code=$?
           cat preflight.md >> "$GITHUB_STEP_SUMMARY"; cat preflight.md
+          echo "::notice title=mainnet preflight::$(sed -e ':a;N;$!ba' -e 's/%/%25/g' -e 's/\r//g' -e 's/\n/%0A/g' preflight.md)"
           [ "$code" = 0 ] || [ "$code" = 2 ]
       - name: Playground command
         if: ${{ inputs.playground != '' && inputs.playground != 'preflight-mainnet' }}
