@@ -164,7 +164,7 @@ Measure each action on the testnet first. The playground's tap uses 0.17 Mana an
 
 ### Step 3: switch off Knode's own sponsor
 
-Once the station is serving Knode, switch off Knode's own sponsor: `set_sponsor_limit(0)` on Kpred, following `knode_sponsor_off_steps.md` in this repo. The Kpred contract then never pays from its own Mana.
+Once the station is serving Knode, switch off Knode's own sponsor: `set_sponsor_limit(0)` on Kpred, following `docs/notes/knode_sponsor_off_steps.md` in this repo. The Kpred contract then never pays from its own Mana.
 
 ### Open questions to check on the testnet before mainnet
 
@@ -242,7 +242,7 @@ Pick your wallet once, top right; every page uses it.
 | `play.html` | Tap as a brand-new player with nothing in their wallet, on the demo app or on your app with a plan. The tap stands in for a real action such as a Knode prediction. |
 | `owner.html` | As Owner: give any contract free Mana (Small / Medium / Large or custom), change or remove it; see customers; pause. As a council member: pause, approve, veto, carry out. |
 
-Old links (`buy.html`, `console.html`, `how-it-works.html`) forward to the new pages.
+Old links
 
 ## 6. Paying without changing the app (Oct 21)
 

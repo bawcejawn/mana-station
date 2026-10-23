@@ -51,7 +51,7 @@ const APP_SLOT: u64 = 3_600_000;
 const APP_N: i32 = 24; // 24 × 1 h
 const WEEK_N: i32 = 7; // 7 × 1 day
 const GLOBAL_KEY: u32 = 0xffffffff;
-// Stablecoins (stablecoins.md, 2026-10-19). Prices are set per token by the owner; these are the defaults to set.
+// Stablecoins (docs/notes/stablecoins.md, 2026-10-19). Prices are set per token by the owner; these are the defaults to set.
 import { VUSDT, VUSDC, NETWORK } from "./net";
 // Audit #1: council delay floor. 48 h on mainnet so everyone can see a money move or upgrade coming; 1 min on testnet.
 const MIN_GUARD_DELAY_MS: u64 = NETWORK == "mainnet" ? 172_800_000 : 60_000;
@@ -529,7 +529,7 @@ export class Station {
   height(): u64 {
     return System.getBlockField("header.height")!.uint64_value;
   }
-  /** Payment, pattern A from stablecoins.md §5.1: the buyer approves the station for exactly `amount` (same tx,
+  /** Payment, pattern A from docs/notes/stablecoins.md §5.1: the buyer approves the station for exactly `amount` (same tx,
    *  earlier operation) and the station PULLS with KCS-4 transfer(from = buyer, to = the station's own escrow). */
   collect(token: Uint8Array, from: Uint8Array, amount: u64): void {
     const tot = this.escrowTot.get(token)!;

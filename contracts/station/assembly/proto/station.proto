@@ -118,13 +118,13 @@ message user_object {
   uint64 cooldown_from = 7 [jstype = JS_STRING];
 }
 
-// Price per accepted stablecoin (owner-set; Monetization prices it). Token address/decimals: see stablecoins.md.
+// Price per accepted stablecoin (owner-set; Monetization prices it). Token address/decimals: see docs/notes/stablecoins.md.
 // Prices per token (8 decimals). Tiers only: a buy or renew must be 1, 7 or 30 days; a tier priced 0 is not offered.
 // Prices are owner-adjustable and apply to NEW purchases and renewals only: each allowance stores what it paid.
 message price_object {
   bool active = 1;
   reserved 2, 3, 4;                                  // were per_mana_day / per_big_mana / min_days
-  uint64 max_per_purchase = 5 [jstype = JS_STRING]; // token units; thin liquidity (stablecoins.md), owner-set
+  uint64 max_per_purchase = 5 [jstype = JS_STRING]; // token units; thin liquidity (docs/notes/stablecoins.md), owner-set
   uint64 price_1d = 6 [jstype = JS_STRING];         // token units per 1,000 Mana/day, whole 1-day term
   uint64 price_7d = 7 [jstype = JS_STRING];         // per 1,000 Mana/day, whole 7-day term
   uint64 price_30d = 8 [jstype = JS_STRING];        // per 1,000 Mana/day, whole 30-day term

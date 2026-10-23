@@ -11,7 +11,6 @@ A static site: plain HTML, one stylesheet, a little JavaScript. No framework.
 | `play.html` | Players | Tap as a brand-new player with no KOIN; the station pays. |
 | `owner.html` | Owner and council (not indexed) | Give your own apps free Mana in sizes, change or remove it; see customers; pause; council votes. |
 | `help.html` | Everyone | Plain-language guide and questions. |
-| `buy.html`, `console.html`, `how-it-works.html` | | Forward old links to the new pages. |
 
 Every page shares the same header with a **wallet chip** (top right): pick a test wallet kept in this browser, or Kondor, once, and every page uses it.
 

@@ -1140,7 +1140,7 @@ describe("audit 2026-10-19: attacks replayed (branch fix/squat-freeze-stall)", (
     inv(s, USDT);
   });
   it("#4 stall: every finished purchase is closed by the next buy, so the open list (cap 128) never accumulates", () => {
-    // 15 days × 8 = 120 purchases: MockVM conflates storage keys with bytes >= 0x80, so ids stay below 128 (engineering.md).
+    // 15 days × 8 = 120 purchases: MockVM conflates storage keys with bytes >= 0x80, so ids stay below 128 (docs/notes/engineering.md).
     const s = setup(); gS = s; const T = NOW; let paid: u64 = 0;
     for (let d = 0; d < 15; d++) {
       at(T + u64(d) * DAYMS + 1000);

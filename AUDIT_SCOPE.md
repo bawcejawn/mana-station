@@ -24,7 +24,6 @@ vetoes). The site, a browser extension and admin scripts sit around the contract
 |---|---|
 | `contracts/station/` | The Station contract (`assembly/Station.ts`, `assembly/proto/station.proto`), its unit and attack tests (`assembly/__tests__/`), build scripts (`scripts/`, incl. `check-mainnet.cjs`), the proposed mainnet settings (`config/mainnet.proposed.json`) and generated ABIs (`abi/`). |
 | `contracts/testapp/`, `contracts/mocktoken/` | A demo app and a mock stablecoin, testnet only. Their `node_modules` are committed symlinks to `../station/node_modules`. |
-| `contracts/v1-archive/` | An earlier Station version, kept for reference; not deployed and not intended for deployment. |
 | `helper/wallet-helper/` | The browser extension ("helper"): sets the Station as payer on a site's Kondor signing request when the Station would pay. `src/` (page.js in the page's world, bridge.js in the extension's world, background.js), `build.mjs`, tests in `test/` (node, Chromium, a manual check). |
 | `site/` | The website: built pages (`*.html`), their sources (`src/`), wallet code (`wallets.js`, `ms.js`), generated data (`abis.js`, `playground.js`) and tools (`tools/`: page build, CSP-hash test, helper-page test, publish script). |
 | `admin/` | `station-admin.mjs`: the owner's command-line tool (signs with a key from `ADMIN_WIF` or a hidden prompt). |
