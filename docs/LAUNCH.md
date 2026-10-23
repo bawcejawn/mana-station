@@ -19,6 +19,9 @@ Status on 2026-10-20 (branch `fix/squat-freeze-stall`, PR #1):
   (suspension refunds more than a cancel) accepted by the owner, docs corrected; AB-031 refusal tests check the
   contract's reason. Unit tests: 203 pass, 5 skipped (the proofs of the two accepted findings); every real survivor of
   the fix check's mutation run now has a killing test.
+- **Daily action floor (owner decision, 2026-10-22, same branch):** per-user `day_actions` at least 24 (1 an hour), for
+  the same reason as AB-024; an older stored config below 24 reads as 24. Unit tests: 206 pass, 5 skipped. The site's
+  pages are now built on Linux with LF sources (`.gitattributes`), and a test checks every page's CSP script hashes.
 
 ## 1. Access: who can do what
 
@@ -57,7 +60,7 @@ accepted as a buyer or payer (AB-020).
 | Owner boosts (`set_app` boost) | Owner. All active boosts together at most `buffer_bp` of the daily budget (AB-003). | audit "boost-ticket", "fixes-1" |
 | Prices (`set_price`), `owner_refund` (never for the operators' own purchases) | Owner | unit suspension and L4 tests |
 | Suspend or unsuspend a buyer | Owner. Reasons 1, 3, 4 (abuse, AUP, legal) **refund the unused share automatically** when the suspension starts (whole unused days pro rata, the unexpired unused share of a ticket, no minimum or fee kept); the owner keeps only what was served. That can be more than the buyer's own cancel would return: intended (owner decision, Oct 22, AB-030), and the terms say so. Reason 2 (sanctions) freezes refund and release. (AB-001) | unit "suspension (AB-001)"; audit "verify-suspend-confiscate", "fixes-1" |
-| `set_config`: limits only | Owner. **Refused** for the owner, treasury, council, threshold or delay, and for any higher ticket fee. Those all go through the council. Also refused (AB-001): a ticket lifetime outside 1 hour to 7 days, `hard_max` below 1 Mana, `admin_min` above 10% of `koin_amount`, `max_ops` below 2, per-user limits of 0 or a daily per-user Mana below `hard_max`, and (AB-024) a `cooldown_ms` above 1 hour or one that with `per_min` would allow fewer than 1 action an hour. Per-user limits apply at once to everyone: the cooldown in force is always the current setting (a user's record keeps only when their cooldown started), so a revert takes effect immediately. `max_allowances` is ignored. Also refused (Oct 22): `app_reserved` (0 = 10) not below `open_cap`, `slot_fee_per_day` above $1 a day, and `slot_fee_per_day` 0 on a real (mainnet or testnet) build; a stored 0 from an older config reads as $0.02 there. | unit "operators: … money settings need the council"; audit "rt-ins-ticket-lifetime", "rt-ins-silent-denial", "fc-AB001-cooldown", "v-AB024-cooldown", "fixes-2" |
+| `set_config`: limits only | Owner. **Refused** for the owner, treasury, council, threshold or delay, and for any higher ticket fee. Those all go through the council. Also refused (AB-001): a ticket lifetime outside 1 hour to 7 days, `hard_max` below 1 Mana, `admin_min` above 10% of `koin_amount`, `max_ops` below 2, per-user limits of 0 or a daily per-user Mana below `hard_max`, and (AB-024) a `cooldown_ms` above 1 hour or one that with `per_min` would allow fewer than 1 action an hour, or a `day_actions` below 24 (1 an hour; a lower value stored by an older config reads as 24). Per-user limits apply at once to everyone: the cooldown in force is always the current setting (a user's record keeps only when their cooldown started), so a revert takes effect immediately. `max_allowances` is ignored. Also refused (Oct 22): `app_reserved` (0 = 10) not below `open_cap`, `slot_fee_per_day` above $1 a day, and `slot_fee_per_day` 0 on a real (mainnet or testnet) build; a stored 0 from an older config reads as $0.02 there. | unit "operators: … money settings need the council"; audit "rt-ins-ticket-lifetime", "rt-ins-silent-denial", "fc-AB001-cooldown", "v-AB024-cooldown", "fixes-2" |
 | Resume after a pause | Owner | same |
 
 ### Council (2 of 3 on the playground)
@@ -168,9 +171,9 @@ Once the station is serving Knode, switch off Knode's own sponsor: `set_sponsor_
 - [ ] **Build** with `NETWORK = mainnet`, which sets the 48-hour minimum wait. CI already builds and checks the mainnet build.
 - [ ] **Check the exact file you upload** (AB-007): `npm run check:mainnet -- <file to upload>` rebuilds the release and
   refuses anything that isn't byte-identical (a `build:sim` test build now goes to `build/sim/`). Record its sha256 here
-  and in the council's upgrade notes. audit-fixes-1 release build after the Audit Bot fix check (AB-024 … AB-031,
-  2026-10-22): `6d391134bea0496d7ef158113d2b9881e4bca09aaf10353778342af8ed29826d` (97,168 bytes); it replaces
-  `f2263538…` (the slot-fee build). Rebuild and update this line after any further contract change.
+  and in the council's upgrade notes. audit-fixes-1 release build with the daily action floor (2026-10-22):
+  `c67e1e526b2c11a9e88aa4ce318bf162d6059f563e2d0afc52f9418e7d1982e6` (97,320 bytes); it replaces `6d391134…` (the
+  Audit Bot fix-check build, AB-024 … AB-031), which replaced `f2263538…` (the slot-fee build). Rebuild and update this line after any further contract change.
 - [ ] **Deploy and init in one transaction:** upload with all three permissions plus `init`, exactly as `testnet/playground.mjs deploy` does. Fund the station's KOIN first.
 - [ ] **`open_cap` 50 at launch.** Raise open_cap only after measuring buy_allowance and the heaviest authorize route on a node at the new value. (MockVM system calls: buy_allowance 391 at 50 open, 741 at 100, 1,826 at 255; the heaviest authorize route, an unreserved free app, 77 / 127 / 283.)
 - [ ] **Known limit: renewals can fill the open purchases.** Each allowance may hold up to 8 open terms, and the station
