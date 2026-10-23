@@ -390,3 +390,50 @@ describe("AB-033 / AB-034 limited vetoes", () => {
     expect(rm1 > 0).toBe(true);
   });
 });
+
+// ───── AB-017: killing tests for the real survivors of the d982a24 fix check's mutation run. The rest were equivalent
+// (no input tells them apart): :227 real-chain payment (MockVM takes the test-build path), :275 / :277 (day_price or
+// used of 0 change nothing, and used 0 never reaches that branch), :1194 (a running term always keeps a used day, so
+// cap_total never equals the cut), :867 and :895 (buy_allowance cleans an expired allowance and its target first, so the
+// boundary and the "taken" case can't be reached), :430 (b - r is 0 either way), :876 / :910 (the price is at least the
+// minimum plus the slot fee, so minKeep returns the minimum either way). ─────
+let gEx: station.set_exempt_arguments | null = null;
+let gOr: station.owner_refund_arguments | null = null;
+describe("Mutation survivors of the fix check (d982a24)", () => {
+  it("M0017: a renewal paid by a sanctioned wallet stays frozen at release, though the allowance's buyer isn't sanctioned", () => {
+    const s = setupWide(); const B = user(9); testSetToken(USDT, B, 100 * USD);
+    const r = buyAccount(s, SOLDAPP, 10 * M, 1); renewBy(s, B, r.id, 1);
+    signedBy([OWNER]); s.suspend_allowance(new station.suspend_allowance_arguments(B, 2)); signedBy([]);
+    const pid = allowanceOf(s, r.id).purchase_ids[1];
+    at(escrowOf(s, pid).end + 1000);
+    gS1 = s; gId1 = pid; MockVM.commitTransaction(); clearRevert();
+    expect(() => { gS1!.release(new station.release_arguments(gId1)); }).toThrow("M0017: a sanctioned payer's term was released");
+    revertedWith("sanctions: funds frozen in escrow pending legal review");
+  });
+  it("M0034 / M0036: new_actions = 1 and day_mana = hard_max are valid settings", () => {
+    const s = setup();
+    const c = cfg(); c.new_actions = 1; c.day_mana = c.hard_max; gS1 = s; gC1 = c;
+    signedBy([OWNER]); MockVM.commitTransaction();
+    expect(() => { gS1!.set_config(new station.set_config_arguments(gC1)); }).not.toThrow("M0034 / M0036: refused");
+    signedBy([]);
+    expect(s.config.get()!.new_actions).toBe(1); expect(s.config.get()!.day_mana).toBe(s.config.get()!.hard_max);
+  });
+  it("M0040: open_cap 1 passes the range check; the reserved slots are what refuse it", () => {
+    const s = setup(); const c = cfg(); c.open_cap = 1;
+    configRefused(s, c, "app_reserved (0 = 10) must be below open_cap");
+  });
+  it("M0041: the owner can't refund a ticket a council member bought", () => {
+    const s = setupWide(); testSetToken(USDT, C1, 100 * USD);
+    signedBy([C1]); s.buy_big_upload(new station.buy_big_upload_arguments(C1, C1, 50 * M, USDT, 1000 * USD, false, 0)); signedBy([]);
+    gS1 = s; gOr = new station.owner_refund_arguments(0, C1);
+    signedBy([OWNER]); MockVM.commitTransaction(); clearRevert();
+    expect(() => { gS1!.owner_refund(gOr!); }).toThrow("M0041: the owner refunded a council member's ticket");
+    revertedWith("the owner can't refund purchases made by the owner or a council member"); signedBy([]);
+  });
+  it("M0018: set_exempt without a value is refused for that reason", () => {
+    const s = setup(); gS1 = s; gEx = new station.set_exempt_arguments(SOLDAPP, null, false);
+    signedBy([OWNER]); MockVM.commitTransaction(); clearRevert();
+    expect(() => { gS1!.set_exempt(gEx!); }).toThrow("M0018: accepted without a value");
+    revertedWith("value required"); signedBy([]);
+  });
+});
