@@ -848,8 +848,9 @@ export class Station {
     System.require(!Arrays.equal(args.target!, this.contractId), "not the station");
     System.require(!this.isMoneyContract(args.target!), "token contracts (KOIN, stablecoins) cannot be sponsored");
     // Audit #3: the app itself must approve being sponsored (its key, or its own authorize, signs this purchase), so
-    // nobody can claim another developer's contract and lock them out.
-    System.require(System.checkAuthority(authority.authorization_type.contract_call, args.target!), "the target app must approve (sign) this purchase");
+    // nobody can claim another developer's contract and lock them out. AB-027: directly, like the buyer (AB-004), so a
+    // contract the target merely signed a transaction for can't approve in its name.
+    System.require(direct(args.target!) && System.checkAuthority(authority.authorization_type.contract_call, args.target!), "the target app must approve (sign) this purchase");
     this.sweep(c, now, args.token!);                                    // audit #4: close finished purchases first (same token: M1)
     const sold = this.committed(c, now, true);                          // clean expired entries
     const open = this.openFor2(args.buyer!, args.target!, now);
@@ -914,8 +915,8 @@ export class Station {
     System.require(!c.paused, "paused");
     System.require(this.signs(args.buyer), "buyer must sign");          // AB-004 / AB-020
     System.require(isAddress(args.payee) && !Arrays.equal(args.payee!, this.contractId), "payee required");
-    // AB-005: the payee approves its own ticket, so nobody can lock a wallet or app out of tickets.
-    System.require(System.checkAuthority(authority.authorization_type.contract_call, args.payee!), "the payee must approve (sign) this ticket");
+    // AB-005: the payee approves its own ticket, so nobody can lock a wallet or app out of tickets. AB-027: directly.
+    System.require(direct(args.payee!) && System.checkAuthority(authority.authorization_type.contract_call, args.payee!), "the payee must approve (sign) this ticket");
     System.require(!this.suspended.has(args.buyer!), "buyer suspended");
     this.sweep(c, now, args.token!);                                    // audit #4 (may also settle an expired ticket here)
     const old = this.tickets.get(args.payee!); System.require(old == null, "payee already has a ticket");
